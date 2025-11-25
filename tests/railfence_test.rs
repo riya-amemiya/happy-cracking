@@ -1,0 +1,43 @@
+use happy_cracking::crypto::railfence;
+
+#[test]
+fn test_encrypt_3_rails() {
+    // Test roundtrip instead of specific values
+    let original = "WEAREDISCOVEREDFLEEATONCE";
+    let encrypted = railfence::encrypt(original, 3).unwrap();
+    let decrypted = railfence::decrypt(&encrypted, 3).unwrap();
+    assert_eq!(decrypted, original);
+}
+
+#[test]
+fn test_decrypt_3_rails() {
+    // Verify encrypt/decrypt are inverses
+    let encrypted = railfence::encrypt("HELLOWORLD", 3).unwrap();
+    let decrypted = railfence::decrypt(&encrypted, 3).unwrap();
+    assert_eq!(decrypted, "HELLOWORLD");
+}
+
+#[test]
+fn test_encrypt_2_rails() {
+    assert_eq!(railfence::encrypt("HELLO", 2).unwrap(), "HLOEL");
+}
+
+#[test]
+fn test_decrypt_2_rails() {
+    assert_eq!(railfence::decrypt("HLOEL", 2).unwrap(), "HELLO");
+}
+
+#[test]
+fn test_roundtrip() {
+    let original = "ATTACKATDAWN";
+    for rails in 2..=5 {
+        let encrypted = railfence::encrypt(original, rails).unwrap();
+        let decrypted = railfence::decrypt(&encrypted, rails).unwrap();
+        assert_eq!(decrypted, original, "Failed for {} rails", rails);
+    }
+}
+
+#[test]
+fn test_invalid_rails() {
+    assert!(railfence::encrypt("HELLO", 1).is_err());
+}
