@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-**happy-cracking** is a CTF (Capture The Flag) toolkit written in Rust, providing command-line utilities for common cryptographic encoding/decoding and cipher operations used in security competitions.
+**happy-cracking** is a CTF (Capture The Flag) toolkit written in Rust, providing command-line utilities for cryptographic encoding/decoding, classic ciphers, hash operations, and analysis tools commonly used in security competitions.
 
 ## Codebase Structure
 
@@ -11,20 +11,54 @@ happy-cracking/
 ├── src/
 │   ├── main.rs           # CLI entry point with clap subcommands
 │   ├── lib.rs            # Library root, exposes crypto module
-│   └── crypto/           # Cryptographic operations
+│   └── crypto/           # Cryptographic operations (18 modules)
 │       ├── mod.rs        # Module exports
+│       │
+│       │ # Encoding
 │       ├── base32.rs     # Base32 encode/decode
+│       ├── base58.rs     # Base58 encode/decode (Bitcoin-style)
 │       ├── base64.rs     # Base64 encode/decode
-│       ├── caesar.rs     # Caesar cipher encrypt/decrypt/bruteforce
+│       ├── binary.rs     # Binary (8-bit) encode/decode
 │       ├── hex.rs        # Hex encode/decode
+│       ├── morse.rs      # Morse code encode/decode
+│       ├── url.rs        # URL encode/decode (percent-encoding)
+│       │
+│       │ # Classic Ciphers
+│       ├── affine.rs     # Affine cipher (ax+b mod 26)
+│       ├── atbash.rs     # Atbash cipher (A↔Z substitution)
+│       ├── caesar.rs     # Caesar cipher encrypt/decrypt/bruteforce
+│       ├── railfence.rs  # Rail Fence transposition cipher
 │       ├── rot.rs        # ROT13 and generic rotation cipher
-│       └── xor.rs        # XOR cipher and single-byte bruteforce
-├── tests/                # Integration tests
+│       ├── vigenere.rs   # Vigenère polyalphabetic cipher
+│       ├── xor.rs        # XOR cipher and single-byte bruteforce
+│       │
+│       │ # Hash
+│       ├── hash.rs       # Generate MD5, SHA1, SHA256, SHA512
+│       ├── hashid.rs     # Identify hash type from string
+│       │
+│       │ # Utilities
+│       ├── autodecode.rs # Auto-detect and decode common encodings
+│       └── frequency.rs  # Character frequency analysis
+│
+├── tests/                # Integration tests (18 test files)
+│   ├── affine_test.rs
+│   ├── atbash_test.rs
+│   ├── autodecode_test.rs
 │   ├── base32_test.rs
+│   ├── base58_test.rs
 │   ├── base64_test.rs
+│   ├── binary_test.rs
+│   ├── frequency_test.rs
+│   ├── hash_test.rs
+│   ├── hashid_test.rs
 │   ├── hex_test.rs
+│   ├── morse_test.rs
+│   ├── railfence_test.rs
 │   ├── rot_test.rs
+│   ├── url_test.rs
+│   ├── vigenere_test.rs
 │   └── xor_test.rs
+│
 ├── Cargo.toml            # Project manifest (Rust 2024 edition)
 ├── Cargo.lock            # Dependency lock file
 └── .github/workflows/
@@ -55,6 +89,8 @@ cargo run -- <command>
 
 ## CLI Usage Examples
 
+### Encoding
+
 ```bash
 # Base64
 cargo run -- base64 encode "Hello, World!"
@@ -64,6 +100,30 @@ cargo run -- base64 decode "SGVsbG8sIFdvcmxkIQ=="
 cargo run -- base32 encode "Hello"
 cargo run -- base32 decode "JBSWY3DP"
 
+# Base58 (Bitcoin-style)
+cargo run -- base58 encode "Hello"
+cargo run -- base58 decode "9Ajdvzr"
+
+# Hex
+cargo run -- hex encode "flag{hex}"
+cargo run -- hex decode "666c61677b6865787d"
+
+# URL encoding
+cargo run -- url encode "hello world&foo=bar"
+cargo run -- url decode "hello%20world%26foo%3Dbar"
+
+# Binary
+cargo run -- binary encode "Hi"
+cargo run -- binary decode "01001000 01101001"
+
+# Morse code
+cargo run -- morse encode "SOS"
+cargo run -- morse decode "... --- ..."
+```
+
+### Classic Ciphers
+
+```bash
 # ROT13
 cargo run -- rot13 "Hello"
 
@@ -72,14 +132,50 @@ cargo run -- caesar encrypt "Hello" --shift 3
 cargo run -- caesar decrypt "Khoor" --shift 3
 cargo run -- caesar bruteforce "Khoor"
 
-# Hex
-cargo run -- hex encode "flag{hex}"
-cargo run -- hex decode "666c61677b6865787d"
+# Vigenère cipher
+cargo run -- vigenere encrypt "HELLO" --key "KEY"
+cargo run -- vigenere decrypt "RIJVS" --key "KEY"
+
+# Atbash cipher (A↔Z)
+cargo run -- atbash cipher "Hello"
+
+# Rail Fence cipher
+cargo run -- railfence encrypt "HELLO WORLD" --rails 3
+cargo run -- railfence decrypt "HORELWLOLD L" --rails 3
+
+# Affine cipher (ax+b mod 26)
+cargo run -- affine encrypt "HELLO" --a 5 --b 8
+cargo run -- affine decrypt "RCLLA" --a 5 --b 8
 
 # XOR
 cargo run -- xor cipher "48656c6c6f" --key "41"
 cargo run -- xor cipher "48656c6c6f" --key "A" --ascii
 cargo run -- xor bruteforce "48656c6c6f" --printable
+```
+
+### Hash Operations
+
+```bash
+# Generate hashes
+cargo run -- hash md5 "password"
+cargo run -- hash sha1 "password"
+cargo run -- hash sha256 "password"
+cargo run -- hash sha512 "password"
+
+# Identify hash type
+cargo run -- hashid identify "5d41402abc4b2a76b9719d911017c592"
+```
+
+### Utilities
+
+```bash
+# Character frequency analysis
+cargo run -- frequency analyze "Hello World"
+cargo run -- frequency top "Hello World" --count 5
+
+# Auto-detect and decode
+cargo run -- auto decode "SGVsbG8gV29ybGQ="
+cargo run -- auto chain "SGVsbG8gV29ybGQ="  # Try multiple decodings
 ```
 
 ## Code Conventions
@@ -88,6 +184,7 @@ cargo run -- xor bruteforce "48656c6c6f" --printable
 - Each crypto operation has its own module in `src/crypto/`
 - Modules expose a `run()` function for CLI integration and individual functions for library use
 - CLI action enums derive `clap::Subcommand` for subcommand parsing
+- Commands are organized into categories: Encoding, Classic Ciphers, Hash, Utilities
 
 ### Error Handling
 - Use `anyhow::Result` for fallible operations
@@ -145,8 +242,13 @@ All checks must pass before merging.
 | `anyhow` | Error handling with context |
 | `clap` | CLI argument parsing with derive macros |
 | `base64` | Base64 encoding/decoding |
+| `bs58` | Base58 encoding/decoding |
 | `data-encoding` | Base32 encoding/decoding |
 | `hex` | Hexadecimal encoding/decoding |
+| `md-5` | MD5 hash generation |
+| `sha1` | SHA1 hash generation |
+| `sha2` | SHA256/SHA512 hash generation |
+| `urlencoding` | URL percent-encoding |
 
 ## Adding New Features
 
@@ -154,7 +256,7 @@ All checks must pass before merging.
 2. Define an action enum with `#[derive(Subcommand)]`
 3. Implement `run()` function and core logic functions
 4. Export the module in `src/crypto/mod.rs`
-5. Add the subcommand to `Commands` enum in `src/main.rs`
+5. Add the subcommand to `Commands` enum in `src/main.rs` (in appropriate category)
 6. Add integration tests in `tests/`
 7. Run `cargo fmt` and `cargo clippy -- -D warnings` before committing
 
@@ -166,3 +268,4 @@ All checks must pass before merging.
 - Keep functions pure and testable where possible
 - XOR module uses `let-else` patterns (Rust 1.65+ feature)
 - Prefer `&str` for input parameters, return owned `String` for results
+- Commands in `main.rs` are organized by category with comments
