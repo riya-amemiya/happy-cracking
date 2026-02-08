@@ -56,3 +56,33 @@ fn caesar_encrypt_decrypt() {
     let decrypted = rot::rotate(&encrypted, 26 - shift);
     assert_eq!(decrypted, plaintext);
 }
+
+#[test]
+fn rot47_basic() {
+    assert_eq!(rot::rot47("Hello World!"), "w6==@ (@C=5P");
+}
+
+#[test]
+fn rot47_roundtrip() {
+    let original = "flag{r0t47_1s_fun!}";
+    let encoded = rot::rot47(original);
+    let decoded = rot::rot47(&encoded);
+    assert_eq!(decoded, original);
+}
+
+#[test]
+fn rot47_preserves_space() {
+    let input = "A B\tC";
+    let result = rot::rot47(input);
+    assert!(result.contains(' '));
+    assert!(result.contains('\t'));
+}
+
+#[test]
+fn rot47_preserves_control_chars() {
+    let input = "Hello\n\r\0World";
+    let result = rot::rot47(input);
+    assert!(result.contains('\n'));
+    assert!(result.contains('\r'));
+    assert!(result.contains('\0'));
+}

@@ -1,0 +1,61 @@
+use anyhow::{Context, Result};
+use clap::Subcommand;
+
+use crate::crypto;
+
+#[derive(Subcommand)]
+pub enum ChainAction {
+    #[command(about = "Apply a chain of operations")]
+    Run {
+        #[arg(help = "Input data")]
+        input: String,
+        #[arg(
+            short,
+            long,
+            help = "Comma-separated list of operations (e.g. base64-decode,rot13,hex-encode)"
+        )]
+        ops: String,
+    },
+}
+
+pub fn run(action: ChainAction) -> Result<()> {
+    match action {
+        ChainAction::Run { input, ops } => {
+            println!("{}", chain(&input, &ops)?);
+        }
+    }
+    Ok(())
+}
+
+fn apply_operation(input: &str, op: &str) -> Result<String> {
+    match op {
+        "base64-encode" => Ok(crypto::base64::encode(input)),
+        "base64-decode" => crypto::base64::decode(input),
+        "base32-encode" => Ok(crypto::base32::encode(input)),
+        "base32-decode" => crypto::base32::decode(input),
+        "hex-encode" => Ok(crypto::hex::encode(input)),
+        "hex-decode" => crypto::hex::decode(input),
+        "url-encode" => Ok(crypto::url::encode(input)),
+        "url-decode" => crypto::url::decode(input),
+        "binary-encode" => Ok(crypto::binary::encode(input)),
+        "binary-decode" => crypto::binary::decode(input),
+        "rot13" => Ok(crypto::rot::rot13(input)),
+        "rot47" => Ok(crypto::rot::rot47(input)),
+        "reverse" => Ok(input.chars().rev().collect()),
+        "upper" => Ok(input.to_uppercase()),
+        "lower" => Ok(input.to_lowercase()),
+        _ => anyhow::bail!("Unknown operation: {}", op),
+    }
+}
+
+pub fn chain(input: &str, ops: &str) -> Result<String> {
+    if ops.trim().is_empty() {
+        return Ok(input.to_string());
+    }
+
+    ops.split(',')
+        .map(|op| op.trim())
+        .try_fold(input.to_string(), |current, op| {
+            apply_operation(&current, op).with_context(|| format!("Failed at operation '{}'", op))
+        })
+}
