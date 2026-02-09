@@ -1,0 +1,148 @@
+use anyhow::{Context, Result};
+use clap::Subcommand;
+
+#[derive(Subcommand)]
+pub enum BaudotAction {
+    #[command(about = "Encode text to Baudot/ITA2 code")]
+    Encode {
+        #[arg(help = "Input text")]
+        input: String,
+    },
+    #[command(about = "Decode Baudot/ITA2 code to text")]
+    Decode {
+        #[arg(help = "Baudot encoded string (space-separated 5-bit binary)")]
+        input: String,
+    },
+}
+
+pub fn run(action: BaudotAction) -> Result<()> {
+    match action {
+        BaudotAction::Encode { input } => {
+            println!("{}", encode(&input)?);
+        }
+        BaudotAction::Decode { input } => {
+            println!("{}", decode(&input)?);
+        }
+    }
+    Ok(())
+}
+
+// ITA2 letter codes (MSB first): index -> (letter_char, figure_char)
+// Code 0x00 = NUL, 0x1B = FIGS shift, 0x1F = LTRS shift
+const ITA2_TABLE: &[(char, char)] = &[
+    ('\0', '\0'),  // 00000 - NUL
+    ('E', '3'),    // 00001
+    ('\n', '\n'),  // 00010 - LF
+    ('A', '-'),    // 00011
+    (' ', ' '),    // 00100 - SPACE
+    ('S', '\''),   // 00101
+    ('I', '8'),    // 00110
+    ('U', '7'),    // 00111
+    ('\r', '\r'),  // 01000 - CR
+    ('D', '$'),    // 01001
+    ('R', '4'),    // 01010
+    ('J', '\x07'), // 01011 - BELL in figures
+    ('N', ','),    // 01100
+    ('F', '!'),    // 01101
+    ('C', ':'),    // 01110
+    ('K', '('),    // 01111
+    ('T', '5'),    // 10000
+    ('Z', '"'),    // 10001
+    ('L', ')'),    // 10010
+    ('W', '2'),    // 10011
+    ('H', '#'),    // 10100
+    ('Y', '6'),    // 10101
+    ('P', '0'),    // 10110
+    ('Q', '1'),    // 10111
+    ('O', '9'),    // 11000
+    ('B', '?'),    // 11001
+    ('G', '&'),    // 11010
+    ('\0', '\0'),  // 11011 - FIGS shift
+    ('M', '.'),    // 11100
+    ('X', '/'),    // 11101
+    ('V', ';'),    // 11110
+    ('\0', '\0'),  // 11111 - LTRS shift
+];
+
+const FIGS_SHIFT: u8 = 0b11011;
+const LTRS_SHIFT: u8 = 0b11111;
+
+pub fn encode(input: &str) -> Result<String> {
+    if input.is_empty() {
+        return Ok(String::new());
+    }
+
+    let upper = input.to_uppercase();
+    let mut codes: Vec<String> = Vec::new();
+    let mut in_figures = false;
+
+    for c in upper.chars() {
+        if let Some((code, is_figure)) = find_code(c) {
+            if is_figure && !in_figures {
+                codes.push(format!("{:05b}", FIGS_SHIFT));
+                in_figures = true;
+            } else if !is_figure && in_figures && c != ' ' {
+                codes.push(format!("{:05b}", LTRS_SHIFT));
+                in_figures = false;
+            }
+            codes.push(format!("{:05b}", code));
+        }
+    }
+
+    Ok(codes.join(" "))
+}
+
+fn find_code(c: char) -> Option<(u8, bool)> {
+    for (i, (letter, figure)) in ITA2_TABLE.iter().enumerate() {
+        let code = i as u8;
+        if code == FIGS_SHIFT || code == LTRS_SHIFT {
+            continue;
+        }
+        if *letter == c {
+            return Some((code, false));
+        }
+        if *figure == c && c != *letter {
+            return Some((code, true));
+        }
+    }
+    None
+}
+
+pub fn decode(input: &str) -> Result<String> {
+    let input = input.trim();
+    if input.is_empty() {
+        return Ok(String::new());
+    }
+
+    let mut result = String::new();
+    let mut in_figures = false;
+
+    for code_str in input.split_whitespace() {
+        if code_str.len() != 5 || !code_str.chars().all(|c| c == '0' || c == '1') {
+            anyhow::bail!("Invalid Baudot code: {}", code_str);
+        }
+
+        let code = u8::from_str_radix(code_str, 2)
+            .context(format!("Failed to parse Baudot code: {}", code_str))?;
+
+        if code == FIGS_SHIFT {
+            in_figures = true;
+            continue;
+        }
+        if code == LTRS_SHIFT {
+            in_figures = false;
+            continue;
+        }
+
+        if let Some((letter, figure)) = ITA2_TABLE.get(code as usize) {
+            let ch = if in_figures { *figure } else { *letter };
+            if ch != '\0' {
+                result.push(ch);
+            }
+        } else {
+            anyhow::bail!("Baudot code out of range: {}", code);
+        }
+    }
+
+    Ok(result)
+}

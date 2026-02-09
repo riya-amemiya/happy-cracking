@@ -28,6 +28,11 @@ enum Commands {
         #[command(subcommand)]
         action: crypto::base58::Base58Action,
     },
+    #[command(about = "Base62 encode/decode")]
+    Base62 {
+        #[command(subcommand)]
+        action: crypto::base62::Base62Action,
+    },
     #[command(about = "Base85 (ASCII85) encode/decode")]
     Base85 {
         #[command(subcommand)]
@@ -63,6 +68,36 @@ enum Commands {
         #[command(subcommand)]
         action: crypto::a1z26::A1z26Action,
     },
+    #[command(about = "Baudot/ITA2 telegraph code")]
+    Baudot {
+        #[command(subcommand)]
+        action: crypto::baudot::BaudotAction,
+    },
+    #[command(about = "Braille encoding")]
+    Braille {
+        #[command(subcommand)]
+        action: crypto::braille::BrailleAction,
+    },
+    #[command(about = "NATO phonetic alphabet")]
+    Nato {
+        #[command(subcommand)]
+        action: crypto::nato::NatoAction,
+    },
+    #[command(about = "Phone keypad multi-tap encoding")]
+    Phone {
+        #[command(subcommand)]
+        action: crypto::phone::PhoneAction,
+    },
+    #[command(about = "Flag semaphore encoding")]
+    Semaphore {
+        #[command(subcommand)]
+        action: crypto::semaphore::SemaphoreAction,
+    },
+    #[command(about = "Tap code encoding")]
+    Tapcode {
+        #[command(subcommand)]
+        action: crypto::tapcode::TapcodeAction,
+    },
 
     // === Classic Ciphers ===
     #[command(about = "ROT13 cipher")]
@@ -95,6 +130,11 @@ enum Commands {
         #[command(subcommand)]
         action: crypto::beaufort::BeaufortAction,
     },
+    #[command(about = "Gronsfeld cipher (numeric Vigenère)")]
+    Gronsfeld {
+        #[command(subcommand)]
+        action: crypto::gronsfeld::GronsfeldAction,
+    },
     #[command(about = "Atbash cipher (A↔Z)")]
     Atbash {
         #[command(subcommand)]
@@ -115,6 +155,26 @@ enum Commands {
         #[command(subcommand)]
         action: crypto::playfair::PlayfairAction,
     },
+    #[command(about = "Four-square cipher")]
+    Foursquare {
+        #[command(subcommand)]
+        action: crypto::foursquare::FoursquareAction,
+    },
+    #[command(about = "Hill cipher (matrix-based)")]
+    Hill {
+        #[command(subcommand)]
+        action: crypto::hill::HillAction,
+    },
+    #[command(about = "Bifid cipher")]
+    Bifid {
+        #[command(subcommand)]
+        action: crypto::bifid::BifidAction,
+    },
+    #[command(about = "ADFGVX cipher")]
+    Adfgvx {
+        #[command(subcommand)]
+        action: crypto::adfgvx::AdfgvxAction,
+    },
     #[command(about = "Columnar transposition cipher")]
     Columnar {
         #[command(subcommand)]
@@ -130,8 +190,13 @@ enum Commands {
         #[command(subcommand)]
         action: crypto::polybius::PolybiusAction,
     },
+    #[command(about = "One-time pad")]
+    Otp {
+        #[command(subcommand)]
+        action: crypto::otp::OtpAction,
+    },
 
-    // === Hash ===
+    // === Hash / Crypto ===
     #[command(about = "Generate hash (MD5, SHA1, SHA256, SHA512)")]
     Hash {
         #[command(subcommand)]
@@ -141,6 +206,21 @@ enum Commands {
     Hashid {
         #[command(subcommand)]
         action: crypto::hashid::HashIdAction,
+    },
+    #[command(about = "HMAC calculation")]
+    Hmac {
+        #[command(subcommand)]
+        action: crypto::hmac::HmacAction,
+    },
+    #[command(about = "CRC32 checksum")]
+    Crc32 {
+        #[command(subcommand)]
+        action: crypto::crc32::Crc32Action,
+    },
+    #[command(about = "RSA utilities (compute-d, encrypt, decrypt, attacks)")]
+    Rsa {
+        #[command(subcommand)]
+        action: crypto::rsa::RsaAction,
     },
 
     // === Utilities ===
@@ -184,6 +264,21 @@ enum Commands {
         #[command(subcommand)]
         action: crypto::chain::ChainAction,
     },
+    #[command(about = "Hex dump display (xxd-style)")]
+    Hexdump {
+        #[command(subcommand)]
+        action: crypto::hexdump::HexdumpAction,
+    },
+    #[command(about = "Bit rotation operations")]
+    Bitrot {
+        #[command(subcommand)]
+        action: crypto::bitrot::BitrotAction,
+    },
+    #[command(about = "Padding scheme utilities (PKCS7, zero padding)")]
+    Padding {
+        #[command(subcommand)]
+        action: crypto::padding::PaddingAction,
+    },
 }
 
 fn main() -> Result<()> {
@@ -194,6 +289,7 @@ fn main() -> Result<()> {
         Commands::Base64 { action } => crypto::base64::run(action)?,
         Commands::Base32 { action } => crypto::base32::run(action)?,
         Commands::Base58 { action } => crypto::base58::run(action)?,
+        Commands::Base62 { action } => crypto::base62::run(action)?,
         Commands::Base85 { action } => crypto::base85::run(action)?,
         Commands::Base91 { action } => crypto::base91::run(action)?,
         Commands::Hex { action } => crypto::hex::run(action)?,
@@ -201,6 +297,12 @@ fn main() -> Result<()> {
         Commands::Binary { action } => crypto::binary::run(action)?,
         Commands::Morse { action } => crypto::morse::run(action)?,
         Commands::A1z26 { action } => crypto::a1z26::run(action)?,
+        Commands::Baudot { action } => crypto::baudot::run(action)?,
+        Commands::Braille { action } => crypto::braille::run(action)?,
+        Commands::Nato { action } => crypto::nato::run(action)?,
+        Commands::Phone { action } => crypto::phone::run(action)?,
+        Commands::Semaphore { action } => crypto::semaphore::run(action)?,
+        Commands::Tapcode { action } => crypto::tapcode::run(action)?,
 
         // Classic Ciphers
         Commands::Rot13 { input } => {
@@ -213,17 +315,26 @@ fn main() -> Result<()> {
         Commands::Xor { action } => crypto::xor::run(action)?,
         Commands::Vigenere { action } => crypto::vigenere::run(action)?,
         Commands::Beaufort { action } => crypto::beaufort::run(action)?,
+        Commands::Gronsfeld { action } => crypto::gronsfeld::run(action)?,
         Commands::Atbash { action } => crypto::atbash::run(action)?,
         Commands::Railfence { action } => crypto::railfence::run(action)?,
         Commands::Affine { action } => crypto::affine::run(action)?,
         Commands::Playfair { action } => crypto::playfair::run(action)?,
+        Commands::Foursquare { action } => crypto::foursquare::run(action)?,
+        Commands::Hill { action } => crypto::hill::run(action)?,
+        Commands::Bifid { action } => crypto::bifid::run(action)?,
+        Commands::Adfgvx { action } => crypto::adfgvx::run(action)?,
         Commands::Columnar { action } => crypto::columnar::run(action)?,
         Commands::Baconian { action } => crypto::baconian::run(action)?,
         Commands::Polybius { action } => crypto::polybius::run(action)?,
+        Commands::Otp { action } => crypto::otp::run(action)?,
 
-        // Hash
+        // Hash / Crypto
         Commands::Hash { action } => crypto::hash::run(action)?,
         Commands::Hashid { action } => crypto::hashid::run(action)?,
+        Commands::Hmac { action } => crypto::hmac::run(action)?,
+        Commands::Crc32 { action } => crypto::crc32::run(action)?,
+        Commands::Rsa { action } => crypto::rsa::run(action)?,
 
         // Utilities
         Commands::Frequency { action } => crypto::frequency::run(action)?,
@@ -234,6 +345,9 @@ fn main() -> Result<()> {
         Commands::Str { action } => crypto::strtools::run(action)?,
         Commands::Numconv { action } => crypto::numbersys::run(action)?,
         Commands::Chain { action } => crypto::chain::run(action)?,
+        Commands::Hexdump { action } => crypto::hexdump::run(action)?,
+        Commands::Bitrot { action } => crypto::bitrot::run(action)?,
+        Commands::Padding { action } => crypto::padding::run(action)?,
     }
 
     Ok(())
