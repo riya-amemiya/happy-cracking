@@ -1,8 +1,5 @@
 use anyhow::Result;
 use clap::Subcommand;
-use num_bigint::BigUint;
-use num_integer::Integer;
-use num_traits::One;
 
 #[derive(Subcommand)]
 pub enum PrimesAction {
@@ -46,13 +43,6 @@ pub fn factorize(mut n: u128) -> Vec<(u128, u32)> {
         return factors;
     }
 
-    // Optimization: Check if n is prime immediately.
-    // This prevents hanging on large primes (DoS protection).
-    if is_prime(n) {
-        factors.push((n, 1));
-        return factors;
-    }
-
     // Optimization: Handle 2 separately to skip all even numbers in the loop
     if n.is_multiple_of(2) {
         let mut count = 0_u32;
@@ -72,13 +62,7 @@ pub fn factorize(mut n: u128) -> Vec<(u128, u32)> {
         }
         if count > 0 {
             factors.push((d, count));
-            // If the remaining number is prime, we are done.
-            if n > 1 && is_prime(n) {
-                factors.push((n, 1));
-                return factors;
-            }
         }
-
         d += 2;
     }
 
@@ -89,62 +73,25 @@ pub fn factorize(mut n: u128) -> Vec<(u128, u32)> {
     factors
 }
 
-// Deterministic Miller-Rabin primality test for u128.
-// Bases: 2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71.
-fn miller_rabin(n: u128) -> bool {
+// Trial division primality test.
+pub fn is_prime(n: u128) -> bool {
     if n < 2 {
         return false;
     }
-    if n == 2 || n == 3 {
+    if n < 4 {
         return true;
     }
-    if n.is_multiple_of(2) {
+    if n.is_multiple_of(2) || n.is_multiple_of(3) {
         return false;
     }
-
-    let bases = [
-        2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71,
-    ];
-
-    let n_big = BigUint::from(n);
-    let one = BigUint::one();
-    let n_minus_1 = &n_big - &one;
-
-    // Find d, s such that n - 1 = d * 2^s
-    let mut d = n_minus_1.clone();
-    let mut s = 0;
-    while d.is_even() {
-        d >>= 1;
-        s += 1;
+    let mut i = 5_u128;
+    while i * i <= n {
+        if n.is_multiple_of(i) || n.is_multiple_of(i + 2) {
+            return false;
+        }
+        i += 6;
     }
-
-    'base_loop: for &a in &bases {
-        if n <= a {
-            break;
-        }
-
-        let a_big = BigUint::from(a);
-        let mut x = a_big.modpow(&d, &n_big);
-
-        if x == one || x == n_minus_1 {
-            continue;
-        }
-
-        for _ in 0..s - 1 {
-            x = x.modpow(&BigUint::from(2u32), &n_big);
-            if x == n_minus_1 {
-                continue 'base_loop;
-            }
-        }
-
-        return false;
-    }
-
     true
-}
-
-pub fn is_prime(n: u128) -> bool {
-    miller_rabin(n)
 }
 
 // Format factorization result as "2^2 × 3 × 7".
