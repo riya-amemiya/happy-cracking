@@ -89,3 +89,57 @@ fn test_factorize_roundtrip() {
     let product: u128 = factors.iter().map(|(p, e)| p.pow(*e)).product();
     assert_eq!(product, n);
 }
+
+#[test]
+fn test_is_prime_large_performance() {
+    use std::time::Instant;
+
+    // 64-bit prime: 2^64 - 59
+    let large_prime = 18446744073709551557;
+    let start = Instant::now();
+    let result = primes::is_prime(large_prime);
+    let duration = start.elapsed();
+    assert!(result);
+    assert!(
+        duration.as_millis() < 50,
+        "Miller-Rabin should be very fast for u64"
+    );
+
+    // 128-bit prime: 2^127 - 1 (Mersenne prime)
+    let larger_prime: u128 = 170141183460469231731687303715884105727;
+    let start = Instant::now();
+    let result = primes::is_prime(larger_prime);
+    let duration = start.elapsed();
+    assert!(result);
+    assert!(
+        duration.as_millis() < 50,
+        "Miller-Rabin should be very fast for u128"
+    );
+}
+
+#[test]
+fn test_factorize_large_prime_performance() {
+    use std::time::Instant;
+
+    // 64-bit prime should be instant
+    let large_prime = 18446744073709551557;
+    let start = Instant::now();
+    let factors = primes::factorize(large_prime);
+    let duration = start.elapsed();
+    assert_eq!(factors, vec![(large_prime, 1)]);
+    assert!(
+        duration.as_millis() < 50,
+        "Factorize for prime should be instant"
+    );
+
+    // 128-bit prime should be instant
+    let larger_prime: u128 = 170141183460469231731687303715884105727;
+    let start = Instant::now();
+    let factors = primes::factorize(larger_prime);
+    let duration = start.elapsed();
+    assert_eq!(factors, vec![(larger_prime, 1)]);
+    assert!(
+        duration.as_millis() < 50,
+        "Factorize for large prime should be instant"
+    );
+}
