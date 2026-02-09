@@ -1,4 +1,4 @@
-# CLAUDE.md - AI Assistant Guide for happy-cracking
+# AGENTS.md - AI Assistant Guide for happy-cracking
 
 ## Project Overview
 
