@@ -53,7 +53,17 @@ pub fn factorize(mut n: u128) -> Vec<(u128, u32)> {
         return factors;
     }
 
-    let mut d = 2_u128;
+    // Optimization: Handle 2 separately to skip all even numbers in the loop
+    if n.is_multiple_of(2) {
+        let mut count = 0_u32;
+        while n.is_multiple_of(2) {
+            count += 1;
+            n /= 2;
+        }
+        factors.push((2, count));
+    }
+
+    let mut d = 3_u128;
     while d * d <= n {
         let mut count = 0_u32;
         while n.is_multiple_of(d) {
@@ -69,11 +79,7 @@ pub fn factorize(mut n: u128) -> Vec<(u128, u32)> {
             }
         }
 
-        if d == 2 {
-            d = 3;
-        } else {
-            d += 2;
-        }
+        d += 2;
     }
 
     if n > 1 {
