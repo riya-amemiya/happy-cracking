@@ -11,7 +11,7 @@ happy-cracking/
 ├── src/
 │   ├── main.rs           # CLI entry point with clap subcommands
 │   ├── lib.rs            # Library root, exposes crypto module
-│   └── crypto/           # Cryptographic operations (48 modules)
+│   └── crypto/           # Cryptographic operations (51 modules)
 │       ├── mod.rs        # Module exports
 │       │
 │       │ # Encoding
@@ -28,7 +28,6 @@ happy-cracking/
 │       ├── hex.rs        # Hex encode/decode
 │       ├── morse.rs      # Morse code encode/decode
 │       ├── nato.rs       # NATO phonetic alphabet
-│       ├── numbersys.rs  # Number base conversion (2-36)
 │       ├── phone.rs      # Phone keypad multi-tap
 │       ├── semaphore.rs  # Flag semaphore encoding
 │       ├── tapcode.rs    # Tap code encoding
@@ -69,6 +68,7 @@ happy-cracking/
 │       ├── frequency.rs  # Character frequency analysis
 │       ├── hexdump.rs    # Hex dump display
 │       ├── mathtools.rs  # Number theory (GCD, modinv, modpow)
+│       ├── numbersys.rs  # Number base conversion (2-36)
 │       ├── padding.rs    # Padding scheme utilities
 │       ├── primes.rs     # Prime factorization and primality test
 │       └── strtools.rs   # String tools (reverse, ord, chr)
@@ -144,6 +144,26 @@ cargo run -- morse decode "... --- ..."
 # Number base conversion
 cargo run -- numconv convert 255 --from 10 --to 16
 cargo run -- numconv convert ff --from 16 --to 2
+
+# NATO phonetic alphabet
+cargo run -- nato encode "hello"
+cargo run -- nato decode "HOTEL ECHO LIMA LIMA OSCAR"
+
+# Tap code
+cargo run -- tapcode encode "hello"
+cargo run -- tapcode decode ". ..... . ..... ... . ... . ... ....."
+
+# Flag semaphore
+cargo run -- semaphore encode "hello"
+cargo run -- semaphore decode "2-3 1-6 3-2 3-2 3-6"
+
+# Phone keypad
+cargo run -- phone encode "hello"
+cargo run -- phone decode "44 33 555 555 666"
+
+# Baudot code
+cargo run -- baudot encode "hello"
+cargo run -- baudot decode "10100 00001 01001 01001 11000"
 ```
 
 ### Classic Ciphers
@@ -151,6 +171,9 @@ cargo run -- numconv convert ff --from 16 --to 2
 ```bash
 # ROT13
 cargo run -- rot13 "Hello"
+
+# ROT47
+cargo run -- rot47 "Hello"
 
 # Caesar cipher
 cargo run -- caesar encrypt "Hello" --shift 3
@@ -180,6 +203,27 @@ cargo run -- baconian decode "AABBB AABAA ABABB ABABB ABBAB"
 cargo run -- xor cipher "48656c6c6f" --key "41"
 cargo run -- xor cipher "48656c6c6f" --key "A" --ascii
 cargo run -- xor bruteforce "48656c6c6f" --printable
+
+# Four-square cipher
+cargo run -- foursquare encrypt "HELLO WORLD" --key1 "KEYONE" --key2 "KEYTWO"
+
+# Hill cipher
+cargo run -- hill encrypt "HELLO" --key "6 24 1 13 16 10 20 17 15"
+
+# Bifid cipher
+cargo run -- bifid encrypt "HELLO" --key "KEY"
+
+# ADFGVX cipher
+cargo run -- adfgvx encrypt "HELLO" --key "default" --transposition-key "KEY"
+
+# Columnar Transposition cipher
+cargo run -- columnar encrypt "HELLO" --key "KEY"
+
+# Polybius square
+cargo run -- polybius encrypt "HELLO"
+
+# One-time pad
+cargo run -- otp encrypt "Hello" --key "0102030405"
 ```
 
 ### Hash / Crypto
@@ -194,6 +238,12 @@ cargo run -- hashid identify "5d41402abc4b2a76b9719d911017c592"
 
 # RSA
 cargo run -- rsa compute-d --p 61 --q 53 --e 17
+
+# HMAC
+cargo run -- hmac sha256 "message" --key "secret"
+
+# CRC32
+cargo run -- crc32 compute "hello"
 ```
 
 ### Utilities
@@ -221,6 +271,15 @@ cargo run -- hexdump view "Hello World"
 
 # Chain operations
 cargo run -- chain run "Hello" --ops "base64-encode"
+
+# Bit rotation
+cargo run -- bitrot rotl "deadbeef" --bits 1 --width 32
+
+# Padding
+cargo run -- padding pkcs7-pad "deadbeef"
+
+# String tools
+cargo run -- str reverse "hello"
 ```
 
 ## Code Conventions
