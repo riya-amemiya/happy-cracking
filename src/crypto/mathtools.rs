@@ -1,5 +1,8 @@
 use anyhow::{Context, Result};
 use clap::Subcommand;
+use num_bigint::{BigInt, BigUint};
+use num_integer::Integer;
+use num_traits::One;
 
 #[derive(Subcommand)]
 pub enum MathAction {
@@ -90,45 +93,43 @@ pub fn modinv(a: u128, m: u128) -> Result<u128> {
         return Ok(0);
     }
 
-    let (mut old_r, mut r) = (a as i128, m as i128);
-    let (mut old_s, mut s) = (1_i128, 0_i128);
+    // Use BigInt to prevent overflow when casting to i128,
+    // which happens if a or m > i128::MAX (2^127-1).
+    let a_big = BigInt::from(a);
+    let m_big = BigInt::from(m);
 
-    while r != 0 {
-        let q = old_r / r;
-        let tmp_r = r;
-        r = old_r - q * r;
-        old_r = tmp_r;
-        let tmp_s = s;
-        s = old_s - q * s;
-        old_s = tmp_s;
-    }
+    let extended = a_big.extended_gcd(&m_big);
 
-    if old_r != 1 {
+    if extended.gcd != BigInt::one() {
         anyhow::bail!(
             "Modular inverse does not exist (gcd({}, {}) = {})",
             a,
             m,
-            old_r
+            extended.gcd
         );
     }
 
-    Ok(((old_s % m as i128 + m as i128) % m as i128) as u128)
+    // x might be negative, ensure positive result in [0, m)
+    let res = (extended.x % &m_big + &m_big) % &m_big;
+
+    // Result fits in u128 because m fits in u128
+    Ok(res.try_into().unwrap())
 }
 
 // Binary exponentiation for modular power.
 // Computes base^exp mod m.
-pub fn modpow(mut base: u128, mut exp: u128, m: u128) -> u128 {
+pub fn modpow(base: u128, exp: u128, m: u128) -> u128 {
     if m == 1 {
         return 0;
     }
-    let mut result = 1_u128;
-    base %= m;
-    while exp > 0 {
-        if exp & 1 == 1 {
-            result = (result * base) % m;
-        }
-        exp >>= 1;
-        base = (base * base) % m;
-    }
-    result
+
+    // Use BigUint to prevent overflow during intermediate calculations (base * base)
+    let base_big = BigUint::from(base);
+    let exp_big = BigUint::from(exp);
+    let m_big = BigUint::from(m);
+
+    let res = base_big.modpow(&exp_big, &m_big);
+
+    // Result fits in u128 because res < m <= u128::MAX
+    res.try_into().unwrap()
 }
