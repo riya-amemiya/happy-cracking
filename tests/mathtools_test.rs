@@ -97,3 +97,31 @@ fn test_modpow_rsa_style() {
     let decrypted = mathtools::modpow(encrypted, d, n);
     assert_eq!(decrypted, message);
 }
+
+#[test]
+fn test_modpow_overflow() {
+    // m > 2^64
+    let m: u128 = 1u128 << 65;
+    let base: u128 = 3;
+    let exp: u128 = 100;
+
+    // logic: 3^100 mod 2^65
+    // intermediate base*base will overflow u128 eventually because m > 2^64
+    // when base > 2^64, base*base > 2^128, overflow.
+    // 3^100 mod 2^65 = 33908865301881557969
+    let result = mathtools::modpow(base, exp, m);
+    assert_eq!(result, 33908865301881557969);
+}
+
+#[test]
+fn test_modinv_large_inputs() {
+    // gcd(u128::MAX - 2, u128::MAX) = 1
+    // u128::MAX = 2^128 - 1
+    let m = u128::MAX;
+    let a = u128::MAX - 2;
+
+    // Inverse exists.
+    let res = mathtools::modinv(a, m).unwrap();
+    // 170141183460469231731687303715884105727
+    assert_eq!(res, 170141183460469231731687303715884105727);
+}
