@@ -63,7 +63,18 @@ pub fn factorize(mut n: u128) -> Vec<(u128, u32)> {
         factors.push((2, count));
     }
 
-    let mut d = 3_u128;
+    // Optimization: Handle 3 separately to skip multiples of 3
+    if n.is_multiple_of(3) {
+        let mut count = 0_u32;
+        while n.is_multiple_of(3) {
+            count += 1;
+            n /= 3;
+        }
+        factors.push((3, count));
+    }
+
+    let mut d = 5_u128;
+    let mut step = 2_u128;
     while d * d <= n {
         let mut count = 0_u32;
         while n.is_multiple_of(d) {
@@ -79,7 +90,8 @@ pub fn factorize(mut n: u128) -> Vec<(u128, u32)> {
             }
         }
 
-        d += 2;
+        d += step;
+        step = 6 - step;
     }
 
     if n > 1 {
