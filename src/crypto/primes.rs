@@ -183,7 +183,7 @@ fn miller_rabin_u64(n: u64) -> bool {
     if n == 2 || n == 3 {
         return true;
     }
-    if n % 2 == 0 {
+    if n.is_multiple_of(2) {
         return false;
     }
 
