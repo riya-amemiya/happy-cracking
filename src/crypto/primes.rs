@@ -155,8 +155,75 @@ fn miller_rabin(n: u128) -> bool {
     true
 }
 
+// Optimized modular exponentiation for u64 using u128 arithmetic.
+fn mod_pow_u64(base: u64, mut exp: u64, modulus: u64) -> u64 {
+    if modulus == 1 {
+        return 0;
+    }
+    let mut result: u128 = 1;
+    let mut base_u128 = (base as u128) % (modulus as u128);
+    let modulus_u128 = modulus as u128;
+
+    while exp > 0 {
+        if exp % 2 == 1 {
+            result = (result * base_u128) % modulus_u128;
+        }
+        base_u128 = (base_u128 * base_u128) % modulus_u128;
+        exp /= 2;
+    }
+    result as u64
+}
+
+// Optimized Miller-Rabin for u64 using u128 arithmetic.
+// Bases: 2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37.
+fn miller_rabin_u64(n: u64) -> bool {
+    if n < 2 {
+        return false;
+    }
+    if n == 2 || n == 3 {
+        return true;
+    }
+    if n % 2 == 0 {
+        return false;
+    }
+
+    let bases = [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37];
+
+    let d_init = n - 1;
+    let s = d_init.trailing_zeros();
+    let d = d_init >> s;
+
+    for &a in &bases {
+        if n <= a {
+            break;
+        }
+
+        let mut x = mod_pow_u64(a, d, n);
+        if x == 1 || x == n - 1 {
+            continue;
+        }
+
+        let mut composite = true;
+        for _ in 0..s - 1 {
+            x = ((x as u128 * x as u128) % (n as u128)) as u64;
+            if x == n - 1 {
+                composite = false;
+                break;
+            }
+        }
+        if composite {
+            return false;
+        }
+    }
+    true
+}
+
 pub fn is_prime(n: u128) -> bool {
-    miller_rabin(n)
+    if n <= u64::MAX as u128 {
+        miller_rabin_u64(n as u64)
+    } else {
+        miller_rabin(n)
+    }
 }
 
 // Format factorization result as "2^2 × 3 × 7".
