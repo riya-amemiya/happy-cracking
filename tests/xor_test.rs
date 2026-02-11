@@ -54,3 +54,11 @@ fn single_byte_xor_bruteforce_returns_256_results() {
     let results = xor::single_byte_xor_bruteforce(data);
     assert_eq!(results.len(), 256);
 }
+
+#[test]
+fn xor_bytes_empty_key() {
+    let data = b"Hello";
+    let key = b"";
+    let result = xor::xor_bytes(data, key);
+    assert_eq!(result, data);
+}
