@@ -113,6 +113,14 @@ cargo run -- <command>
 cargo run -- base64 encode "Hello, World!"
 cargo run -- base64 decode "SGVsbG8sIFdvcmxkIQ=="
 
+# Base32
+cargo run -- base32 encode "Hello"
+cargo run -- base32 decode "JBSWY3DP"
+
+# Base58
+cargo run -- base58 encode "Hello"
+cargo run -- base58 decode "9A8o"
+
 # Base62
 cargo run -- base62 encode "Hello"
 cargo run -- base62 decode "73XpUgyM"
@@ -121,9 +129,9 @@ cargo run -- base62 decode "73XpUgyM"
 cargo run -- base85 encode "Hello"
 cargo run -- base85 decode "87cURDZ"
 
-# Braille
-cargo run -- braille encode "Hello"
-cargo run -- braille decode "⠓⠑⠇⠇⠕"
+# Base91
+cargo run -- base91 encode "Hello"
+cargo run -- base91 decode ">OwJh"
 
 # Hex
 cargo run -- hex encode "flag{hex}"
@@ -141,29 +149,33 @@ cargo run -- binary decode "01001000 01101001"
 cargo run -- morse encode "SOS"
 cargo run -- morse decode "... --- ..."
 
-# Number base conversion
-cargo run -- numconv convert 255 --from 10 --to 16
-cargo run -- numconv convert ff --from 16 --to 2
+# A1Z26 cipher (A=1, B=2, ..., Z=26)
+cargo run -- a1z26 encode "Hello"
+cargo run -- a1z26 decode "8-5-12-12-15"
+
+# Baudot code
+cargo run -- baudot encode "hello"
+cargo run -- baudot decode "10100 00001 01001 01001 11000"
+
+# Braille
+cargo run -- braille encode "Hello"
+cargo run -- braille decode "⠓⠑⠇⠇⠕"
 
 # NATO phonetic alphabet
 cargo run -- nato encode "hello"
 cargo run -- nato decode "HOTEL ECHO LIMA LIMA OSCAR"
 
-# Tap code
-cargo run -- tapcode encode "hello"
-cargo run -- tapcode decode ". ..... . ..... ... . ... . ... ....."
+# Phone keypad
+cargo run -- phone encode "hello"
+cargo run -- phone decode "44 33 555 555 666"
 
 # Flag semaphore
 cargo run -- semaphore encode "hello"
 cargo run -- semaphore decode "2-3 1-6 3-2 3-2 3-6"
 
-# Phone keypad
-cargo run -- phone encode "hello"
-cargo run -- phone decode "44 33 555 555 666"
-
-# Baudot code
-cargo run -- baudot encode "hello"
-cargo run -- baudot decode "10100 00001 01001 01001 11000"
+# Tap code
+cargo run -- tapcode encode "hello"
+cargo run -- tapcode decode ". ..... . ..... ... . ... . ... ....."
 ```
 
 ### Classic Ciphers
@@ -179,9 +191,25 @@ cargo run -- rot47 "Hello"
 cargo run -- caesar encrypt "Hello" --shift 3
 cargo run -- caesar bruteforce "Khoor"
 
+# XOR
+cargo run -- xor cipher "48656c6c6f" --key "41"
+cargo run -- xor cipher "48656c6c6f" --key "A" --ascii
+cargo run -- xor bruteforce "48656c6c6f" --printable
+
 # Vigenere cipher
 cargo run -- vigenere encrypt "HELLO" --key "KEY"
 cargo run -- vigenere decrypt "RIJVS" --key "KEY"
+
+# Beaufort cipher
+cargo run -- beaufort encrypt "HELLO" --key "KEY"
+cargo run -- beaufort decrypt "DANZQ" --key "KEY"
+
+# Gronsfeld cipher (numeric Vigenere)
+cargo run -- gronsfeld encrypt "HELLO" --key "123"
+cargo run -- gronsfeld decrypt "IGOMQ" --key "123"
+
+# Atbash cipher (A↔Z)
+cargo run -- atbash transform "HELLO"
 
 # Rail Fence cipher
 cargo run -- railfence encrypt "HELLO WORLD" --rails 3
@@ -194,15 +222,6 @@ cargo run -- affine decrypt "RCLLA" --a 5 --b 8
 # Playfair cipher
 cargo run -- playfair encrypt "HELLO WORLD" --key "MONARCHY"
 cargo run -- playfair decrypt "CFSUPMOMZPD" --key "MONARCHY"
-
-# Baconian cipher
-cargo run -- baconian encode "HELLO"
-cargo run -- baconian decode "AABBB AABAA ABABB ABABB ABBAB"
-
-# XOR
-cargo run -- xor cipher "48656c6c6f" --key "41"
-cargo run -- xor cipher "48656c6c6f" --key "A" --ascii
-cargo run -- xor bruteforce "48656c6c6f" --printable
 
 # Four-square cipher
 cargo run -- foursquare encrypt "HELLO WORLD" --key1 "KEYONE" --key2 "KEYTWO"
@@ -218,6 +237,10 @@ cargo run -- adfgvx encrypt "HELLO" --key "default" --transposition-key "KEY"
 
 # Columnar Transposition cipher
 cargo run -- columnar encrypt "HELLO" --key "KEY"
+
+# Baconian cipher
+cargo run -- baconian encode "HELLO"
+cargo run -- baconian decode "AABBB AABAA ABABB ABABB ABBAB"
 
 # Polybius square
 cargo run -- polybius encrypt "HELLO"
@@ -236,14 +259,14 @@ cargo run -- hash sha256 "password"
 # Identify hash type
 cargo run -- hashid identify "5d41402abc4b2a76b9719d911017c592"
 
-# RSA
-cargo run -- rsa compute-d --p 61 --q 53 --e 17
-
 # HMAC
 cargo run -- hmac sha256 "message" --key "secret"
 
 # CRC32
 cargo run -- crc32 compute "hello"
+
+# RSA
+cargo run -- rsa compute-d --p 61 --q 53 --e 17
 ```
 
 ### Utilities
@@ -266,20 +289,24 @@ cargo run -- math modinv 3 26
 cargo run -- primes factorize 84
 cargo run -- primes isprime 104729
 
-# Hexdump
-cargo run -- hexdump view "Hello World"
+# String tools
+cargo run -- str reverse "hello"
+
+# Number base conversion
+cargo run -- numconv convert 255 --from 10 --to 16
+cargo run -- numconv convert ff --from 16 --to 2
 
 # Chain operations
 cargo run -- chain run "Hello" --ops "base64-encode"
+
+# Hexdump
+cargo run -- hexdump view "Hello World"
 
 # Bit rotation
 cargo run -- bitrot rotl "deadbeef" --bits 1 --width 32
 
 # Padding
 cargo run -- padding pkcs7-pad "deadbeef"
-
-# String tools
-cargo run -- str reverse "hello"
 ```
 
 ## Code Conventions
