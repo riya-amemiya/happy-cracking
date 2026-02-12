@@ -7,3 +7,8 @@
 **Vulnerability:** Cipher implementation using modulo operator on key length (e.g., `i % key.len()`) panicked when key was empty.
 **Learning:** Rust's type safety doesn't prevent runtime logic errors like division by zero. Always validate inputs that are used as divisors, especially in loop conditions.
 **Prevention:** Check for empty keys/inputs at the start of functions or use `checked_rem` if panic is not acceptable.
+
+## 2026-02-12 - Panic on Mathematical Overflow/Zero
+**Vulnerability:** `modpow` panicked with modulus 0 (div by zero) and `lcm` panicked on large inputs (overflow).
+**Learning:** Mathematical utility functions must handle edge cases (0, overflow) gracefully, especially when exposed to user input via CLI, as panics cause DoS.
+**Prevention:** Return `Result` instead of raw types for math functions, and use `checked_` arithmetic operations.

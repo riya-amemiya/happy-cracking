@@ -48,7 +48,7 @@ pub fn run(action: MathAction) -> Result<()> {
         MathAction::Lcm { a, b } => {
             let a = a.parse::<u128>().context("Invalid number for a")?;
             let b = b.parse::<u128>().context("Invalid number for b")?;
-            println!("{}", lcm(a, b));
+            println!("{}", lcm(a, b)?);
         }
         MathAction::Modinv { a, m } => {
             let a = a.parse::<u128>().context("Invalid number for a")?;
@@ -59,7 +59,7 @@ pub fn run(action: MathAction) -> Result<()> {
             let base = base.parse::<u128>().context("Invalid number for base")?;
             let exp = exp.parse::<u128>().context("Invalid number for exp")?;
             let m = m.parse::<u128>().context("Invalid number for m")?;
-            println!("{}", modpow(base, exp, m));
+            println!("{}", modpow(base, exp, m)?);
         }
     }
     Ok(())
@@ -76,11 +76,14 @@ pub fn gcd(mut a: u128, mut b: u128) -> u128 {
 }
 
 // Least common multiple via GCD.
-pub fn lcm(a: u128, b: u128) -> u128 {
+pub fn lcm(a: u128, b: u128) -> Result<u128> {
     if a == 0 || b == 0 {
-        return 0;
+        return Ok(0);
     }
-    a / gcd(a, b) * b
+    let g = gcd(a, b);
+    (a / g)
+        .checked_mul(b)
+        .ok_or_else(|| anyhow::anyhow!("LCM overflow"))
 }
 
 // Extended Euclidean algorithm for modular inverse.
@@ -118,9 +121,12 @@ pub fn modinv(a: u128, m: u128) -> Result<u128> {
 
 // Binary exponentiation for modular power.
 // Computes base^exp mod m.
-pub fn modpow(base: u128, exp: u128, m: u128) -> u128 {
+pub fn modpow(base: u128, exp: u128, m: u128) -> Result<u128> {
+    if m == 0 {
+        anyhow::bail!("Modulus must be non-zero");
+    }
     if m == 1 {
-        return 0;
+        return Ok(0);
     }
 
     // Use BigUint to prevent overflow during intermediate calculations (base * base)
@@ -131,5 +137,5 @@ pub fn modpow(base: u128, exp: u128, m: u128) -> u128 {
     let res = base_big.modpow(&exp_big, &m_big);
 
     // Result fits in u128 because res < m <= u128::MAX
-    res.try_into().unwrap()
+    Ok(res.try_into().unwrap())
 }
