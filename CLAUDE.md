@@ -267,6 +267,9 @@ cargo run -- crc32 compute "hello"
 
 # RSA
 cargo run -- rsa compute-d --p 61 --q 53 --e 17
+cargo run -- rsa encrypt --m "123" --e "17" --n "3233"
+cargo run -- rsa decrypt --c "855" --d "2753" --n "3233"
+cargo run -- rsa factorize-n --n "3233"
 ```
 
 ### Utilities
@@ -283,7 +286,9 @@ cargo run -- entropy analyze "Hello World"
 
 # Number theory tools
 cargo run -- math gcd 12345 67890
+cargo run -- math lcm 12 18
 cargo run -- math modinv 3 26
+cargo run -- math modpow 2 10 1000
 
 # Prime factorization
 cargo run -- primes factorize 84
@@ -298,15 +303,19 @@ cargo run -- numconv convert ff --from 16 --to 2
 
 # Chain operations
 cargo run -- chain run "Hello" --ops "base64-encode"
+cargo run -- chain run "SGVsbG8=" --ops "base64-decode,reverse"
 
 # Hexdump
 cargo run -- hexdump view "Hello World"
 
 # Bit rotation
 cargo run -- bitrot rotl "deadbeef" --bits 1 --width 32
+cargo run -- bitrot rotr "deadbeef" --bits 1 --width 32
 
 # Padding
 cargo run -- padding pkcs7-pad "deadbeef"
+cargo run -- padding pkcs7-unpad "646561646265656604040404" --block-size 8
+cargo run -- padding zero-pad "deadbeef" --block-size 8
 ```
 
 ## Code Conventions
