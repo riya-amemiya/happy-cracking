@@ -25,19 +25,19 @@ fn test_gcd_same() {
 
 #[test]
 fn test_lcm_basic() {
-    assert_eq!(mathtools::lcm(4, 6), 12);
-    assert_eq!(mathtools::lcm(3, 5), 15);
+    assert_eq!(mathtools::lcm(4, 6).unwrap(), 12);
+    assert_eq!(mathtools::lcm(3, 5).unwrap(), 15);
 }
 
 #[test]
 fn test_lcm_with_zero() {
-    assert_eq!(mathtools::lcm(0, 5), 0);
-    assert_eq!(mathtools::lcm(5, 0), 0);
+    assert_eq!(mathtools::lcm(0, 5).unwrap(), 0);
+    assert_eq!(mathtools::lcm(5, 0).unwrap(), 0);
 }
 
 #[test]
 fn test_lcm_same() {
-    assert_eq!(mathtools::lcm(7, 7), 7);
+    assert_eq!(mathtools::lcm(7, 7).unwrap(), 7);
 }
 
 #[test]
@@ -66,23 +66,23 @@ fn test_modinv_mod_one() {
 #[test]
 fn test_modpow_basic() {
     // 2^10 mod 1000 = 1024 mod 1000 = 24
-    assert_eq!(mathtools::modpow(2, 10, 1000), 24);
+    assert_eq!(mathtools::modpow(2, 10, 1000).unwrap(), 24);
 }
 
 #[test]
 fn test_modpow_large() {
     // 3^13 mod 7 = 1594323 mod 7 = 3
-    assert_eq!(mathtools::modpow(3, 13, 7), 3);
+    assert_eq!(mathtools::modpow(3, 13, 7).unwrap(), 3);
 }
 
 #[test]
 fn test_modpow_zero_exp() {
-    assert_eq!(mathtools::modpow(5, 0, 13), 1);
+    assert_eq!(mathtools::modpow(5, 0, 13).unwrap(), 1);
 }
 
 #[test]
 fn test_modpow_mod_one() {
-    assert_eq!(mathtools::modpow(100, 100, 1), 0);
+    assert_eq!(mathtools::modpow(100, 100, 1).unwrap(), 0);
 }
 
 #[test]
@@ -93,8 +93,8 @@ fn test_modpow_rsa_style() {
     let e = 17_u128;
     let d = 2753_u128;
     let message = 65_u128;
-    let encrypted = mathtools::modpow(message, e, n);
-    let decrypted = mathtools::modpow(encrypted, d, n);
+    let encrypted = mathtools::modpow(message, e, n).unwrap();
+    let decrypted = mathtools::modpow(encrypted, d, n).unwrap();
     assert_eq!(decrypted, message);
 }
 
@@ -109,7 +109,7 @@ fn test_modpow_overflow() {
     // intermediate base*base will overflow u128 eventually because m > 2^64
     // when base > 2^64, base*base > 2^128, overflow.
     // 3^100 mod 2^65 = 33908865301881557969
-    let result = mathtools::modpow(base, exp, m);
+    let result = mathtools::modpow(base, exp, m).unwrap();
     assert_eq!(result, 33908865301881557969);
 }
 
