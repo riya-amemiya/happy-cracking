@@ -123,6 +123,12 @@ pub fn modpow(base: u128, exp: u128, m: u128) -> u128 {
         return 0;
     }
 
+    // Optimization: if m fits in u64, use u128 for intermediate calculations
+    // to avoid BigUint allocation overhead.
+    if m <= u64::MAX as u128 {
+        return modpow_u64(base, exp, m as u64) as u128;
+    }
+
     // Use BigUint to prevent overflow during intermediate calculations (base * base)
     let base_big = BigUint::from(base);
     let exp_big = BigUint::from(exp);
@@ -132,4 +138,20 @@ pub fn modpow(base: u128, exp: u128, m: u128) -> u128 {
 
     // Result fits in u128 because res < m <= u128::MAX
     res.try_into().unwrap()
+}
+
+// Optimized modular exponentiation for u64 modulus using u128 arithmetic.
+fn modpow_u64(base: u128, mut exp: u128, m: u64) -> u64 {
+    let m_u128 = m as u128;
+    let mut res: u128 = 1;
+    let mut base = base % m_u128;
+
+    while exp > 0 {
+        if exp & 1 == 1 {
+            res = (res * base) % m_u128;
+        }
+        base = (base * base) % m_u128;
+        exp >>= 1;
+    }
+    res as u64
 }
