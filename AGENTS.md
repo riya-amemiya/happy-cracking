@@ -270,6 +270,8 @@ cargo run -- rsa compute-d --p 61 --q 53 --e 17
 cargo run -- rsa encrypt --m "123" --e "17" --n "3233"
 cargo run -- rsa decrypt --c "855" --d "2753" --n "3233"
 cargo run -- rsa factorize-n --n "3233"
+cargo run -- rsa wiener --n "3233" --e "17"
+cargo run -- rsa small-e --c "123" --e "3"
 ```
 
 ### Utilities
@@ -296,6 +298,8 @@ cargo run -- primes isprime 104729
 
 # String tools
 cargo run -- str reverse "hello"
+cargo run -- str ord "hello"
+cargo run -- str chr "104 101 108 108 111"
 
 # Number base conversion
 cargo run -- numconv convert 255 --from 10 --to 16
@@ -306,7 +310,8 @@ cargo run -- chain run "Hello" --ops "base64-encode"
 cargo run -- chain run "SGVsbG8=" --ops "base64-decode,reverse"
 
 # Hexdump
-cargo run -- hexdump view "Hello World"
+cargo run -- hexdump dump "Hello World"
+cargo run -- hexdump reverse "00000000: 4865 6c6c 6f20 576f 726c 64              Hello World"
 
 # Bit rotation
 cargo run -- bitrot rotl "deadbeef" --bits 1 --width 32
@@ -316,6 +321,7 @@ cargo run -- bitrot rotr "deadbeef" --bits 1 --width 32
 cargo run -- padding pkcs7-pad "deadbeef"
 cargo run -- padding pkcs7-unpad "646561646265656604040404" --block-size 8
 cargo run -- padding zero-pad "deadbeef" --block-size 8
+cargo run -- padding zero-unpad "64656164626565660000000000000000"
 ```
 
 ## Code Conventions
