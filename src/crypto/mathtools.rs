@@ -132,7 +132,7 @@ pub fn modpow(base: u128, exp: u128, m: u128) -> Result<u128> {
     // Optimization: if m fits in u64, use u128 for intermediate calculations
     // to avoid BigUint allocation overhead.
     if m <= u64::MAX as u128 {
-        return modpow_u64(base, exp, m as u64) as u128;
+        return Ok(modpow_u64(base, exp, m as u64) as u128);
     }
 
     // Use BigUint to prevent overflow during intermediate calculations (base * base)
