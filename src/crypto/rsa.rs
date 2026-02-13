@@ -98,6 +98,11 @@ pub fn run(action: RsaAction) -> Result<()> {
         RsaAction::SmallE { c, e } => {
             let c = c.parse::<BigUint>().context("Invalid number for c")?;
             let e: u32 = e.parse().context("Invalid number for e")?;
+
+            if e == 0 {
+                anyhow::bail!("Exponent e must be non-zero");
+            }
+
             let m = integer_nth_root(&c, e);
             println!("Decimal: {}", m);
             let ascii = bigint_to_ascii(&m);
@@ -151,7 +156,7 @@ pub fn big_modpow(base: &BigUint, exp: &BigUint, modulus: &BigUint) -> BigUint {
 // Integer nth root using Newton's method.
 // Returns the largest x such that x^k <= n.
 pub fn integer_nth_root(n: &BigUint, k: u32) -> BigUint {
-    if n.is_zero() {
+    if n.is_zero() || k == 0 {
         return BigUint::zero();
     }
     if k == 1 {

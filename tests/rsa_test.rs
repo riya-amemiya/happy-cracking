@@ -223,3 +223,10 @@ fn test_full_rsa_ctf_scenario() {
     let decrypted = rsa::big_modpow(&c, &recovered_d, &n);
     assert_eq!(decrypted, m);
 }
+
+#[test]
+fn test_integer_nth_root_zero_k() {
+    let n = BigUint::from(27u32);
+    let result = rsa::integer_nth_root(&n, 0);
+    assert_eq!(result, BigUint::from(0u32));
+}
