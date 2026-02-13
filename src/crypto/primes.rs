@@ -37,68 +37,89 @@ pub fn run(action: PrimesAction) -> Result<()> {
     Ok(())
 }
 
-// Trial division for prime factorization.
-// Returns a list of (prime, exponent) pairs.
+// Factorize a number into prime factors.
+// Uses a hybrid approach: trial division for small factors + Pollard's Rho for large composites.
 pub fn factorize(mut n: u128) -> Vec<(u128, u32)> {
-    let mut factors = Vec::new();
+    let mut factors_list = Vec::new();
 
     if n <= 1 {
-        return factors;
+        return Vec::new();
     }
 
-    // Optimization: Check if n is prime immediately.
-    // This prevents hanging on large primes (DoS protection).
-    if is_prime(n) {
-        factors.push((n, 1));
-        return factors;
-    }
-
-    // Optimization: Handle 2 separately to skip all even numbers in the loop
-    if n.is_multiple_of(2) {
-        let mut count = 0_u32;
-        while n.is_multiple_of(2) {
-            count += 1;
-            n /= 2;
+    // 1. Remove small factors (2, 3, 5) using trial division
+    // This is cheap and effective, and helps Pollard's Rho.
+    for &p in &[2, 3, 5] {
+        while n.is_multiple_of(p) {
+            factors_list.push(p);
+            n /= p;
         }
-        factors.push((2, count));
     }
 
-    // Optimization: Handle 3 separately to skip multiples of 3
-    if n.is_multiple_of(3) {
-        let mut count = 0_u32;
-        while n.is_multiple_of(3) {
-            count += 1;
-            n /= 3;
-        }
-        factors.push((3, count));
-    }
-
-    let mut d = 5_u128;
-    let mut step = 2_u128;
-    while d * d <= n {
-        let mut count = 0_u32;
-        while n.is_multiple_of(d) {
-            count += 1;
-            n /= d;
-        }
-        if count > 0 {
-            factors.push((d, count));
-            // If the remaining number is prime, we are done.
-            if n > 1 && is_prime(n) {
-                factors.push((n, 1));
-                return factors;
-            }
-        }
-
-        d += step;
-        step = 6 - step;
-    }
-
+    // 2. Recursively factorize the rest
     if n > 1 {
-        factors.push((n, 1));
+        factor_recursive(n, &mut factors_list);
     }
 
-    factors
+    factors_list.sort();
+
+    // 3. Group by prime to count exponents
+    let mut result = Vec::new();
+    if factors_list.is_empty() {
+        return result;
+    }
+
+    let mut current_p = factors_list[0];
+    let mut current_count = 1;
+
+    for &p in &factors_list[1..] {
+        if p == current_p {
+            current_count += 1;
+        } else {
+            result.push((current_p, current_count));
+            current_p = p;
+            current_count = 1;
+        }
+    }
+    result.push((current_p, current_count));
+
+    result
+}
+
+fn factor_recursive(n: u128, factors: &mut Vec<u128>) {
+    if n == 1 {
+        return;
+    }
+
+    // For very small numbers, trial division is faster than Miller-Rabin + Pollard's Rho
+    if n < 1_000 {
+        let mut temp_n = n;
+        let mut d = 2;
+        while d * d <= temp_n {
+            while temp_n.is_multiple_of(d) {
+                factors.push(d);
+                temp_n /= d;
+            }
+            d += 1;
+        }
+        if temp_n > 1 {
+            factors.push(temp_n);
+        }
+        return;
+    }
+
+    if is_prime(n) {
+        factors.push(n);
+        return;
+    }
+
+    let divisor = pollard_rho(n);
+    if divisor == n {
+        // Failed to find a factor. Push n to avoid infinite recursion.
+        factors.push(n);
+    } else {
+        factor_recursive(divisor, factors);
+        factor_recursive(n / divisor, factors);
+    }
 }
 
 // Deterministic Miller-Rabin primality test for u128.
@@ -224,6 +245,54 @@ pub fn is_prime(n: u128) -> bool {
     } else {
         miller_rabin(n)
     }
+}
+
+// Modular multiplication: (a * b) % m
+fn mul_mod(a: u128, b: u128, m: u128) -> u128 {
+    if m <= u64::MAX as u128 {
+        // Optimization: if m fits in u64, we can use u128 arithmetic directly
+        (a * b) % m
+    } else {
+        // For larger numbers, we use BigUint to avoid overflow
+        let a_big = BigUint::from(a);
+        let b_big = BigUint::from(b);
+        let m_big = BigUint::from(m);
+        ((a_big * b_big) % m_big).try_into().unwrap()
+    }
+}
+
+// Pollard's Rho algorithm for finding a factor of a composite number.
+fn pollard_rho(n: u128) -> u128 {
+    if n.is_multiple_of(2) {
+        return 2;
+    }
+
+    // Try different constants c if the first one fails
+    for c in [1, 3, 5, 7, 2, 4, 6, 8] {
+        let mut x: u128 = 2;
+        let mut y: u128 = 2;
+        let mut d: u128 = 1;
+
+        let f = |x: u128| -> u128 {
+            let x2 = mul_mod(x, x, n);
+            (x2 + c) % n
+        };
+
+        while d == 1 {
+            x = f(x);
+            y = f(f(y));
+
+            let abs_diff = x.abs_diff(y);
+            d = num_integer::gcd(abs_diff, n);
+        }
+
+        if d != n {
+            return d;
+        }
+    }
+
+    // If all fail, return n (factorization failed)
+    n
 }
 
 // Format factorization result as "2^2 × 3 × 7".
