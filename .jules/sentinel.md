@@ -12,3 +12,8 @@
 **Vulnerability:** `modpow` panicked with modulus 0 (div by zero) and `lcm` panicked on large inputs (overflow).
 **Learning:** Mathematical utility functions must handle edge cases (0, overflow) gracefully, especially when exposed to user input via CLI, as panics cause DoS.
 **Prevention:** Return `Result` instead of raw types for math functions, and use `checked_` arithmetic operations.
+
+## 2026-02-13 - Panic in RSA Nth Root Calculation
+**Vulnerability:** `integer_nth_root` function panicked when the root exponent `k` was 0, causing a division by zero in `div_ceil`. This could be triggered via the CLI `rsa small-e` command with `--e 0`.
+**Learning:** Mathematical functions accepting external inputs (like exponents) must validate that inputs are within valid ranges (e.g. > 0) before performing operations that might panic (division, modulo).
+**Prevention:** Add input validation guards at the start of mathematical functions and in CLI argument parsing logic to reject invalid parameters like zero exponents.
