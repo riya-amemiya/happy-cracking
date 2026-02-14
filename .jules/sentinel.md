@@ -17,3 +17,8 @@
 **Vulnerability:** `integer_nth_root` function panicked when the root exponent `k` was 0, causing a division by zero in `div_ceil`. This could be triggered via the CLI `rsa small-e` command with `--e 0`.
 **Learning:** Mathematical functions accepting external inputs (like exponents) must validate that inputs are within valid ranges (e.g. > 0) before performing operations that might panic (division, modulo).
 **Prevention:** Add input validation guards at the start of mathematical functions and in CLI argument parsing logic to reject invalid parameters like zero exponents.
+
+## 2026-02-13 - DoS via Chain Reaction
+**Vulnerability:** The `chain` command allowed unbounded sequencing of operations (e.g., repeating `base64-encode`), leading to exponential memory growth (Zip Bomb) and process crash/hang.
+**Learning:** Flexible "pipeline" features in CLI tools are vectors for DoS if not constrained by recursion limits or output size limits.
+**Prevention:** Enforce strict limits on operation count and intermediate/final output size for any user-definable processing pipeline.

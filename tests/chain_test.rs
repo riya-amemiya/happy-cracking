@@ -90,3 +90,16 @@ fn chain_base32_roundtrip() {
     let result = chain::chain("Test", "base32-encode,base32-decode").unwrap();
     assert_eq!(result, "Test");
 }
+
+#[test]
+fn chain_too_many_operations_errors() {
+    let ops = vec!["base64-encode"; 51].join(",");
+    let result = chain::chain("test", &ops);
+    assert!(result.is_err());
+    assert!(
+        result
+            .unwrap_err()
+            .to_string()
+            .contains("Too many operations")
+    );
+}
