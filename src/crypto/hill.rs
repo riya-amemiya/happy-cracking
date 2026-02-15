@@ -151,8 +151,7 @@ fn prepare_input(input: &str, n: usize) -> Vec<i64> {
 pub fn encrypt(input: &str, key: &str) -> Result<String> {
     let (matrix, n) = parse_key_matrix(key)?;
 
-    let filtered: String = input.chars().filter(|c| c.is_ascii_alphabetic()).collect();
-    if filtered.is_empty() {
+    if !input.chars().any(|c| c.is_ascii_alphabetic()) {
         return Ok(String::new());
     }
 
@@ -174,8 +173,7 @@ pub fn decrypt(input: &str, key: &str) -> Result<String> {
     let (matrix, n) = parse_key_matrix(key)?;
     let inv = inverse_matrix(&matrix, n)?;
 
-    let filtered: String = input.chars().filter(|c| c.is_ascii_alphabetic()).collect();
-    if filtered.is_empty() {
+    if !input.chars().any(|c| c.is_ascii_alphabetic()) {
         return Ok(String::new());
     }
 

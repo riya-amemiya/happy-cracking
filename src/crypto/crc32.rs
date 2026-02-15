@@ -1,5 +1,6 @@
 use anyhow::Result;
 use clap::Subcommand;
+use std::sync::LazyLock;
 
 #[derive(Subcommand)]
 pub enum Crc32Action {
@@ -34,7 +35,7 @@ pub fn run(action: Crc32Action) -> Result<()> {
     Ok(())
 }
 
-fn build_table() -> [u32; 256] {
+static CRC32_TABLE: LazyLock<[u32; 256]> = LazyLock::new(|| {
     let mut table = [0u32; 256];
     for i in 0..256u32 {
         let mut crc = i;
@@ -48,10 +49,10 @@ fn build_table() -> [u32; 256] {
         table[i as usize] = crc;
     }
     table
-}
+});
 
 pub fn compute_bytes(data: &[u8]) -> u32 {
-    let table = build_table();
+    let table = &*CRC32_TABLE;
     let mut crc = 0xFFFF_FFFFu32;
     for &byte in data {
         let index = ((crc ^ u32::from(byte)) & 0xFF) as usize;

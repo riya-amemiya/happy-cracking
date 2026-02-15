@@ -46,22 +46,13 @@ pub fn run(action: AffineAction) -> Result<()> {
 // Valid 'a' values (coprime with 26)
 const VALID_A: [i32; 12] = [1, 3, 5, 7, 9, 11, 15, 17, 19, 21, 23, 25];
 
-fn gcd(mut a: i32, mut b: i32) -> i32 {
-    while b != 0 {
-        let t = b;
-        b = a % b;
-        a = t;
-    }
-    a.abs()
-}
-
 fn mod_inverse(a: i32, m: i32) -> Option<i32> {
     let a = ((a % m) + m) % m;
     (1..m).find(|&x| (a * x) % m == 1)
 }
 
 pub fn encrypt(input: &str, a: i32, b: i32) -> Result<String> {
-    if gcd(a, 26) != 1 {
+    if crate::crypto::mathtools::gcd(a.unsigned_abs() as u128, 26) != 1 {
         anyhow::bail!("'a' must be coprime with 26. Valid values: {:?}", VALID_A);
     }
 

@@ -52,6 +52,40 @@ pub enum RsaAction {
         #[arg(long, help = "Public exponent e")]
         e: String,
     },
+    #[command(about = "Hastad's Broadcast Attack (same m, small e, different n)")]
+    Hastad {
+        #[arg(long, help = "Public exponent e")]
+        e: String,
+        #[arg(long, help = "Comma-separated ciphertexts")]
+        ciphertexts: String,
+        #[arg(long, help = "Comma-separated moduli")]
+        moduli: String,
+    },
+    #[command(about = "Common Modulus Attack (same n, two different e values)")]
+    CommonModulus {
+        #[arg(long, help = "Shared modulus n")]
+        n: String,
+        #[arg(long, help = "First public exponent")]
+        e1: String,
+        #[arg(long, help = "Second public exponent")]
+        e2: String,
+        #[arg(long, help = "First ciphertext")]
+        c1: String,
+        #[arg(long, help = "Second ciphertext")]
+        c2: String,
+    },
+    #[command(about = "Pollard's p-1 factorization")]
+    PollardP1 {
+        #[arg(long, help = "Modulus n")]
+        n: String,
+        #[arg(long, help = "Smoothness bound B", default_value = "100000")]
+        b: String,
+    },
+    #[command(about = "Pollard's Rho factorization (Brent's variant)")]
+    PollardRho {
+        #[arg(long, help = "Modulus n")]
+        n: String,
+    },
 }
 
 pub fn run(action: RsaAction) -> Result<()> {
@@ -110,6 +144,55 @@ pub fn run(action: RsaAction) -> Result<()> {
                 println!("ASCII: {}", ascii);
             }
             println!("Hex: {}", hex::encode(m.to_bytes_be()));
+        }
+        RsaAction::Hastad {
+            e,
+            ciphertexts,
+            moduli,
+        } => {
+            let e: u32 = e.parse().context("Invalid number for e")?;
+            let cs: Vec<BigUint> = ciphertexts
+                .split(',')
+                .map(|s| s.trim().parse::<BigUint>().context("Invalid ciphertext"))
+                .collect::<Result<_>>()?;
+            let ns: Vec<BigUint> = moduli
+                .split(',')
+                .map(|s| s.trim().parse::<BigUint>().context("Invalid modulus"))
+                .collect::<Result<_>>()?;
+            let m = hastad_broadcast(&cs, &ns, e)?;
+            println!("Decimal: {}", m);
+            let ascii = bigint_to_ascii(&m);
+            if !ascii.is_empty() {
+                println!("ASCII: {}", ascii);
+            }
+            println!("Hex: {}", hex::encode(m.to_bytes_be()));
+        }
+        RsaAction::CommonModulus { n, e1, e2, c1, c2 } => {
+            let n = n.parse::<BigUint>().context("Invalid number for n")?;
+            let e1 = e1.parse::<BigUint>().context("Invalid number for e1")?;
+            let e2 = e2.parse::<BigUint>().context("Invalid number for e2")?;
+            let c1 = c1.parse::<BigUint>().context("Invalid number for c1")?;
+            let c2 = c2.parse::<BigUint>().context("Invalid number for c2")?;
+            let m = common_modulus_attack(&n, &e1, &e2, &c1, &c2)?;
+            println!("Decimal: {}", m);
+            let ascii = bigint_to_ascii(&m);
+            if !ascii.is_empty() {
+                println!("ASCII: {}", ascii);
+            }
+            println!("Hex: {}", hex::encode(m.to_bytes_be()));
+        }
+        RsaAction::PollardP1 { n, b } => {
+            let n = n.parse::<BigUint>().context("Invalid number for n")?;
+            let b: u64 = b.parse().context("Invalid number for b")?;
+            let (p, q) = pollard_p1(&n, b)?;
+            println!("p = {}", p);
+            println!("q = {}", q);
+        }
+        RsaAction::PollardRho { n } => {
+            let n = n.parse::<BigUint>().context("Invalid number for n")?;
+            let (p, q) = pollard_rho_factor(&n)?;
+            println!("p = {}", p);
+            println!("q = {}", q);
         }
     }
     Ok(())
@@ -293,6 +376,258 @@ fn continued_fraction_convergents(a: &BigUint, b: &BigUint) -> Vec<(BigUint, Big
     }
 
     convergents
+}
+
+// Hastad's Broadcast Attack.
+// When the same message m is encrypted with the same small exponent e
+// under e different moduli n_i, use CRT to recover m^e, then take the e-th root.
+pub fn hastad_broadcast(ciphertexts: &[BigUint], moduli: &[BigUint], e: u32) -> Result<BigUint> {
+    let e_usize = e as usize;
+    if ciphertexts.len() < e_usize || moduli.len() < e_usize {
+        anyhow::bail!(
+            "Hastad's attack requires at least e={} pairs of (ciphertext, modulus)",
+            e
+        );
+    }
+    if e == 0 {
+        anyhow::bail!("Exponent e must be non-zero");
+    }
+
+    let cs = &ciphertexts[..e_usize];
+    let ns = &moduli[..e_usize];
+
+    // CRT: find x such that x ≡ c_i (mod n_i) for all i
+    let big_n: BigUint = ns.iter().product();
+    let mut x = BigUint::zero();
+
+    for i in 0..e_usize {
+        let ni_cap = &big_n / &ns[i];
+        let yi = big_modinv(&ni_cap, &ns[i])?;
+        x += &cs[i] * &ni_cap * &yi;
+    }
+    let me = x % &big_n;
+
+    let m = me.nth_root(e);
+
+    // Verify
+    if m.pow(e) != me {
+        anyhow::bail!("Hastad's attack failed: e-th root is not exact");
+    }
+
+    Ok(m)
+}
+
+// Common Modulus Attack.
+// When the same message m is encrypted under the same modulus n with two
+// coprime exponents e1, e2, recover m using extended GCD.
+// m = c1^s * c2^t mod n where e1*s + e2*t = 1
+pub fn common_modulus_attack(
+    n: &BigUint,
+    e1: &BigUint,
+    e2: &BigUint,
+    c1: &BigUint,
+    c2: &BigUint,
+) -> Result<BigUint> {
+    let e1_int = e1.to_bigint().unwrap();
+    let e2_int = e2.to_bigint().unwrap();
+
+    // Extended GCD to find s, t such that e1*s + e2*t = gcd(e1, e2)
+    let (g, s, t) = extended_gcd_bigint(&e1_int, &e2_int);
+
+    if g != BigInt::one() {
+        anyhow::bail!("Common modulus attack requires gcd(e1, e2) = 1, got {}", g);
+    }
+
+    let n_int = n.to_bigint().unwrap();
+    let c1_int = c1.to_bigint().unwrap();
+    let c2_int = c2.to_bigint().unwrap();
+
+    // For negative exponents, use modular inverse of the ciphertext
+    let part1 = if s < BigInt::zero() {
+        let c1_inv = big_modinv_signed(&c1_int, &n_int)?;
+        mod_pow_bigint(&c1_inv, &(-&s), &n_int)
+    } else {
+        mod_pow_bigint(&c1_int, &s, &n_int)
+    };
+
+    let part2 = if t < BigInt::zero() {
+        let c2_inv = big_modinv_signed(&c2_int, &n_int)?;
+        mod_pow_bigint(&c2_inv, &(-&t), &n_int)
+    } else {
+        mod_pow_bigint(&c2_int, &t, &n_int)
+    };
+
+    let m_int = (&part1 * &part2) % &n_int;
+    let m_int = (m_int + &n_int) % &n_int;
+
+    Ok(m_int.to_biguint().unwrap())
+}
+
+// Extended GCD for BigInt. Returns (gcd, s, t) where a*s + b*t = gcd.
+fn extended_gcd_bigint(a: &BigInt, b: &BigInt) -> (BigInt, BigInt, BigInt) {
+    let mut old_r = a.clone();
+    let mut r = b.clone();
+    let mut old_s = BigInt::one();
+    let mut s = BigInt::zero();
+    let mut old_t = BigInt::zero();
+    let mut t = BigInt::one();
+
+    while !r.is_zero() {
+        let q = &old_r / &r;
+        let tmp_r = r.clone();
+        r = &old_r - &q * &r;
+        old_r = tmp_r;
+        let tmp_s = s.clone();
+        s = &old_s - &q * &s;
+        old_s = tmp_s;
+        let tmp_t = t.clone();
+        t = &old_t - &q * &t;
+        old_t = tmp_t;
+    }
+
+    (old_r, old_s, old_t)
+}
+
+// Modular inverse for BigInt (signed).
+fn big_modinv_signed(a: &BigInt, m: &BigInt) -> Result<BigInt> {
+    let (g, x, _) = extended_gcd_bigint(a, m);
+    if g != BigInt::one() && g != -BigInt::one() {
+        anyhow::bail!("Modular inverse does not exist");
+    }
+    Ok(((x % m) + m) % m)
+}
+
+// Modular exponentiation for BigInt.
+fn mod_pow_bigint(base: &BigInt, exp: &BigInt, modulus: &BigInt) -> BigInt {
+    let base_uint = ((base % modulus) + modulus) % modulus;
+    let exp_uint = exp.to_biguint().unwrap();
+    let mod_uint = modulus.to_biguint().unwrap();
+    let base_uint = base_uint.to_biguint().unwrap();
+    base_uint.modpow(&exp_uint, &mod_uint).to_bigint().unwrap()
+}
+
+// Pollard's p-1 factorization.
+// Finds a factor of n when p-1 is B-smooth (all prime factors ≤ B).
+pub fn pollard_p1(n: &BigUint, b: u64) -> Result<(BigUint, BigUint)> {
+    if n.is_even() {
+        let two = BigUint::from(2u32);
+        let other = n / &two;
+        return Ok((two, other));
+    }
+
+    let mut a = BigUint::from(2u32);
+
+    // Compute a = 2^(B!) mod n iteratively: a = a^k mod n for k = 2, 3, ..., B
+    for k in 2..=b {
+        let k_big = BigUint::from(k);
+        a = a.modpow(&k_big, n);
+
+        let a_minus_1 = if a > BigUint::one() {
+            &a - BigUint::one()
+        } else {
+            continue;
+        };
+        let g = a_minus_1.gcd(n);
+        if g > BigUint::one() && &g < n {
+            let q = n / &g;
+            return Ok((g, q));
+        }
+        if &g == n {
+            anyhow::bail!("Pollard p-1 failed: GCD equals n (try smaller bound)");
+        }
+    }
+
+    // Final GCD check
+    if a > BigUint::one() {
+        let a_minus_1 = &a - BigUint::one();
+        let g = a_minus_1.gcd(n);
+        if g > BigUint::one() && &g < n {
+            let q = n / &g;
+            return Ok((g, q));
+        }
+    }
+
+    anyhow::bail!("Pollard p-1 failed to factor n with bound B={}", b)
+}
+
+// Pollard's Rho factorization using Brent's cycle detection variant.
+pub fn pollard_rho_factor(n: &BigUint) -> Result<(BigUint, BigUint)> {
+    if n.is_even() {
+        let two = BigUint::from(2u32);
+        let other = n / &two;
+        return Ok((two, other));
+    }
+
+    // Try multiple starting values
+    for c_val in 1u64..20 {
+        let c = BigUint::from(c_val);
+        if let Some(d) = pollard_rho_brent(n, &c)
+            && d > BigUint::one()
+            && &d < n
+        {
+            let q = n / &d;
+            return Ok((d, q));
+        }
+    }
+
+    anyhow::bail!("Pollard's Rho failed to factor n")
+}
+
+// Brent's variant of Pollard's Rho. Returns a non-trivial factor or None.
+fn pollard_rho_brent(n: &BigUint, c: &BigUint) -> Option<BigUint> {
+    let f = |x: &BigUint| -> BigUint { (x * x + c) % n };
+
+    let mut y = BigUint::from(2u32);
+    let mut r: u64 = 1;
+    let mut q = BigUint::one();
+
+    let mut x = y.clone();
+    let mut ys = y.clone();
+    let mut g = BigUint::one();
+
+    while g == BigUint::one() {
+        x = y.clone();
+
+        for _ in 0..r {
+            y = f(&y);
+        }
+
+        let mut k: u64 = 0;
+        while k < r && g == BigUint::one() {
+            ys = y.clone();
+
+            let batch_size = std::cmp::min(128, r - k);
+            for _ in 0..batch_size {
+                y = f(&y);
+                let diff = if x > y { &x - &y } else { &y - &x };
+                q = (q * diff) % n;
+            }
+
+            g = q.gcd(n);
+            k += batch_size;
+        }
+
+        r *= 2;
+
+        // Safety limit
+        if r > 1_000_000 {
+            return None;
+        }
+    }
+
+    if &g == n {
+        // Backtrack
+        loop {
+            ys = f(&ys);
+            let diff = if x > ys { &x - &ys } else { &ys - &x };
+            g = diff.gcd(n);
+            if g > BigUint::one() {
+                break;
+            }
+        }
+    }
+
+    if &g == n { None } else { Some(g) }
 }
 
 // Convert a BigUint to an ASCII string by interpreting its bytes.

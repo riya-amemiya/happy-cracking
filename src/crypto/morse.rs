@@ -1,5 +1,7 @@
 use anyhow::{Context, Result};
 use clap::Subcommand;
+use std::collections::HashMap;
+use std::sync::LazyLock;
 
 #[derive(Subcommand)]
 pub enum MorseAction {
@@ -84,18 +86,19 @@ const MORSE_TABLE: &[(char, &str)] = &[
     ('@', ".--.-."),
 ];
 
+static CHAR_TO_MORSE: LazyLock<HashMap<char, &'static str>> =
+    LazyLock::new(|| MORSE_TABLE.iter().copied().collect());
+
+static MORSE_TO_CHAR: LazyLock<HashMap<&'static str, char>> =
+    LazyLock::new(|| MORSE_TABLE.iter().map(|&(c, m)| (m, c)).collect());
+
 pub fn encode(input: &str) -> String {
     input
         .to_uppercase()
         .split_whitespace()
         .map(|word| {
             word.chars()
-                .filter_map(|c| {
-                    MORSE_TABLE
-                        .iter()
-                        .find(|(ch, _)| *ch == c)
-                        .map(|(_, morse)| *morse)
-                })
+                .filter_map(|c| CHAR_TO_MORSE.get(&c).copied())
                 .collect::<Vec<_>>()
                 .join(" ")
         })
@@ -109,10 +112,9 @@ pub fn decode(input: &str) -> Result<String> {
         .map(|word| {
             word.split_whitespace()
                 .map(|morse| {
-                    MORSE_TABLE
-                        .iter()
-                        .find(|(_, m)| *m == morse)
-                        .map(|(c, _)| *c)
+                    MORSE_TO_CHAR
+                        .get(morse)
+                        .copied()
                         .context(format!("Unknown Morse code: {}", morse))
                 })
                 .collect::<Result<String>>()

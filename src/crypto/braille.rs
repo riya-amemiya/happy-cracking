@@ -1,5 +1,7 @@
 use anyhow::{Context, Result};
 use clap::Subcommand;
+use std::collections::HashMap;
+use std::sync::LazyLock;
 
 #[derive(Subcommand)]
 pub enum BrailleAction {
@@ -60,6 +62,12 @@ const LETTER_TABLE: &[(char, char)] = &[
 const NUMBER_PREFIX: char = '\u{283C}';
 const BRAILLE_SPACE: char = '\u{2800}';
 
+static CHAR_TO_BRAILLE: LazyLock<HashMap<char, char>> =
+    LazyLock::new(|| LETTER_TABLE.iter().copied().collect());
+
+static BRAILLE_TO_CHAR: LazyLock<HashMap<char, char>> =
+    LazyLock::new(|| LETTER_TABLE.iter().map(|&(c, b)| (b, c)).collect());
+
 fn digit_to_braille(d: char) -> Option<char> {
     let idx = match d {
         '1' => 0, // same as A
@@ -77,33 +85,22 @@ fn digit_to_braille(d: char) -> Option<char> {
     Some(LETTER_TABLE[idx].1)
 }
 
+// Digit index mapping for braille-to-digit lookup
+const DIGIT_MAP: &[char] = &['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'];
+
 fn braille_to_digit(b: char) -> Option<char> {
-    LETTER_TABLE.iter().enumerate().find_map(|(idx, &(_, br))| {
-        if br == b {
-            match idx {
-                0 => Some('1'),
-                1 => Some('2'),
-                2 => Some('3'),
-                3 => Some('4'),
-                4 => Some('5'),
-                5 => Some('6'),
-                6 => Some('7'),
-                7 => Some('8'),
-                8 => Some('9'),
-                9 => Some('0'),
-                _ => None,
-            }
-        } else {
-            None
-        }
-    })
+    LETTER_TABLE
+        .iter()
+        .enumerate()
+        .find(|(idx, (_, br))| *br == b && *idx < 10)
+        .map(|(idx, _)| DIGIT_MAP[idx])
 }
 
 pub fn encode(input: &str) -> String {
     let mut result = String::new();
     for c in input.to_uppercase().chars() {
         if c.is_ascii_alphabetic() {
-            if let Some(&(_, braille)) = LETTER_TABLE.iter().find(|&&(ch, _)| ch == c) {
+            if let Some(&braille) = CHAR_TO_BRAILLE.get(&c) {
                 result.push(braille);
             }
         } else if c.is_ascii_digit() {
@@ -141,10 +138,9 @@ pub fn decode(input: &str) -> Result<String> {
             result.push(digit);
             in_number_mode = false;
         } else {
-            let letter = LETTER_TABLE
-                .iter()
-                .find(|&&(_, br)| br == c)
-                .map(|&(ch, _)| ch)
+            let letter = BRAILLE_TO_CHAR
+                .get(&c)
+                .copied()
                 .context(format!("Unknown Braille character: {:?}", c))?;
             result.push(letter);
         }

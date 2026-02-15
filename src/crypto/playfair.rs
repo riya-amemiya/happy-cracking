@@ -1,6 +1,8 @@
 use anyhow::Result;
 use clap::Subcommand;
 
+use super::polybius_utils::{build_polybius_square, find_in_square};
+
 #[derive(Subcommand)]
 pub enum PlayfairAction {
     #[command(about = "Encrypt with Playfair cipher")]
@@ -29,34 +31,6 @@ pub fn run(action: PlayfairAction) -> Result<()> {
         }
     }
     Ok(())
-}
-
-fn build_matrix(key: &str) -> Vec<char> {
-    let mut seen = [false; 26];
-    // I/J are unified: J is treated as I
-    seen[(b'J' - b'A') as usize] = true;
-    let mut matrix = Vec::with_capacity(25);
-
-    for c in key
-        .to_uppercase()
-        .chars()
-        .chain('A'..='Z')
-        .filter(|c| c.is_ascii_uppercase())
-    {
-        let c = if c == 'J' { 'I' } else { c };
-        let idx = (c as u8 - b'A') as usize;
-        if !seen[idx] {
-            seen[idx] = true;
-            matrix.push(c);
-        }
-    }
-
-    matrix
-}
-
-fn find_position(matrix: &[char], c: char) -> (usize, usize) {
-    let idx = matrix.iter().position(|&m| m == c).unwrap();
-    (idx / 5, idx % 5)
 }
 
 fn prepare_digraphs(input: &str) -> Vec<(char, char)> {
@@ -99,13 +73,13 @@ pub fn encrypt(input: &str, key: &str) -> Result<String> {
         return Ok(String::new());
     }
 
-    let matrix = build_matrix(key);
+    let matrix = build_polybius_square(key);
     let digraphs = prepare_digraphs(input);
 
     let mut result = String::new();
     for (a, b) in digraphs {
-        let (ra, ca) = find_position(&matrix, a);
-        let (rb, cb) = find_position(&matrix, b);
+        let (ra, ca) = find_in_square(&matrix, a);
+        let (rb, cb) = find_in_square(&matrix, b);
 
         if ra == rb {
             // Same row: shift right
@@ -145,12 +119,12 @@ pub fn decrypt(input: &str, key: &str) -> Result<String> {
         anyhow::bail!("Encrypted text must have even length");
     }
 
-    let matrix = build_matrix(key);
+    let matrix = build_polybius_square(key);
 
     let mut result = String::new();
     for pair in letters.chunks(2) {
-        let (ra, ca) = find_position(&matrix, pair[0]);
-        let (rb, cb) = find_position(&matrix, pair[1]);
+        let (ra, ca) = find_in_square(&matrix, pair[0]);
+        let (rb, cb) = find_in_square(&matrix, pair[1]);
 
         if ra == rb {
             // Same row: shift left

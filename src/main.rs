@@ -195,6 +195,26 @@ enum Commands {
         #[command(subcommand)]
         action: crypto::otp::OtpAction,
     },
+    #[command(about = "AES-128 ECB/CBC encrypt/decrypt")]
+    Aes {
+        #[command(subcommand)]
+        action: crypto::aes_cipher::AesCipherAction,
+    },
+    #[command(about = "DES/Triple-DES encrypt/decrypt")]
+    Des {
+        #[command(subcommand)]
+        action: crypto::des_cipher::DesCipherAction,
+    },
+    #[command(about = "RC4 stream cipher")]
+    Rc4 {
+        #[command(subcommand)]
+        action: crypto::rc4::Rc4Action,
+    },
+    #[command(about = "Simple substitution cipher (encode/decode/solve)")]
+    Substitution {
+        #[command(subcommand)]
+        action: crypto::substitution::SubstitutionAction,
+    },
 
     // === Hash / Crypto ===
     #[command(about = "Generate hash (MD5, SHA1, SHA256, SHA512)")]
@@ -217,10 +237,37 @@ enum Commands {
         #[command(subcommand)]
         action: crypto::crc32::Crc32Action,
     },
+    #[command(about = "CRC32 forgery (append bytes for target CRC)")]
+    Crc32Forge {
+        #[command(subcommand)]
+        action: crypto::crc32_forge::Crc32ForgeAction,
+    },
     #[command(about = "RSA utilities (compute-d, encrypt, decrypt, attacks)")]
     Rsa {
         #[command(subcommand)]
         action: crypto::rsa::RsaAction,
+    },
+    #[command(about = "SHA-256 hash length extension attack")]
+    HashExt {
+        #[command(subcommand)]
+        action: crypto::hash_ext::HashExtAction,
+    },
+    #[command(about = "JWT decode and vulnerability analysis")]
+    Jwt {
+        #[command(subcommand)]
+        action: crypto::jwt::JwtAction,
+    },
+
+    // === Advanced Crypto ===
+    #[command(about = "Elliptic curve operations over finite fields")]
+    Ec {
+        #[command(subcommand)]
+        action: crypto::ec::EcAction,
+    },
+    #[command(about = "Diffie-Hellman key exchange and discrete log")]
+    Dh {
+        #[command(subcommand)]
+        action: crypto::dh::DhAction,
     },
 
     // === Utilities ===
@@ -328,13 +375,24 @@ fn main() -> Result<()> {
         Commands::Baconian { action } => crypto::baconian::run(action)?,
         Commands::Polybius { action } => crypto::polybius::run(action)?,
         Commands::Otp { action } => crypto::otp::run(action)?,
+        Commands::Aes { action } => crypto::aes_cipher::run(action)?,
+        Commands::Des { action } => crypto::des_cipher::run(action)?,
+        Commands::Rc4 { action } => crypto::rc4::run(action)?,
+        Commands::Substitution { action } => crypto::substitution::run(action)?,
 
         // Hash / Crypto
         Commands::Hash { action } => crypto::hash::run(action)?,
         Commands::Hashid { action } => crypto::hashid::run(action)?,
         Commands::Hmac { action } => crypto::hmac::run(action)?,
         Commands::Crc32 { action } => crypto::crc32::run(action)?,
+        Commands::Crc32Forge { action } => crypto::crc32_forge::run(action)?,
         Commands::Rsa { action } => crypto::rsa::run(action)?,
+        Commands::HashExt { action } => crypto::hash_ext::run(action)?,
+        Commands::Jwt { action } => crypto::jwt::run(action)?,
+
+        // Advanced Crypto
+        Commands::Ec { action } => crypto::ec::run(action)?,
+        Commands::Dh { action } => crypto::dh::run(action)?,
 
         // Utilities
         Commands::Frequency { action } => crypto::frequency::run(action)?,

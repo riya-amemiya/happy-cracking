@@ -1,5 +1,7 @@
 use anyhow::{Context, Result};
 use clap::Subcommand;
+use std::collections::HashMap;
+use std::sync::LazyLock;
 
 #[derive(Subcommand)]
 pub enum BaudotAction {
@@ -67,6 +69,24 @@ const ITA2_TABLE: &[(char, char)] = &[
 const FIGS_SHIFT: u8 = 0b11011;
 const LTRS_SHIFT: u8 = 0b11111;
 
+// Maps a character to (code, is_figure) for O(1) encode lookups
+static CHAR_TO_CODE: LazyLock<HashMap<char, (u8, bool)>> = LazyLock::new(|| {
+    let mut map = HashMap::new();
+    for (i, &(letter, figure)) in ITA2_TABLE.iter().enumerate() {
+        let code = i as u8;
+        if code == FIGS_SHIFT || code == LTRS_SHIFT {
+            continue;
+        }
+        if letter != '\0' && !map.contains_key(&letter) {
+            map.insert(letter, (code, false));
+        }
+        if figure != '\0' && figure != letter && !map.contains_key(&figure) {
+            map.insert(figure, (code, true));
+        }
+    }
+    map
+});
+
 pub fn encode(input: &str) -> Result<String> {
     if input.is_empty() {
         return Ok(String::new());
@@ -77,7 +97,7 @@ pub fn encode(input: &str) -> Result<String> {
     let mut in_figures = false;
 
     for c in upper.chars() {
-        if let Some((code, is_figure)) = find_code(c) {
+        if let Some(&(code, is_figure)) = CHAR_TO_CODE.get(&c) {
             if is_figure && !in_figures {
                 codes.push(format!("{:05b}", FIGS_SHIFT));
                 in_figures = true;
@@ -90,22 +110,6 @@ pub fn encode(input: &str) -> Result<String> {
     }
 
     Ok(codes.join(" "))
-}
-
-fn find_code(c: char) -> Option<(u8, bool)> {
-    for (i, (letter, figure)) in ITA2_TABLE.iter().enumerate() {
-        let code = i as u8;
-        if code == FIGS_SHIFT || code == LTRS_SHIFT {
-            continue;
-        }
-        if *letter == c {
-            return Some((code, false));
-        }
-        if *figure == c && c != *letter {
-            return Some((code, true));
-        }
-    }
-    None
 }
 
 pub fn decode(input: &str) -> Result<String> {
