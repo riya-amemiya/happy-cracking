@@ -3,6 +3,9 @@ use clap::Subcommand;
 
 use crate::crypto;
 
+const MAX_OPERATIONS: usize = 50;
+const MAX_OUTPUT_SIZE: usize = 50 * 1024 * 1024; // 50MB
+
 #[derive(Subcommand)]
 pub enum ChainAction {
     #[command(about = "Apply a chain of operations")]
@@ -53,9 +56,36 @@ pub fn chain(input: &str, ops: &str) -> Result<String> {
         return Ok(input.to_string());
     }
 
-    ops.split(',')
-        .map(|op| op.trim())
+    let operations: Vec<&str> = ops.split(',').map(|op| op.trim()).collect();
+
+    if operations.len() > MAX_OPERATIONS {
+        anyhow::bail!(
+            "Too many operations: {} (max {})",
+            operations.len(),
+            MAX_OPERATIONS
+        );
+    }
+
+    if input.len() > MAX_OUTPUT_SIZE {
+        anyhow::bail!(
+            "Input size too large: {} bytes (max {} bytes)",
+            input.len(),
+            MAX_OUTPUT_SIZE
+        );
+    }
+
+    operations
+        .into_iter()
         .try_fold(input.to_string(), |current, op| {
-            apply_operation(&current, op).with_context(|| format!("Failed at operation '{}'", op))
+            let result = apply_operation(&current, op)
+                .with_context(|| format!("Failed at operation '{}'", op))?;
+            if result.len() > MAX_OUTPUT_SIZE {
+                anyhow::bail!(
+                    "Output size limit exceeded: {} bytes (max {} bytes)",
+                    result.len(),
+                    MAX_OUTPUT_SIZE
+                );
+            }
+            Ok(result)
         })
 }

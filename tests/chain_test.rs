@@ -90,3 +90,33 @@ fn chain_base32_roundtrip() {
     let result = chain::chain("Test", "base32-encode,base32-decode").unwrap();
     assert_eq!(result, "Test");
 }
+
+#[test]
+fn chain_too_many_operations() {
+    let ops: Vec<&str> = (0..51).map(|_| "rot13").collect();
+    let ops_str = ops.join(",");
+    let result = chain::chain("test", &ops_str);
+    assert!(result.is_err());
+    assert!(
+        result
+            .unwrap_err()
+            .to_string()
+            .contains("Too many operations")
+    );
+}
+
+#[test]
+fn chain_output_too_large() {
+    // 2^20 bytes = 1MB
+    let input = "A".repeat(1024 * 1024);
+    // 6 hex-encodes: 1 -> 2 -> 4 -> 8 -> 16 -> 32 -> 64MB
+    let ops = "hex-encode,hex-encode,hex-encode,hex-encode,hex-encode,hex-encode";
+    let result = chain::chain(&input, ops);
+    assert!(result.is_err());
+    assert!(
+        result
+            .unwrap_err()
+            .to_string()
+            .contains("Output size limit exceeded")
+    );
+}
