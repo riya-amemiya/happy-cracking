@@ -261,6 +261,29 @@ fn mul_mod(a: u128, b: u128, m: u128) -> u128 {
     }
 }
 
+// Binary GCD algorithm for u128
+fn binary_gcd(mut u: u128, mut v: u128) -> u128 {
+    if u == 0 {
+        return v;
+    }
+    if v == 0 {
+        return u;
+    }
+    let shift = (u | v).trailing_zeros();
+    u >>= u.trailing_zeros();
+    loop {
+        v >>= v.trailing_zeros();
+        if u > v {
+            std::mem::swap(&mut u, &mut v);
+        }
+        v -= u;
+        if v == 0 {
+            break;
+        }
+    }
+    u << shift
+}
+
 // Pollard's Rho algorithm for finding a factor of a composite number.
 fn pollard_rho(n: u128) -> u128 {
     if n.is_multiple_of(2) {
@@ -283,7 +306,8 @@ fn pollard_rho(n: u128) -> u128 {
             y = f(f(y));
 
             let abs_diff = x.abs_diff(y);
-            d = num_integer::gcd(abs_diff, n);
+            // Use optimized binary GCD
+            d = binary_gcd(abs_diff, n);
         }
 
         if d != n {
