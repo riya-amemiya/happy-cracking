@@ -103,7 +103,7 @@ pub fn run(action: RsaAction) -> Result<()> {
                 anyhow::bail!("Exponent e must be non-zero");
             }
 
-            let m = integer_nth_root(&c, e);
+            let m = c.nth_root(e);
             println!("Decimal: {}", m);
             let ascii = bigint_to_ascii(&m);
             if !ascii.is_empty() {
@@ -153,41 +153,13 @@ pub fn big_modpow(base: &BigUint, exp: &BigUint, modulus: &BigUint) -> BigUint {
     base.modpow(exp, modulus)
 }
 
-// Integer nth root using Newton's method.
+// Integer nth root using the optimized library implementation.
 // Returns the largest x such that x^k <= n.
 pub fn integer_nth_root(n: &BigUint, k: u32) -> BigUint {
-    if n.is_zero() || k == 0 {
+    if k == 0 {
         return BigUint::zero();
     }
-    if k == 1 {
-        return n.clone();
-    }
-
-    let k_big = BigUint::from(k);
-    let k_minus_1 = BigUint::from(k - 1);
-
-    // Initial guess: 2^(ceil(bit_length / k))
-    let bit_len = n.bits();
-    let shift = bit_len.div_ceil(u64::from(k));
-    let mut x = BigUint::one() << shift;
-
-    loop {
-        // x_new = ((k-1) * x + n / x^(k-1)) / k
-        let x_pow = x.pow(k - 1);
-        let x_new = (&k_minus_1 * &x + n / &x_pow) / &k_big;
-
-        if x_new >= x {
-            break;
-        }
-        x = x_new;
-    }
-
-    // Verify and adjust downward if needed
-    while x.pow(k) > *n {
-        x -= BigUint::one();
-    }
-
-    x
+    n.nth_root(k)
 }
 
 // Fermat's factorization method for N with close prime factors.
@@ -198,7 +170,7 @@ pub fn fermat_factor(n: &BigUint, max_iter: u64) -> Result<(BigUint, BigUint)> {
         return Ok((two, other));
     }
 
-    let mut a = integer_nth_root(n, 2);
+    let mut a = n.sqrt();
     if &a * &a < *n {
         a += BigUint::one();
     }
@@ -210,7 +182,7 @@ pub fn fermat_factor(n: &BigUint, max_iter: u64) -> Result<(BigUint, BigUint)> {
             continue;
         }
         let b_sq = &a_sq - n;
-        let b = integer_nth_root(&b_sq, 2);
+        let b = b_sq.sqrt();
         if &b * &b == b_sq {
             let p = &a + &b;
             let q = &a - &b;
@@ -267,7 +239,7 @@ pub fn wiener_attack(e: &BigUint, n: &BigUint) -> Result<BigUint> {
             continue;
         }
         let discriminant = &s_sq - &four_n;
-        let sqrt_disc = integer_nth_root(&discriminant, 2);
+        let sqrt_disc = discriminant.sqrt();
         if &sqrt_disc * &sqrt_disc == discriminant {
             // Verify: encrypt and decrypt a test message
             let test_m = BigUint::from(2u32);
