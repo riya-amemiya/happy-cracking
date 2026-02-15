@@ -1,5 +1,7 @@
 use anyhow::{Context, Result};
 use clap::Subcommand;
+use std::collections::HashMap;
+use std::sync::LazyLock;
 
 #[derive(Subcommand)]
 pub enum NatoAction {
@@ -66,16 +68,17 @@ const NATO_TABLE: &[(char, &str)] = &[
     ('9', "NINE"),
 ];
 
+static CHAR_TO_NATO: LazyLock<HashMap<char, &'static str>> =
+    LazyLock::new(|| NATO_TABLE.iter().copied().collect());
+
+static NATO_TO_CHAR: LazyLock<HashMap<&'static str, char>> =
+    LazyLock::new(|| NATO_TABLE.iter().map(|&(c, word)| (word, c)).collect());
+
 pub fn encode(input: &str) -> String {
     input
         .to_uppercase()
         .chars()
-        .filter_map(|c| {
-            NATO_TABLE
-                .iter()
-                .find(|&&(ch, _)| ch == c)
-                .map(|&(_, word)| word)
-        })
+        .filter_map(|c| CHAR_TO_NATO.get(&c).copied())
         .collect::<Vec<_>>()
         .join(" ")
 }
@@ -89,10 +92,9 @@ pub fn decode(input: &str) -> Result<String> {
         .split_whitespace()
         .map(|word| {
             let upper = word.to_uppercase();
-            NATO_TABLE
-                .iter()
-                .find(|&&(_, nato)| nato == upper)
-                .map(|&(c, _)| c)
+            NATO_TO_CHAR
+                .get(upper.as_str())
+                .copied()
                 .context(format!("Unknown NATO word: {}", word))
         })
         .collect::<Result<String>>()

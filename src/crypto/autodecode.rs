@@ -149,9 +149,8 @@ fn looks_like_base32(s: &str) -> bool {
         return false;
     }
     let valid_chars = s
-        .to_uppercase()
         .chars()
-        .all(|c| matches!(c, 'A'..='Z' | '2'..='7' | '='));
+        .all(|c| c.is_ascii_alphabetic() || matches!(c, '2'..='7' | '='));
     valid_chars && s.len().is_multiple_of(8)
 }
 
@@ -169,16 +168,12 @@ fn looks_like_hex(s: &str) -> bool {
 }
 
 fn looks_like_binary(s: &str) -> bool {
-    let cleaned: String = s.chars().filter(|c| !c.is_whitespace()).collect();
-    cleaned.len() >= 8 && cleaned.chars().all(|c| c == '0' || c == '1')
+    let non_ws_count = s.chars().filter(|c| !c.is_whitespace()).count();
+    non_ws_count >= 8 && s.chars().all(|c| c == '0' || c == '1' || c.is_whitespace())
 }
 
 fn looks_like_morse(s: &str) -> bool {
-    let chars: Vec<char> = s.chars().collect();
-    if chars.len() < 2 {
-        return false;
-    }
-    chars
-        .iter()
-        .all(|&c| c == '.' || c == '-' || c == ' ' || c == '/')
+    s.len() >= 2
+        && s.chars()
+            .all(|c| c == '.' || c == '-' || c == ' ' || c == '/')
 }

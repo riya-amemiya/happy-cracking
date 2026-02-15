@@ -1,6 +1,8 @@
 use anyhow::Result;
 use clap::Subcommand;
 
+use super::shared::column_order;
+
 #[derive(Subcommand)]
 pub enum AdfgvxAction {
     #[command(about = "Encrypt with ADFGVX cipher")]
@@ -80,18 +82,6 @@ fn find_in_grid(grid: &[char], c: char) -> Option<(usize, usize)> {
     grid.iter()
         .position(|&g| g == c)
         .map(|idx| (idx / 6, idx % 6))
-}
-
-fn column_order(key: &str) -> Vec<usize> {
-    let key_upper: Vec<char> = key.to_uppercase().chars().collect();
-    let mut indices: Vec<usize> = (0..key_upper.len()).collect();
-    indices.sort_by(|&a, &b| key_upper[a].cmp(&key_upper[b]).then(a.cmp(&b)));
-
-    let mut order = vec![0; key_upper.len()];
-    for (rank, &idx) in indices.iter().enumerate() {
-        order[idx] = rank;
-    }
-    order
 }
 
 pub fn encrypt(input: &str, key: &str, transposition_key: &str) -> Result<String> {

@@ -1,6 +1,8 @@
 use anyhow::Result;
 use clap::Subcommand;
 
+use super::shared::column_order;
+
 #[derive(Subcommand)]
 pub enum ColumnarAction {
     #[command(about = "Encrypt with Columnar Transposition cipher")]
@@ -29,18 +31,6 @@ pub fn run(action: ColumnarAction) -> Result<()> {
         }
     }
     Ok(())
-}
-
-fn column_order(key: &str) -> Vec<usize> {
-    let key_upper: Vec<char> = key.to_uppercase().chars().collect();
-    let mut indices: Vec<usize> = (0..key_upper.len()).collect();
-    indices.sort_by(|&a, &b| key_upper[a].cmp(&key_upper[b]).then(a.cmp(&b)));
-
-    let mut order = vec![0; key_upper.len()];
-    for (rank, &idx) in indices.iter().enumerate() {
-        order[idx] = rank;
-    }
-    order
 }
 
 pub fn encrypt(input: &str, key: &str) -> Result<String> {

@@ -46,9 +46,9 @@ pub fn factorize(mut n: u128) -> Vec<(u128, u32)> {
         return Vec::new();
     }
 
-    // 1. Remove small factors (2, 3, 5) using trial division
+    // 1. Remove small factors (2, 3, 5, 7, 11, 13) using trial division
     // This is cheap and effective, and helps Pollard's Rho.
-    for &p in &[2, 3, 5] {
+    for &p in &[2, 3, 5, 7, 11, 13] {
         while n.is_multiple_of(p) {
             factors_list.push(p);
             n /= p;
@@ -284,7 +284,7 @@ fn binary_gcd(mut u: u128, mut v: u128) -> u128 {
     u << shift
 }
 
-// Pollard's Rho algorithm for finding a factor of a composite number.
+// Pollard's Rho algorithm using Brent's cycle detection variant with batch GCD.
 fn pollard_rho(n: u128) -> u128 {
     if n.is_multiple_of(2) {
         return 2;
@@ -292,22 +292,49 @@ fn pollard_rho(n: u128) -> u128 {
 
     // Try different constants c if the first one fails
     for c in [1, 3, 5, 7, 2, 4, 6, 8] {
-        let mut x: u128 = 2;
-        let mut y: u128 = 2;
-        let mut d: u128 = 1;
-
         let f = |x: u128| -> u128 {
             let x2 = mul_mod(x, x, n);
             (x2 + c) % n
         };
 
-        while d == 1 {
-            x = f(x);
-            y = f(f(y));
+        // Brent's variant: only update y at powers of 2
+        let mut y: u128 = 2;
+        let mut q: u128 = 1;
+        let mut r: u128 = 1;
+        let mut d: u128 = 1;
+        let mut x: u128 = 2;
+        let mut ys: u128 = 0;
 
-            let abs_diff = x.abs_diff(y);
-            // Use optimized binary GCD
-            d = binary_gcd(abs_diff, n);
+        while d == 1 {
+            x = y;
+            for _ in 0..r {
+                y = f(y);
+            }
+
+            let mut k: u128 = 0;
+            while k < r && d == 1 {
+                ys = y;
+                // Batch GCD: accumulate product of differences over ~100 iterations
+                let batch_end = (k + 100).min(r);
+                for _ in k..batch_end {
+                    y = f(y);
+                    q = mul_mod(q, x.abs_diff(y), n);
+                }
+                d = binary_gcd(q, n);
+                k = batch_end;
+            }
+            r *= 2;
+        }
+
+        if d == n {
+            // Backtrack: retry without batching from ys
+            loop {
+                ys = f(ys);
+                d = binary_gcd(x.abs_diff(ys), n);
+                if d != 1 {
+                    break;
+                }
+            }
         }
 
         if d != n {

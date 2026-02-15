@@ -1,6 +1,8 @@
 use anyhow::Result;
 use clap::Subcommand;
 
+use super::polybius_utils::{build_polybius_square, find_in_square};
+
 #[derive(Subcommand)]
 pub enum FoursquareAction {
     #[command(about = "Encrypt with Four-square cipher")]
@@ -40,33 +42,6 @@ const STANDARD_SQUARE: [char; 25] = [
     'U', 'V', 'W', 'X', 'Y', 'Z',
 ];
 
-fn build_keyed_square(key: &str) -> Vec<char> {
-    let mut seen = [false; 26];
-    seen[(b'J' - b'A') as usize] = true;
-    let mut square = Vec::with_capacity(25);
-
-    for c in key
-        .to_uppercase()
-        .chars()
-        .chain('A'..='Z')
-        .filter(|c| c.is_ascii_uppercase())
-    {
-        let c = if c == 'J' { 'I' } else { c };
-        let idx = (c as u8 - b'A') as usize;
-        if !seen[idx] {
-            seen[idx] = true;
-            square.push(c);
-        }
-    }
-
-    square
-}
-
-fn find_in_square(square: &[char], c: char) -> (usize, usize) {
-    let idx = square.iter().position(|&s| s == c).unwrap();
-    (idx / 5, idx % 5)
-}
-
 fn normalize_char(c: char) -> char {
     if c == 'J' { 'I' } else { c }
 }
@@ -98,8 +73,8 @@ pub fn encrypt(input: &str, key1: &str, key2: &str) -> Result<String> {
         letters.push('X');
     }
 
-    let top_right = build_keyed_square(key1);
-    let bottom_left = build_keyed_square(key2);
+    let top_right = build_polybius_square(key1);
+    let bottom_left = build_polybius_square(key2);
 
     let mut result = String::new();
     for pair in letters.chunks(2) {
@@ -131,8 +106,8 @@ pub fn decrypt(input: &str, key1: &str, key2: &str) -> Result<String> {
         anyhow::bail!("Encrypted text must have even length");
     }
 
-    let top_right = build_keyed_square(key1);
-    let bottom_left = build_keyed_square(key2);
+    let top_right = build_polybius_square(key1);
+    let bottom_left = build_polybius_square(key2);
 
     let mut result = String::new();
     for pair in letters.chunks(2) {

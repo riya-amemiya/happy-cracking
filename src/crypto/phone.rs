@@ -1,5 +1,7 @@
 use anyhow::Result;
 use clap::Subcommand;
+use std::collections::HashMap;
+use std::sync::LazyLock;
 
 #[derive(Subcommand)]
 pub enum PhoneAction {
@@ -39,22 +41,36 @@ const KEYPAD: &[(char, &[char])] = &[
     ('9', &['W', 'X', 'Y', 'Z']),
 ];
 
-fn char_to_presses(c: char) -> Option<String> {
+// Maps char -> (digit, position), e.g. 'A' -> ('2', 0), 'B' -> ('2', 1)
+static CHAR_TO_KEY: LazyLock<HashMap<char, (char, usize)>> = LazyLock::new(|| {
+    let mut map = HashMap::new();
     for &(digit, letters) in KEYPAD {
-        if let Some(pos) = letters.iter().position(|&l| l == c) {
-            return Some(digit.to_string().repeat(pos + 1));
+        for (pos, &letter) in letters.iter().enumerate() {
+            map.insert(letter, (digit, pos));
         }
     }
-    None
+    map
+});
+
+// Maps (digit, press_count) -> char, e.g. ('2', 1) -> 'A', ('2', 2) -> 'B'
+static KEY_TO_CHAR: LazyLock<HashMap<(char, usize), char>> = LazyLock::new(|| {
+    let mut map = HashMap::new();
+    for &(digit, letters) in KEYPAD {
+        for (pos, &letter) in letters.iter().enumerate() {
+            map.insert((digit, pos + 1), letter);
+        }
+    }
+    map
+});
+
+fn char_to_presses(c: char) -> Option<String> {
+    CHAR_TO_KEY
+        .get(&c)
+        .map(|&(digit, pos)| digit.to_string().repeat(pos + 1))
 }
 
 fn key_for_char(c: char) -> Option<char> {
-    for &(digit, letters) in KEYPAD {
-        if letters.contains(&c) {
-            return Some(digit);
-        }
-    }
-    None
+    CHAR_TO_KEY.get(&c).map(|&(digit, _)| digit)
 }
 
 pub fn encode(input: &str) -> String {
@@ -111,20 +127,15 @@ fn presses_to_char(s: &str) -> Result<char> {
     }
 
     let count = s.len();
-    for &(key, letters) in KEYPAD {
-        if key == digit {
-            if count == 0 || count > letters.len() {
-                anyhow::bail!("Invalid press count {} for key {}", count, digit);
-            }
-            return Ok(letters[count - 1]);
-        }
-    }
 
     if digit == '0' {
         return Ok(' ');
     }
 
-    anyhow::bail!("Unknown key digit: {}", digit)
+    KEY_TO_CHAR
+        .get(&(digit, count))
+        .copied()
+        .ok_or_else(|| anyhow::anyhow!("Invalid press count {} for key {}", count, digit))
 }
 
 pub fn decode(input: &str) -> Result<String> {

@@ -1,5 +1,7 @@
 use anyhow::{Context, Result};
 use clap::Subcommand;
+use std::collections::HashMap;
+use std::sync::LazyLock;
 
 #[derive(Subcommand)]
 pub enum SemaphoreAction {
@@ -57,6 +59,12 @@ const SEMAPHORE_MAP: &[(char, &str)] = &[
     ('Z', "6-5"),
 ];
 
+static CHAR_TO_SEMAPHORE: LazyLock<HashMap<char, &'static str>> =
+    LazyLock::new(|| SEMAPHORE_MAP.iter().copied().collect());
+
+static SEMAPHORE_TO_CHAR: LazyLock<HashMap<&'static str, char>> =
+    LazyLock::new(|| SEMAPHORE_MAP.iter().map(|&(c, code)| (code, c)).collect());
+
 pub fn encode(input: &str) -> Result<String> {
     if input.is_empty() {
         return Ok(String::new());
@@ -67,10 +75,9 @@ pub fn encode(input: &str) -> Result<String> {
         .chars()
         .filter(|c| c.is_ascii_alphabetic())
         .map(|c| {
-            SEMAPHORE_MAP
-                .iter()
-                .find(|(ch, _)| *ch == c)
-                .map(|(_, code)| *code)
+            CHAR_TO_SEMAPHORE
+                .get(&c)
+                .copied()
                 .context(format!("No semaphore code for character: {}", c))
         })
         .collect();
@@ -87,10 +94,9 @@ pub fn decode(input: &str) -> Result<String> {
     input
         .split_whitespace()
         .map(|code| {
-            SEMAPHORE_MAP
-                .iter()
-                .find(|(_, s)| *s == code)
-                .map(|(c, _)| *c)
+            SEMAPHORE_TO_CHAR
+                .get(code)
+                .copied()
                 .context(format!("Unknown semaphore code: {}", code))
         })
         .collect()

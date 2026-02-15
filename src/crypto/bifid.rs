@@ -1,6 +1,8 @@
 use anyhow::Result;
 use clap::Subcommand;
 
+use super::polybius_utils::{build_polybius_square, find_in_square};
+
 #[derive(Subcommand)]
 pub enum BifidAction {
     #[command(about = "Encrypt with Bifid cipher")]
@@ -31,34 +33,6 @@ pub fn run(action: BifidAction) -> Result<()> {
     Ok(())
 }
 
-fn build_square(key: &str) -> Vec<char> {
-    let mut seen = [false; 26];
-    // I/J merged: J is treated as I
-    seen[(b'J' - b'A') as usize] = true;
-    let mut square = Vec::with_capacity(25);
-
-    for c in key
-        .to_uppercase()
-        .chars()
-        .chain('A'..='Z')
-        .filter(|c| c.is_ascii_uppercase())
-    {
-        let c = if c == 'J' { 'I' } else { c };
-        let idx = (c as u8 - b'A') as usize;
-        if !seen[idx] {
-            seen[idx] = true;
-            square.push(c);
-        }
-    }
-
-    square
-}
-
-fn find_position(square: &[char], c: char) -> (usize, usize) {
-    let idx = square.iter().position(|&s| s == c).unwrap();
-    (idx / 5, idx % 5)
-}
-
 fn normalize_input(input: &str) -> Vec<char> {
     input
         .to_uppercase()
@@ -78,13 +52,13 @@ pub fn encrypt(input: &str, key: &str) -> Result<String> {
         return Ok(String::new());
     }
 
-    let square = build_square(key);
+    let square = build_polybius_square(key);
 
     // Step 1: get row and column coordinates
     let mut rows = Vec::with_capacity(letters.len());
     let mut cols = Vec::with_capacity(letters.len());
     for &c in &letters {
-        let (r, col) = find_position(&square, c);
+        let (r, col) = find_in_square(&square, c);
         rows.push(r);
         cols.push(col);
     }
@@ -113,12 +87,12 @@ pub fn decrypt(input: &str, key: &str) -> Result<String> {
         return Ok(String::new());
     }
 
-    let square = build_square(key);
+    let square = build_polybius_square(key);
 
     // Step 1: convert each ciphertext letter to row/col pair
     let mut coords = Vec::with_capacity(letters.len() * 2);
     for &c in &letters {
-        let (r, col) = find_position(&square, c);
+        let (r, col) = find_in_square(&square, c);
         coords.push(r);
         coords.push(col);
     }
