@@ -247,6 +247,7 @@ cargo run -- polybius encrypt "HELLO"
 
 # One-time pad
 cargo run -- otp encrypt "Hello" --key "0102030405"
+cargo run -- otp generate 16
 ```
 
 ### Hash / Crypto
