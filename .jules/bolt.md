@@ -13,3 +13,7 @@
 ## 2026-02-14 - Branch Prediction vs Allocation
 **Learning:** A naive double-and-add loop for 128-bit modular multiplication (to avoid BigUint allocation) was 20% SLOWER on random inputs due to branch misprediction, despite being 20% faster on constant inputs. BigUint's word-based operations are more predictor-friendly.
 **Action:** When optimizing tight loops with random data, prefer branchless algorithms or vectorized operations over simple loops, even if it means keeping allocations.
+
+## 2026-02-15 - Native BigUint Roots
+**Learning:** `num-bigint`'s native `nth_root` and `sqrt` methods are significantly faster (~2x for `nth_root`, ~7x for `sqrt`) than a custom Newton's method implementation.
+**Action:** Always prefer library implementations for big integer roots over custom arithmetic loops.
