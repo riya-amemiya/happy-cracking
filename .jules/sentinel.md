@@ -18,7 +18,7 @@
 **Learning:** Mathematical functions accepting external inputs (like exponents) must validate that inputs are within valid ranges (e.g. > 0) before performing operations that might panic (division, modulo).
 **Prevention:** Add input validation guards at the start of mathematical functions and in CLI argument parsing logic to reject invalid parameters like zero exponents.
 
-## 2024-05-22 - [DoS Prevention in Chain Command]
+## 2026-02-15 - DoS Prevention in Chain Command
 **Vulnerability:** Unbounded resource consumption in `chain` command. A user could chain operations indefinitely or cause exponential output growth (e.g., repeated `hex-encode`), leading to memory exhaustion or process hang.
 **Learning:** CLI tools that allow user-defined pipelines/chains of operations must have explicit limits on depth and data size to prevent DoS, even if they are not exposed as a service (local DoS is still a concern).
 **Prevention:** Enforce strict limits on recursion depth/loop count and intermediate/final data size. Added `MAX_OPERATIONS=50` and `MAX_OUTPUT_SIZE=50MB`.
