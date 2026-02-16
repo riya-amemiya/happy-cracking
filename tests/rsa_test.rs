@@ -22,8 +22,8 @@ fn test_encrypt_decrypt_roundtrip() {
     let d = BigUint::from(2753u32);
     let m = BigUint::from(65u32);
 
-    let c = rsa::big_modpow(&m, &e, &n);
-    let decrypted = rsa::big_modpow(&c, &d, &n);
+    let c = rsa::big_modpow(&m, &e, &n).unwrap();
+    let decrypted = rsa::big_modpow(&c, &d, &n).unwrap();
     assert_eq!(decrypted, m);
 }
 
@@ -38,8 +38,8 @@ fn test_encrypt_decrypt_roundtrip_larger() {
     let d = rsa::big_modinv(&e, &phi).unwrap();
 
     let m = BigUint::from(12345u32);
-    let c = rsa::big_modpow(&m, &e, &n);
-    let decrypted = rsa::big_modpow(&c, &d, &n);
+    let c = rsa::big_modpow(&m, &e, &n).unwrap();
+    let decrypted = rsa::big_modpow(&c, &d, &n).unwrap();
     assert_eq!(decrypted, m);
 }
 
@@ -130,8 +130,8 @@ fn test_wiener_attack() {
 
     // Verify the recovered d works for encryption/decryption
     let m = BigUint::from(42u32);
-    let c = rsa::big_modpow(&m, &e, &n);
-    let decrypted = rsa::big_modpow(&c, &recovered_d, &n);
+    let c = rsa::big_modpow(&m, &e, &n).unwrap();
+    let decrypted = rsa::big_modpow(&c, &recovered_d, &n).unwrap();
     assert_eq!(decrypted, m);
 }
 
@@ -208,7 +208,7 @@ fn test_full_rsa_ctf_scenario() {
 
     // Encrypt a message
     let m = BigUint::from(9999u32);
-    let c = rsa::big_modpow(&m, &e, &n);
+    let c = rsa::big_modpow(&m, &e, &n).unwrap();
 
     // Factor n (close primes)
     let (fp, fq) = rsa::fermat_factor(&n, 1_000_000).unwrap();
@@ -220,7 +220,7 @@ fn test_full_rsa_ctf_scenario() {
     assert_eq!(recovered_d, d);
 
     // Decrypt
-    let decrypted = rsa::big_modpow(&c, &recovered_d, &n);
+    let decrypted = rsa::big_modpow(&c, &recovered_d, &n).unwrap();
     assert_eq!(decrypted, m);
 }
 

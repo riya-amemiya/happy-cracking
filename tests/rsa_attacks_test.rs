@@ -66,8 +66,8 @@ fn test_common_modulus_basic() {
     let e2 = BigUint::from(19u32);
     let m = BigUint::from(42u32);
 
-    let c1 = rsa::big_modpow(&m, &e1, &n);
-    let c2 = rsa::big_modpow(&m, &e2, &n);
+    let c1 = rsa::big_modpow(&m, &e1, &n).unwrap();
+    let c2 = rsa::big_modpow(&m, &e2, &n).unwrap();
 
     let recovered = rsa::common_modulus_attack(&n, &e1, &e2, &c1, &c2).unwrap();
     assert_eq!(recovered, m);
@@ -83,8 +83,8 @@ fn test_common_modulus_larger() {
     let e2 = BigUint::from(17u32);
     let m = BigUint::from(12345u32);
 
-    let c1 = rsa::big_modpow(&m, &e1, &n);
-    let c2 = rsa::big_modpow(&m, &e2, &n);
+    let c1 = rsa::big_modpow(&m, &e1, &n).unwrap();
+    let c2 = rsa::big_modpow(&m, &e2, &n).unwrap();
 
     let recovered = rsa::common_modulus_attack(&n, &e1, &e2, &c1, &c2).unwrap();
     assert_eq!(recovered, m);
@@ -100,8 +100,8 @@ fn test_common_modulus_flag() {
     let e2 = BigUint::from(3u32);
     let m = BigUint::from(123456u32);
 
-    let c1 = rsa::big_modpow(&m, &e1, &n);
-    let c2 = rsa::big_modpow(&m, &e2, &n);
+    let c1 = rsa::big_modpow(&m, &e1, &n).unwrap();
+    let c2 = rsa::big_modpow(&m, &e2, &n).unwrap();
 
     let recovered = rsa::common_modulus_attack(&n, &e1, &e2, &c1, &c2).unwrap();
     assert_eq!(recovered, m);
@@ -161,12 +161,12 @@ fn test_pollard_p1_full_ctf_scenario() {
     let e = BigUint::from(65537u32);
     let m = BigUint::from(42u32);
 
-    let c = rsa::big_modpow(&m, &e, &n);
+    let c = rsa::big_modpow(&m, &e, &n).unwrap();
 
     let (fp, fq) = rsa::pollard_p1(&n, 1000).unwrap();
     let phi = (&fp - BigUint::one()) * (&fq - BigUint::one());
     let d = rsa::big_modinv(&e, &phi).unwrap();
-    let decrypted = rsa::big_modpow(&c, &d, &n);
+    let decrypted = rsa::big_modpow(&c, &d, &n).unwrap();
     assert_eq!(decrypted, m);
 }
 
@@ -215,12 +215,12 @@ fn test_pollard_rho_full_ctf_scenario() {
     let e = BigUint::from(7u32); // gcd(7, 10200) = 1
     let m = BigUint::from(65u32);
 
-    let c = rsa::big_modpow(&m, &e, &n);
+    let c = rsa::big_modpow(&m, &e, &n).unwrap();
 
     let (fp, fq) = rsa::pollard_rho_factor(&n).unwrap();
     let phi = (&fp - BigUint::one()) * (&fq - BigUint::one());
     let d = rsa::big_modinv(&e, &phi).unwrap();
-    let decrypted = rsa::big_modpow(&c, &d, &n);
+    let decrypted = rsa::big_modpow(&c, &d, &n).unwrap();
     assert_eq!(decrypted, m);
 }
 
