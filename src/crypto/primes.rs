@@ -284,25 +284,192 @@ fn binary_gcd(mut u: u128, mut v: u128) -> u128 {
     u << shift
 }
 
+struct Montgomery {
+    n: u128,
+    neg_inv_n: u128, // -n^{-1} mod 2^128
+    r2: u128,        // R^2 mod n, where R = 2^128
+}
+
+impl Montgomery {
+    fn new(n: u128) -> Self {
+        // n must be odd
+        debug_assert!(!n.is_multiple_of(2));
+
+        // Compute -n^{-1} mod 2^128 using Newton's method
+        // x_0 = 1 works because n is odd (n * 1 = 1 mod 2)? No, n must be 1 mod 2.
+        // If n is odd, n * x = 1 mod 2 => x=1.
+        // Iterate: x = x * (2 - n*x)
+        let mut inv = 1u128;
+        for _ in 0..7 {
+            inv = inv.wrapping_mul(2u128.wrapping_sub(n.wrapping_mul(inv)));
+        }
+        let neg_inv_n = inv.wrapping_neg();
+
+        // Compute R^2 mod n
+        // R = 2^128. R mod n = (2^128 - n) % n = (-n) % n.
+        // Wait. 2^128 is 0 in u128 wrapping (mod 2^128).
+        // But we want R mod n.
+        // R = 2^128.
+        // calculating R^2 mod n requires BigUint usually, or double-width arithmetic.
+        // R % n = (2^128) % n.
+        // = (u128::MAX - n + 1) % n.
+        // = ( (u128::MAX % n) + (1 % n) ) % n? No.
+        // u128::MAX + 1 = 2^128.
+        // 2^128 % n = ((u128::MAX % n) + 1) % n.
+
+        let r_mod_n = (u128::MAX % n).wrapping_add(1) % n;
+
+        // R^2 mod n = (R mod n)^2 mod n
+        let r2 = mul_mod(r_mod_n, r_mod_n, n);
+
+        Montgomery { n, neg_inv_n, r2 }
+    }
+
+    // Computes a * b * R^-1 mod n
+    fn mul(&self, a: u128, b: u128) -> u128 {
+        let (hi, lo) = widening_mul_u128(a, b);
+
+        // m = T * n' mod R => lo * neg_inv_n
+        let m = lo.wrapping_mul(self.neg_inv_n);
+
+        // t = (T + m*n) / R
+        // We only need the high part of (T + m*n)
+        // T = hi * 2^128 + lo
+        // m*n = m_hi * 2^128 + m_lo
+        // lo + m_lo = lo + (lo * neg_inv_n * n)_lo = lo + (lo * -1)_lo = 0 mod 2^128?
+        // Yes, m*n = -lo mod 2^128. So lo + m_lo = 0 mod 2^128.
+        // So the carry from lo + m_lo is what matters.
+        // But since lower 128 bits are zero, we just compute (hi + m_hi + carry).
+
+        // We know lo + m_lo overflows u128 iff lo != 0 (since m_lo = -lo).
+        // Actually m_lo = lo.wrapping_mul(self.neg_inv_n).wrapping_mul(self.n) = lo * (-1) = -lo.
+        // lo + (-lo) = 0 (mod 2^128).
+        // If lo != 0, carry is 1. If lo == 0, carry is 0.
+        let carry_lo = if lo != 0 { 1 } else { 0 };
+
+        // Wait, I need high part of m*n too.
+        let (m_hi, _) = widening_mul_u128(m, self.n);
+
+        // Result = hi + m_hi + carry_lo
+        let (res, carry) = hi.overflowing_add(m_hi);
+        let (res, carry2) = res.overflowing_add(carry_lo);
+
+        // If there was an overflow in the high part sum, the result exceeds 2^128?
+        // Wait. The true sum (T + m*n)/R can be up to 2n.
+        // So res fits in u128 if < 2^128?
+        // If carry happened, it means result >= 2^128.
+        // Since result < 2n < 2*2^128. The carry is at most 1 bit.
+
+        let mut t = res;
+        // If overflow (carry or carry2), we have an extra 2^128.
+        // In that case t is definitely >= n (since n < 2^128).
+        // Actually, the result is t + carry*2^128.
+        // We want (t + carry*2^128) mod n.
+        // If t >= n, subtract n.
+        // If carry, we definitely subtract n?
+        // The result of Redc is bounded by 2n.
+        // So if result >= n, subtract n.
+        // If carry, result >= 2^128 > n. So subtract n.
+
+        if carry || carry2 {
+             t = t.wrapping_sub(self.n);
+        }
+
+        if t >= self.n {
+            t -= self.n;
+        }
+
+        t
+    }
+
+    // Converts a to Montgomery form: a * R mod n
+    fn transform(&self, a: u128) -> u128 {
+        self.mul(a, self.r2)
+    }
+
+    // Converts back from Montgomery form: a * R^-1 mod n
+    // transform(1) = 1 * R mod n = R mod n
+    // mul(a, 1) = a * 1 * R^-1 mod n = a * R^-1 mod n.
+    #[allow(dead_code)]
+    fn reduce(&self, a: u128) -> u128 {
+        self.mul(a, 1)
+    }
+}
+
+// 128-bit widening multiplication: returns (hi, lo) such that a * b = hi * 2^128 + lo
+fn widening_mul_u128(a: u128, b: u128) -> (u128, u128) {
+    let al = a as u64;
+    let ah = (a >> 64) as u64;
+    let bl = b as u64;
+    let bh = (b >> 64) as u64;
+
+    let p0 = (al as u128) * (bl as u128);
+    let p1 = (al as u128) * (bh as u128);
+    let p2 = (ah as u128) * (bl as u128);
+    let p3 = (ah as u128) * (bh as u128);
+
+    let (mid, carry_mid) = p1.overflowing_add(p2);
+
+    let (lo, carry_lo) = p0.overflowing_add(mid << 64);
+
+    let mut hi = p3 + (mid >> 64);
+    if carry_mid {
+        hi += 1u128 << 64;
+    }
+    if carry_lo {
+        hi += 1;
+    }
+
+    (hi, lo)
+}
+
 // Pollard's Rho algorithm using Brent's cycle detection variant with batch GCD.
 fn pollard_rho(n: u128) -> u128 {
     if n.is_multiple_of(2) {
         return 2;
     }
 
+    // Optimize for u128 using Montgomery multiplication
+    let mont = if n <= u64::MAX as u128 {
+        None // Use standard arithmetic for small n? Or just use mont anyway?
+        // For u64, we can use u128 arithmetic directly without Montgomery overhead.
+        // But pollard_rho implementation below is unified.
+        // Let's use Montgomery only for > u64::MAX to match current optimization level?
+        // Actually Montgomery for u128 is fast enough for u64 too, but standard % is faster if hardware supports it.
+        // Let's stick to using Montgomery for all u128 inputs in this function for simplicity and speed on large inputs.
+    } else {
+        Some(Montgomery::new(n))
+    };
+
+    let one_mont = if let Some(m) = &mont { m.transform(1) } else { 1 };
+
     // Try different constants c if the first one fails
-    for c in [1, 3, 5, 7, 2, 4, 6, 8] {
-        let f = |x: u128| -> u128 {
-            let x2 = mul_mod(x, x, n);
-            (x2 + c) % n
+    for c_val in [1, 3, 5, 7, 2, 4, 6, 8] {
+        let mont_c = if let Some(m) = &mont {
+            m.transform(c_val)
+        } else {
+            c_val
         };
 
-        // Brent's variant: only update y at powers of 2
-        let mut y: u128 = 2;
-        let mut q: u128 = 1;
+        // If using Montgomery, x, y are in Montgomery form.
+        // f(x) = x^2 + c
+        let f = |x: u128| -> u128 {
+            if let Some(m) = &mont {
+                let x2 = m.mul(x, x);
+                // (x^2 + c) mod n
+                let (sum, overflow) = x2.overflowing_add(mont_c);
+                if overflow || sum >= n { sum.wrapping_sub(n) } else { sum }
+            } else {
+                let x2 = mul_mod(x, x, n); // mul_mod handles u64 fast path
+                (x2 + c_val) % n
+            }
+        };
+
+        let mut y: u128 = mont.as_ref().map_or(2, |m| m.transform(2));
+        let mut q: u128 = if mont.is_some() { one_mont } else { 1 };
         let mut r: u128 = 1;
         let mut d: u128 = 1;
-        let mut x: u128 = 2;
+        let mut x: u128 = 0; // initialized in loop, but set to 0 to satisfy compiler
         let mut ys: u128 = 0;
 
         while d == 1 {
@@ -314,12 +481,26 @@ fn pollard_rho(n: u128) -> u128 {
             let mut k: u128 = 0;
             while k < r && d == 1 {
                 ys = y;
-                // Batch GCD: accumulate product of differences over ~100 iterations
                 let batch_end = (k + 100).min(r);
                 for _ in k..batch_end {
                     y = f(y);
-                    q = mul_mod(q, x.abs_diff(y), n);
+                    // q = q * |x - y| mod n
+                    let abs_diff = x.abs_diff(y);
+                    if let Some(m) = &mont {
+                        // abs_diff is in Montgomery form? Yes, x and y are.
+                        // Wait. |x - y| is difference of Montgomery forms.
+                        // (xR - yR) = (x-y)R.
+                        // So abs_diff IS in Montgomery form of (x-y).
+                        q = m.mul(q, abs_diff);
+                    } else {
+                        q = mul_mod(q, abs_diff, n);
+                    }
                 }
+
+                // q is in Montgomery form. GCD(q, n) works?
+                // GCD(qR mod n, n) = GCD(qR, n).
+                // If GCD(n, R) = 1 (which it is, since n is odd), then GCD(qR, n) = GCD(q, n).
+                // So we don't need to reduce q!
                 d = binary_gcd(q, n);
                 k = batch_end;
             }
@@ -327,10 +508,11 @@ fn pollard_rho(n: u128) -> u128 {
         }
 
         if d == n {
-            // Backtrack: retry without batching from ys
             loop {
                 ys = f(ys);
-                d = binary_gcd(x.abs_diff(ys), n);
+                let abs_diff = x.abs_diff(ys); // Montgomery diff
+                // GCD works on Montgomery form directly
+                d = binary_gcd(abs_diff, n);
                 if d != 1 {
                     break;
                 }
@@ -342,7 +524,6 @@ fn pollard_rho(n: u128) -> u128 {
         }
     }
 
-    // If all fail, return n (factorization failed)
     n
 }
 
@@ -363,4 +544,29 @@ pub fn format_factors(factors: &[(u128, u32)]) -> String {
         })
         .collect::<Vec<_>>()
         .join(" × ")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_montgomery() {
+        let n = 123456789123456789u128; // Odd number
+        let mont = Montgomery::new(n);
+
+        // Test mul: 10 * 20 = 200
+        let a = mont.transform(10);
+        let b = mont.transform(20);
+        let c = mont.mul(a, b);
+        let res = mont.reduce(c);
+        assert_eq!(res, 200);
+
+        // Test with large numbers
+        let a = mont.transform(n - 1);
+        let b = mont.transform(2);
+        let c = mont.mul(a, b);
+        let res = mont.reduce(c);
+        assert_eq!(res, n - 2);
+    }
 }
