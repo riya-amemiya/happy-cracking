@@ -11,7 +11,7 @@ happy-cracking/
 ├── src/
 │   ├── main.rs           # CLI entry point with clap subcommands
 │   ├── lib.rs            # Library root, exposes crypto module
-│   └── crypto/           # Cryptographic operations (51 modules)
+│   └── crypto/           # Cryptographic operations
 │       ├── mod.rs        # Module exports
 │       │
 │       │ # Encoding
@@ -35,6 +35,7 @@ happy-cracking/
 │       │
 │       │ # Classic Ciphers
 │       ├── adfgvx.rs     # ADFGVX cipher
+│       ├── aes_cipher.rs # AES-128 ECB/CBC encrypt/decrypt
 │       ├── affine.rs     # Affine cipher (ax+b mod 26)
 │       ├── atbash.rs     # Atbash cipher (A↔Z substitution)
 │       ├── baconian.rs   # Baconian cipher (5-bit A/B encoding)
@@ -42,6 +43,7 @@ happy-cracking/
 │       ├── bifid.rs      # Bifid cipher
 │       ├── caesar.rs     # Caesar cipher encrypt/decrypt/bruteforce
 │       ├── columnar.rs   # Columnar transposition cipher
+│       ├── des_cipher.rs # DES/Triple-DES encrypt/decrypt
 │       ├── foursquare.rs # Four-square cipher
 │       ├── gronsfeld.rs  # Gronsfeld cipher (numeric Vigenere)
 │       ├── hill.rs       # Hill cipher (matrix-based)
@@ -49,16 +51,25 @@ happy-cracking/
 │       ├── playfair.rs   # Playfair cipher (5x5 digraph substitution)
 │       ├── polybius.rs   # Polybius square cipher
 │       ├── railfence.rs  # Rail Fence transposition cipher
+│       ├── rc4.rs        # RC4 stream cipher
 │       ├── rot.rs        # ROT13, ROT47, and generic rotation cipher
+│       ├── substitution.rs # Simple substitution cipher
 │       ├── vigenere.rs   # Vigenere polyalphabetic cipher
 │       ├── xor.rs        # XOR cipher and single-byte bruteforce
 │       │
 │       │ # Hash / Crypto
 │       ├── crc32.rs      # CRC32 checksum
+│       ├── crc32_forge.rs # CRC32 forgery
 │       ├── hash.rs       # Generate MD5, SHA1, SHA256, SHA512
+│       ├── hash_ext.rs   # Hash length extension attack
 │       ├── hashid.rs     # Identify hash type from string
 │       ├── hmac.rs       # HMAC calculation
+│       ├── jwt.rs        # JWT decode and analysis
 │       ├── rsa.rs        # RSA utilities
+│       │
+│       │ # Advanced Crypto
+│       ├── dh.rs         # Diffie-Hellman key exchange
+│       ├── ec.rs         # Elliptic curve operations
 │       │
 │       │ # Utilities
 │       ├── autodecode.rs # Auto-detect and decode common encodings
@@ -73,7 +84,7 @@ happy-cracking/
 │       ├── primes.rs     # Prime factorization and primality test
 │       └── strtools.rs   # String tools (reverse, ord, chr)
 │
-├── tests/                # Integration tests (50+ test files)
+├── tests/                # Integration tests
 │   ├── ...
 │
 ├── Cargo.toml            # Project manifest (Rust 2024 edition)
@@ -248,6 +259,21 @@ cargo run -- polybius encrypt "HELLO"
 # One-time pad
 cargo run -- otp encrypt "Hello" --key "0102030405"
 cargo run -- otp generate 16
+
+# AES-128
+cargo run -- aes ecb-encrypt "00112233445566778899aabbccddeeff" --key "000102030405060708090a0b0c0d0e0f"
+cargo run -- aes ecb-decrypt "69c4e0d86a7b0430d8cdb78070b4c55a" --key "000102030405060708090a0b0c0d0e0f"
+
+# DES/Triple-DES
+cargo run -- des encrypt "0123456789abcdef" --key "133457799bbcdff1"
+cargo run -- des tdes-encrypt "0123456789abcdef" --key "0123456789abcdef0123456789abcdef0123456789abcdef"
+
+# RC4
+cargo run -- rc4 cipher "48656c6c6f" --key "Key" --ascii
+
+# Simple Substitution
+cargo run -- substitution encode "Hello" --alphabet "QWERTYUIOPASDFGHJKLZXCVBNM"
+cargo run -- substitution solve "Itssg"
 ```
 
 ### Hash / Crypto
@@ -265,6 +291,7 @@ cargo run -- hmac sha256 "message" --key "secret"
 
 # CRC32
 cargo run -- crc32 compute "hello"
+cargo run -- crc32-forge forge "deadbeef" --target "cafebabe"
 
 # RSA
 cargo run -- rsa compute-d --p 61 --q 53 --e 17
@@ -273,6 +300,25 @@ cargo run -- rsa decrypt --c "855" --d "2753" --n "3233"
 cargo run -- rsa factorize-n --n "3233"
 cargo run -- rsa wiener --n "3233" --e "17"
 cargo run -- rsa small-e --c "123" --e "3"
+
+# Hash Extension Attack
+cargo run -- hash-ext sha256-extend "5d41402abc4b2a76b9719d911017c592" --original-len 8 --append "admin=true"
+
+# JWT
+cargo run -- jwt decode "eyJhbG..."
+cargo run -- jwt analyze "eyJhbG..."
+```
+
+### Advanced Crypto
+
+```bash
+# Elliptic Curve
+cargo run -- ec add "1,2" "3,4" --a 1 --b 1 --p 17
+cargo run -- ec multiply "1,2" --n 5 --a 1 --b 1 --p 17
+
+# Diffie-Hellman
+cargo run -- dh pubkey --g 2 --p 23 --a 6
+cargo run -- dh shared-secret --public-key 8 --p 23 --a 15
 ```
 
 ### Utilities
@@ -382,11 +428,14 @@ All checks must pass before merging.
 
 | Crate | Purpose |
 | ----- | --------- |
+| `aes` | AES block cipher |
 | `anyhow` | Error handling with context |
 | `clap` | CLI argument parsing with derive macros |
 | `base64` | Base64 encoding/decoding |
 | `bs58` | Base58 encoding/decoding |
+| `cipher` | Crypto traits |
 | `data-encoding` | Base32 encoding/decoding |
+| `des` | DES block cipher |
 | `hex` | Hexadecimal encoding/decoding |
 | `md-5` | MD5 hash generation |
 | `num-bigint` | Big integer arithmetic (math/primes) |
