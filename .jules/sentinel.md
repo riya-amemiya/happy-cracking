@@ -22,3 +22,8 @@
 **Vulnerability:** The `chain` command allowed unbounded sequencing of operations (e.g., repeating `base64-encode`), leading to exponential memory growth (Zip Bomb) and process crash/hang.
 **Learning:** Flexible "pipeline" features in CLI tools are vectors for DoS if not constrained by recursion limits or output size limits.
 **Prevention:** Enforce strict limits on operation count and intermediate/final output size for any user-definable processing pipeline.
+
+## 2026-02-13 - RSA Denial of Service
+**Vulnerability:** A denial-of-service vulnerability existed in the RSA module where a zero modulus caused a panic in `BigUint::modpow`, crashing the application.
+**Learning:** External library functions like `num-bigint`'s `modpow` may panic on specific invalid inputs (like modulus 0) instead of returning an error. Assuming they are safe is dangerous.
+**Prevention:** Always validate mathematical inputs (especially divisors and moduli) before passing them to external libraries, or wrap them in functions that return `Result`.

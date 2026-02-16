@@ -102,7 +102,7 @@ pub fn run(action: RsaAction) -> Result<()> {
             let c = c.parse::<BigUint>().context("Invalid number for c")?;
             let d = d.parse::<BigUint>().context("Invalid number for d")?;
             let n = n.parse::<BigUint>().context("Invalid number for n")?;
-            let m = big_modpow(&c, &d, &n);
+            let m = big_modpow(&c, &d, &n)?;
             println!("Decimal: {}", m);
             let ascii = bigint_to_ascii(&m);
             if !ascii.is_empty() {
@@ -114,7 +114,7 @@ pub fn run(action: RsaAction) -> Result<()> {
             let m = m.parse::<BigUint>().context("Invalid number for m")?;
             let e = e.parse::<BigUint>().context("Invalid number for e")?;
             let n = n.parse::<BigUint>().context("Invalid number for n")?;
-            let c = big_modpow(&m, &e, &n);
+            let c = big_modpow(&m, &e, &n)?;
             println!("{}", c);
         }
         RsaAction::FactorizeN { n } => {
@@ -232,8 +232,11 @@ pub fn big_modinv(a: &BigUint, m: &BigUint) -> Result<BigUint> {
 }
 
 // Modular exponentiation using num-bigint's built-in modpow.
-pub fn big_modpow(base: &BigUint, exp: &BigUint, modulus: &BigUint) -> BigUint {
-    base.modpow(exp, modulus)
+pub fn big_modpow(base: &BigUint, exp: &BigUint, modulus: &BigUint) -> Result<BigUint> {
+    if modulus.is_zero() {
+        anyhow::bail!("Modulus must be non-zero");
+    }
+    Ok(base.modpow(exp, modulus))
 }
 
 // Integer nth root using the optimized library implementation.
@@ -326,8 +329,8 @@ pub fn wiener_attack(e: &BigUint, n: &BigUint) -> Result<BigUint> {
         if &sqrt_disc * &sqrt_disc == discriminant {
             // Verify: encrypt and decrypt a test message
             let test_m = BigUint::from(2u32);
-            let test_c = big_modpow(&test_m, e, n);
-            let test_dec = big_modpow(&test_c, &d, n);
+            let test_c = big_modpow(&test_m, e, n)?;
+            let test_dec = big_modpow(&test_c, &d, n)?;
             if test_dec == test_m {
                 return Ok(d);
             }
@@ -445,16 +448,16 @@ pub fn common_modulus_attack(
     // For negative exponents, use modular inverse of the ciphertext
     let part1 = if s < BigInt::zero() {
         let c1_inv = big_modinv_signed(&c1_int, &n_int)?;
-        mod_pow_bigint(&c1_inv, &(-&s), &n_int)
+        mod_pow_bigint(&c1_inv, &(-&s), &n_int)?
     } else {
-        mod_pow_bigint(&c1_int, &s, &n_int)
+        mod_pow_bigint(&c1_int, &s, &n_int)?
     };
 
     let part2 = if t < BigInt::zero() {
         let c2_inv = big_modinv_signed(&c2_int, &n_int)?;
-        mod_pow_bigint(&c2_inv, &(-&t), &n_int)
+        mod_pow_bigint(&c2_inv, &(-&t), &n_int)?
     } else {
-        mod_pow_bigint(&c2_int, &t, &n_int)
+        mod_pow_bigint(&c2_int, &t, &n_int)?
     };
 
     let m_int = (&part1 * &part2) % &n_int;
@@ -498,12 +501,15 @@ fn big_modinv_signed(a: &BigInt, m: &BigInt) -> Result<BigInt> {
 }
 
 // Modular exponentiation for BigInt.
-fn mod_pow_bigint(base: &BigInt, exp: &BigInt, modulus: &BigInt) -> BigInt {
+fn mod_pow_bigint(base: &BigInt, exp: &BigInt, modulus: &BigInt) -> Result<BigInt> {
+    if modulus.is_zero() {
+        anyhow::bail!("Modulus must be non-zero");
+    }
     let base_uint = ((base % modulus) + modulus) % modulus;
     let exp_uint = exp.to_biguint().unwrap();
     let mod_uint = modulus.to_biguint().unwrap();
     let base_uint = base_uint.to_biguint().unwrap();
-    base_uint.modpow(&exp_uint, &mod_uint).to_bigint().unwrap()
+    Ok(base_uint.modpow(&exp_uint, &mod_uint).to_bigint().unwrap())
 }
 
 // Pollard's p-1 factorization.
