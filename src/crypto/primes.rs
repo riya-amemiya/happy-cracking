@@ -372,7 +372,7 @@ impl Montgomery {
         // If carry, result >= 2^128 > n. So subtract n.
 
         if carry || carry2 {
-             t = t.wrapping_sub(self.n);
+            t = t.wrapping_sub(self.n);
         }
 
         if t >= self.n {
@@ -432,16 +432,20 @@ fn pollard_rho(n: u128) -> u128 {
     // Optimize for u128 using Montgomery multiplication
     let mont = if n <= u64::MAX as u128 {
         None // Use standard arithmetic for small n? Or just use mont anyway?
-        // For u64, we can use u128 arithmetic directly without Montgomery overhead.
-        // But pollard_rho implementation below is unified.
-        // Let's use Montgomery only for > u64::MAX to match current optimization level?
-        // Actually Montgomery for u128 is fast enough for u64 too, but standard % is faster if hardware supports it.
-        // Let's stick to using Montgomery for all u128 inputs in this function for simplicity and speed on large inputs.
+    // For u64, we can use u128 arithmetic directly without Montgomery overhead.
+    // But pollard_rho implementation below is unified.
+    // Let's use Montgomery only for > u64::MAX to match current optimization level?
+    // Actually Montgomery for u128 is fast enough for u64 too, but standard % is faster if hardware supports it.
+    // Let's stick to using Montgomery for all u128 inputs in this function for simplicity and speed on large inputs.
     } else {
         Some(Montgomery::new(n))
     };
 
-    let one_mont = if let Some(m) = &mont { m.transform(1) } else { 1 };
+    let one_mont = if let Some(m) = &mont {
+        m.transform(1)
+    } else {
+        1
+    };
 
     // Try different constants c if the first one fails
     for c_val in [1, 3, 5, 7, 2, 4, 6, 8] {
@@ -458,7 +462,11 @@ fn pollard_rho(n: u128) -> u128 {
                 let x2 = m.mul(x, x);
                 // (x^2 + c) mod n
                 let (sum, overflow) = x2.overflowing_add(mont_c);
-                if overflow || sum >= n { sum.wrapping_sub(n) } else { sum }
+                if overflow || sum >= n {
+                    sum.wrapping_sub(n)
+                } else {
+                    sum
+                }
             } else {
                 let x2 = mul_mod(x, x, n); // mul_mod handles u64 fast path
                 (x2 + c_val) % n
