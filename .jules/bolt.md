@@ -21,3 +21,7 @@
 ## 2026-02-16 - Montgomery Multiplication vs Bitwise Reduction
 **Learning:** A naive bitwise modular reduction loop for u128 was SLOWER than BigUint (due to branch misprediction). Montgomery multiplication (which is word-based and branchless) yielded a 20x speedup over BigUint.
 **Action:** For modular arithmetic with fixed modulus (like Pollard's Rho), always prefer Montgomery multiplication over custom bitwise reduction loops.
+
+## 2026-02-16 - CI Configuration
+**Learning:** The CI pipeline runs on the stable Rust channel, which does not support unstable `rustfmt` options. Using them causes lint check failures.
+**Action:** When configuring `rustfmt.toml`, only use options available in the stable channel or verify locally with `rustfmt --check` using the stable toolchain.
