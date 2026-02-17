@@ -263,6 +263,9 @@ cargo run -- otp generate 16
 # AES-128
 cargo run -- aes ecb-encrypt "00112233445566778899aabbccddeeff" --key "000102030405060708090a0b0c0d0e0f"
 cargo run -- aes ecb-decrypt "69c4e0d86a7b0430d8cdb78070b4c55a" --key "000102030405060708090a0b0c0d0e0f"
+cargo run -- aes cbc-encrypt "00112233445566778899aabbccddeeff" --key "000102030405060708090a0b0c0d0e0f" --iv "00000000000000000000000000000000"
+cargo run -- aes cbc-decrypt "7649abac8119b246cee98e9b12e9197d" --key "000102030405060708090a0b0c0d0e0f" --iv "00000000000000000000000000000000"
+cargo run -- aes ecb-detect "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff"
 
 # DES/Triple-DES
 cargo run -- des encrypt "0123456789abcdef" --key "133457799bbcdff1"
@@ -281,7 +284,10 @@ cargo run -- substitution solve "Itssg"
 ```bash
 # Generate hashes
 cargo run -- hash md5 "password"
+cargo run -- hash sha1 "password"
 cargo run -- hash sha256 "password"
+cargo run -- hash sha512 "password"
+cargo run -- hash all "password"
 
 # Identify hash type
 cargo run -- hashid identify "5d41402abc4b2a76b9719d911017c592"
@@ -292,6 +298,7 @@ cargo run -- hmac sha256 "message" --key "secret"
 # CRC32
 cargo run -- crc32 compute "hello"
 cargo run -- crc32-forge forge "deadbeef" --target "cafebabe"
+cargo run -- crc32-forge verify "deadbeef" --suffix "12345678" --target "cafebabe"
 
 # RSA
 cargo run -- rsa compute-d --p 61 --q 53 --e 17
@@ -300,6 +307,10 @@ cargo run -- rsa decrypt --c "855" --d "2753" --n "3233"
 cargo run -- rsa factorize-n --n "3233"
 cargo run -- rsa wiener --n "3233" --e "17"
 cargo run -- rsa small-e --c "123" --e "3"
+cargo run -- rsa hastad --e 3 --ciphertexts "c1,c2,c3" --moduli "n1,n2,n3"
+cargo run -- rsa common-modulus --n "3233" --e1 "17" --e2 "257" --c1 "c1" --c2 "c2"
+cargo run -- rsa pollard-p1 --n "3233"
+cargo run -- rsa pollard-rho --n "3233"
 
 # Hash Extension Attack
 cargo run -- hash-ext sha256-extend "5d41402abc4b2a76b9719d911017c592" --original-len 8 --append "admin=true"
@@ -315,10 +326,13 @@ cargo run -- jwt analyze "eyJhbG..."
 # Elliptic Curve
 cargo run -- ec add "1,2" "3,4" --a 1 --b 1 --p 17
 cargo run -- ec multiply "1,2" --n 5 --a 1 --b 1 --p 17
+cargo run -- ec order "1,2" --a 1 --b 1 --p 17
+cargo run -- ec pohlig-hellman "1,2" "3,4" --a 1 --b 1 --p 17 --order 18
 
 # Diffie-Hellman
 cargo run -- dh pubkey --g 2 --p 23 --a 6
 cargo run -- dh shared-secret --public-key 8 --p 23 --a 15
+cargo run -- dh dlog --g 2 --p 23 --target 18 --order 22
 ```
 
 ### Utilities
@@ -326,9 +340,12 @@ cargo run -- dh shared-secret --public-key 8 --p 23 --a 15
 ```bash
 # Character frequency analysis
 cargo run -- frequency analyze "Hello World"
+cargo run -- frequency chi-squared "Hello World"
+cargo run -- frequency ioc "Hello World"
 
 # Auto-detect and decode
 cargo run -- auto decode "SGVsbG8gV29ybGQ="
+cargo run -- auto decode "SGVsbG8=" --recursive
 
 # Shannon entropy analysis
 cargo run -- entropy analyze "Hello World"
