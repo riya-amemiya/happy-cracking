@@ -1,3 +1,4 @@
+#![allow(clippy::manual_is_multiple_of)]
 use anyhow::Result;
 use clap::Subcommand;
 use num_bigint::BigUint;
