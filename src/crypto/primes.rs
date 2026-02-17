@@ -285,7 +285,11 @@ fn pollard_rho(n: u128) -> u128 {
             let x2 = mont.mul(x, x);
             // x^2 + c
             let (sum, carry) = x2.overflowing_add(c);
-            if carry || sum >= n { sum.wrapping_sub(n) } else { sum }
+            if carry || sum >= n {
+                sum.wrapping_sub(n)
+            } else {
+                sum
+            }
         };
 
         // Brent's variant: only update y at powers of 2
@@ -402,7 +406,7 @@ impl Montgomery {
         // Calculate -m^-1 mod 2^128 using Newton's method
         let mut inv = 1u128;
         for _ in 0..7 {
-             inv = inv.wrapping_mul(2u128.wrapping_sub(m.wrapping_mul(inv)));
+            inv = inv.wrapping_mul(2u128.wrapping_sub(m.wrapping_mul(inv)));
         }
         let m_prime = 0u128.wrapping_sub(inv);
 
@@ -445,7 +449,7 @@ impl Montgomery {
 
     // Transform to Montgomery form: a * R mod m
     fn transform(&self, a: u128) -> u128 {
-         self.mul(a, self.r2)
+        self.mul(a, self.r2)
     }
 
     // Transform from Montgomery form: a * R^-1 mod m
