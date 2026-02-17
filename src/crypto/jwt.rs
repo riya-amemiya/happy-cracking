@@ -83,12 +83,23 @@ pub fn decode(token: &str) -> Result<JwtParts> {
 }
 
 pub fn extract_algorithm(header_json: &str) -> String {
-    extract_json_string_field(header_json, "alg").unwrap_or_else(|| "unknown".to_string())
+    let v: serde_json::Value = serde_json::from_str(header_json).unwrap_or(serde_json::Value::Null);
+    v.get("alg")
+        .and_then(|v| v.as_str())
+        .unwrap_or("unknown")
+        .to_string()
 }
 
 pub fn find_vulnerabilities(header_json: &str) -> Vec<String> {
     let mut warnings = Vec::new();
-    let alg = extract_algorithm(header_json);
+
+    // Parse JSON safely using serde_json
+    let v: serde_json::Value = match serde_json::from_str(header_json) {
+        Ok(val) => val,
+        Err(_) => return vec!["Invalid JSON header - parsing failed".to_string()],
+    };
+
+    let alg = v.get("alg").and_then(|v| v.as_str()).unwrap_or("unknown");
     let alg_lower = alg.to_lowercase();
 
     if alg_lower == "none" {
@@ -102,75 +113,30 @@ pub fn find_vulnerabilities(header_json: &str) -> Vec<String> {
         ));
     }
 
-    if extract_json_string_field(header_json, "jku").is_some() {
+    if v.get("jku").is_some() {
         warnings.push(
             "\"jku\" (JWK Set URL) header present - possible SSRF or key injection".to_string(),
         );
     }
 
-    if extract_json_string_field(header_json, "x5u").is_some() {
+    if v.get("x5u").is_some() {
         warnings.push(
             "\"x5u\" (X.509 URL) header present - possible SSRF or key injection".to_string(),
         );
     }
 
-    if extract_json_string_field(header_json, "kid").is_some() {
+    if v.get("kid").is_some() {
         warnings.push(
             "\"kid\" (Key ID) header present - check for SQL injection or path traversal"
                 .to_string(),
         );
     }
 
-    if extract_json_string_field(header_json, "jwk").is_some() {
+    if v.get("jwk").is_some() {
         warnings.push(
             "\"jwk\" (embedded key) header present - possible key self-signing attack".to_string(),
         );
     }
 
     warnings
-}
-
-// Extracts a string value for a given key from a simple JSON object.
-// This is a minimal parser that handles the common JWT header format
-// without requiring serde_json.
-fn extract_json_string_field(json: &str, key: &str) -> Option<String> {
-    let search = format!("\"{}\"", key);
-    let idx = json.find(&search)?;
-    let after_key = &json[idx + search.len()..];
-
-    // Skip whitespace and colon
-    let after_colon = after_key.trim_start();
-    let after_colon = after_colon.strip_prefix(':')?;
-    let after_colon = after_colon.trim_start();
-
-    if let Some(content) = after_colon.strip_prefix('"') {
-        let mut result = String::new();
-        let mut chars = content.chars();
-        while let Some(c) = chars.next() {
-            match c {
-                '"' => return Some(result),
-                '\\' => {
-                    if let Some(escaped) = chars.next() {
-                        match escaped {
-                            'n' => result.push('\n'),
-                            'r' => result.push('\r'),
-                            't' => result.push('\t'),
-                            'u' => {
-                                let hex_str: String = chars.by_ref().take(4).collect();
-                                if hex_str.len() == 4
-                                    && let Ok(code) = u32::from_str_radix(&hex_str, 16)
-                                    && let Some(ch) = char::from_u32(code)
-                                {
-                                    result.push(ch);
-                                }
-                            }
-                            _ => result.push(escaped),
-                        }
-                    }
-                }
-                _ => result.push(c),
-            }
-        }
-    }
-    None
 }

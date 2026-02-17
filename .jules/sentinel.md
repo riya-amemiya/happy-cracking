@@ -27,3 +27,8 @@
 **Vulnerability:** A denial-of-service vulnerability existed in the RSA module where a zero modulus caused a panic in `BigUint::modpow`, crashing the application.
 **Learning:** External library functions like `num-bigint`'s `modpow` may panic on specific invalid inputs (like modulus 0) instead of returning an error. Assuming they are safe is dangerous.
 **Prevention:** Always validate mathematical inputs (especially divisors and moduli) before passing them to external libraries, or wrap them in functions that return `Result`.
+
+## 2026-02-18 - Algorithm Confusion via JSON Shadowing
+**Vulnerability:** The JWT parser used a naive string search to extract the "alg" header, allowing an attacker to hide the real algorithm (e.g., "none") by injecting a fake "alg" string in a preceding field value or key, causing the security scanner to report "unknown" or the wrong algorithm.
+**Learning:** Custom parsers for structured data (like JSON) are extremely fragile and prone to "parser differential" attacks where the security tool sees something different than the actual verifier.
+**Prevention:** Always use established, robust parsing libraries (like `serde_json`) for structured data, especially when making security decisions based on the content.

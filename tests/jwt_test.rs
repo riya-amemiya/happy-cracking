@@ -132,3 +132,20 @@ fn decode_ctf_token() {
     assert!(parts.payload.contains("flag{jwt_d3c0d3d}"));
     assert_eq!(jwt::extract_algorithm(&parts.header), "none");
 }
+
+#[test]
+fn extract_algorithm_security_cases() {
+    // Test for parser robustness against shadowing and confusing inputs
+
+    // Case 1: "alg" inside a comment/string value
+    let header_1 = r#"{"comment": "fake \"alg\": \"HS256\"", "alg": "none"}"#;
+    assert_eq!(jwt::extract_algorithm(header_1), "none");
+
+    // Case 2: "alg" shadowed by value in preceding field
+    let header_2 = r#"{"foo": "alg", "alg": "none"}"#;
+    assert_eq!(jwt::extract_algorithm(header_2), "none");
+
+    // Case 3: "alg" shadowed by similar key prefix
+    let header_3 = r#"{"algo": "foo", "alg": "none"}"#;
+    assert_eq!(jwt::extract_algorithm(header_3), "none");
+}
