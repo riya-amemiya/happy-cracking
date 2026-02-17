@@ -1,8 +1,7 @@
+#![allow(clippy::manual_is_multiple_of)]
 use anyhow::Result;
 use clap::Subcommand;
 use num_bigint::BigUint;
-use num_integer::Integer;
-use num_traits::One;
 
 #[derive(Subcommand)]
 pub enum PrimesAction {
@@ -49,7 +48,7 @@ pub fn factorize(mut n: u128) -> Vec<(u128, u32)> {
     // 1. Remove small factors (2, 3, 5, 7, 11, 13) using trial division
     // This is cheap and effective, and helps Pollard's Rho.
     for &p in &[2, 3, 5, 7, 11, 13] {
-        while n.is_multiple_of(p) {
+        while n % p == 0 {
             factors_list.push(p);
             n /= p;
         }
@@ -95,7 +94,7 @@ fn factor_recursive(n: u128, factors: &mut Vec<u128>) {
         let mut temp_n = n;
         let mut d = 2;
         while d * d <= temp_n {
-            while temp_n.is_multiple_of(d) {
+            while temp_n % d == 0 {
                 factors.push(d);
                 temp_n /= d;
             }
@@ -131,7 +130,7 @@ fn miller_rabin(n: u128) -> bool {
     if n == 2 || n == 3 {
         return true;
     }
-    if n.is_multiple_of(2) {
+    if n % 2 == 0 {
         return false;
     }
 
@@ -139,33 +138,33 @@ fn miller_rabin(n: u128) -> bool {
         2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71,
     ];
 
-    let n_big = BigUint::from(n);
-    let one = BigUint::one();
-    let n_minus_1 = &n_big - &one;
-
     // Find d, s such that n - 1 = d * 2^s
-    let mut d = n_minus_1.clone();
+    let mut d = n - 1;
     let mut s = 0;
-    while d.is_even() {
+    while d % 2 == 0 {
         d >>= 1;
         s += 1;
     }
+
+    let mont = Montgomery::new(n);
+    let one_mont = mont.transform(1);
+    let n_minus_1_mont = mont.transform(n - 1);
 
     'base_loop: for &a in &bases {
         if n <= a {
             break;
         }
 
-        let a_big = BigUint::from(a);
-        let mut x = a_big.modpow(&d, &n_big);
+        let a_mont = mont.transform(a);
+        let mut x = mont.pow(a_mont, d);
 
-        if x == one || x == n_minus_1 {
+        if x == one_mont || x == n_minus_1_mont {
             continue;
         }
 
         for _ in 0..s - 1 {
-            x = x.modpow(&BigUint::from(2u32), &n_big);
-            if x == n_minus_1 {
+            x = mont.mul(x, x);
+            if x == n_minus_1_mont {
                 continue 'base_loop;
             }
         }
@@ -204,7 +203,7 @@ fn miller_rabin_u64(n: u64) -> bool {
     if n == 2 || n == 3 {
         return true;
     }
-    if n.is_multiple_of(2) {
+    if n % 2 == 0 {
         return false;
     }
 
@@ -247,20 +246,6 @@ pub fn is_prime(n: u128) -> bool {
     }
 }
 
-// Modular multiplication: (a * b) % m
-fn mul_mod(a: u128, b: u128, m: u128) -> u128 {
-    if m <= u64::MAX as u128 {
-        // Optimization: if m fits in u64, we can use u128 arithmetic directly
-        (a * b) % m
-    } else {
-        // For larger numbers, we use BigUint to avoid overflow
-        let a_big = BigUint::from(a);
-        let b_big = BigUint::from(b);
-        let m_big = BigUint::from(m);
-        ((a_big * b_big) % m_big).try_into().unwrap()
-    }
-}
-
 // Binary GCD algorithm for u128
 fn binary_gcd(mut u: u128, mut v: u128) -> u128 {
     if u == 0 {
@@ -286,24 +271,35 @@ fn binary_gcd(mut u: u128, mut v: u128) -> u128 {
 
 // Pollard's Rho algorithm using Brent's cycle detection variant with batch GCD.
 fn pollard_rho(n: u128) -> u128 {
-    if n.is_multiple_of(2) {
+    if n % 2 == 0 {
         return 2;
     }
 
+    let mont = Montgomery::new(n);
+    let one = mont.transform(1);
+
     // Try different constants c if the first one fails
-    for c in [1, 3, 5, 7, 2, 4, 6, 8] {
+    for c_val in [1, 3, 5, 7, 2, 4, 6, 8] {
+        let c = mont.transform(c_val);
+
         let f = |x: u128| -> u128 {
-            let x2 = mul_mod(x, x, n);
-            (x2 + c) % n
+            let x2 = mont.mul(x, x);
+            // x^2 + c
+            let (sum, carry) = x2.overflowing_add(c);
+            if carry || sum >= n {
+                sum.wrapping_sub(n)
+            } else {
+                sum
+            }
         };
 
         // Brent's variant: only update y at powers of 2
-        let mut y: u128 = 2;
-        let mut q: u128 = 1;
+        let mut y = mont.transform(2);
+        let mut x = y;
+        let mut q = one;
         let mut r: u128 = 1;
         let mut d: u128 = 1;
-        let mut x: u128 = 2;
-        let mut ys: u128 = 0;
+        let mut ys = y;
 
         while d == 1 {
             x = y;
@@ -318,7 +314,7 @@ fn pollard_rho(n: u128) -> u128 {
                 let batch_end = (k + 100).min(r);
                 for _ in k..batch_end {
                     y = f(y);
-                    q = mul_mod(q, x.abs_diff(y), n);
+                    q = mont.mul(q, x.abs_diff(y));
                 }
                 d = binary_gcd(q, n);
                 k = batch_end;
@@ -363,4 +359,116 @@ pub fn format_factors(factors: &[(u128, u32)]) -> String {
         })
         .collect::<Vec<_>>()
         .join(" × ")
+}
+
+// Helper for 128-bit widening multiplication: (a * b) -> (lo, hi)
+fn widening_mul_u128(a: u128, b: u128) -> (u128, u128) {
+    let mask = 0xFFFF_FFFF_FFFF_FFFF;
+    let al = a & mask;
+    let ah = a >> 64;
+    let bl = b & mask;
+    let bh = b >> 64;
+
+    let t0 = al * bl;
+    let t1 = al * bh;
+    let t2 = ah * bl;
+    let t3 = ah * bh;
+
+    let (mid, carry_mid) = t1.overflowing_add(t2);
+    // mid represents bits 64..192
+    let mid_lo = mid << 64; // bits 64..128
+    let mid_hi = mid >> 64; // bits 128..192
+
+    let (lo, carry_lo) = t0.overflowing_add(mid_lo);
+
+    let mut hi = t3 + mid_hi;
+    if carry_mid {
+        hi += 1 << 64;
+    }
+    if carry_lo {
+        hi += 1;
+    }
+
+    (lo, hi)
+}
+
+struct Montgomery {
+    m: u128,
+    m_prime: u128, // -m^-1 mod 2^128
+    r2: u128,      // R^2 mod m
+}
+
+impl Montgomery {
+    fn new(m: u128) -> Self {
+        if m % 2 == 0 {
+            panic!("Modulus must be odd for Montgomery arithmetic");
+        }
+
+        // Calculate -m^-1 mod 2^128 using Newton's method
+        let mut inv = 1u128;
+        for _ in 0..7 {
+            inv = inv.wrapping_mul(2u128.wrapping_sub(m.wrapping_mul(inv)));
+        }
+        let m_prime = 0u128.wrapping_sub(inv);
+
+        // Calculate R^2 mod m where R = 2^128
+        let r_mod_m = (u128::MAX % m + 1) % m;
+        let r_big = BigUint::from(r_mod_m);
+        let m_big = BigUint::from(m);
+        let r2 = (&r_big * &r_big) % &m_big;
+        let r2 = r2.try_into().unwrap();
+
+        Self { m, m_prime, r2 }
+    }
+
+    // Montgomery reduction: computes T * R^-1 mod m
+    fn reduce(&self, lo: u128, hi: u128) -> u128 {
+        let m = self.m;
+        let m_prime = self.m_prime;
+
+        let m_factor = lo.wrapping_mul(m_prime);
+        let (prod_lo, prod_hi) = widening_mul_u128(m_factor, m);
+
+        let (_, carry_lo) = lo.overflowing_add(prod_lo);
+        let (sum, carry1) = hi.overflowing_add(prod_hi);
+        let (mut res, carry2) = sum.overflowing_add(if carry_lo { 1 } else { 0 });
+        let carry = carry1 || carry2;
+
+        if carry {
+            res = res.wrapping_sub(m);
+        } else if res >= m {
+            res -= m;
+        }
+        res
+    }
+
+    // Multiplication: a * b * R^-1 mod m
+    fn mul(&self, a: u128, b: u128) -> u128 {
+        let (lo, hi) = widening_mul_u128(a, b);
+        self.reduce(lo, hi)
+    }
+
+    // Transform to Montgomery form: a * R mod m
+    fn transform(&self, a: u128) -> u128 {
+        self.mul(a, self.r2)
+    }
+
+    // Transform from Montgomery form: a * R^-1 mod m
+    // Only used for final result, so we can pass 0 for high part
+    #[allow(dead_code)]
+    fn reduce_from(&self, a: u128) -> u128 {
+        self.reduce(a, 0)
+    }
+
+    fn pow(&self, mut base: u128, mut exp: u128) -> u128 {
+        let mut res = self.transform(1);
+        while exp > 0 {
+            if exp % 2 == 1 {
+                res = self.mul(res, base);
+            }
+            base = self.mul(base, base);
+            exp /= 2;
+        }
+        res
+    }
 }

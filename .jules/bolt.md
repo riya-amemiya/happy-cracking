@@ -17,3 +17,7 @@
 ## 2026-02-15 - Native BigUint Roots
 **Learning:** `num-bigint`'s native `nth_root` and `sqrt` methods are significantly faster (~2x for `nth_root`, ~7x for `sqrt`) than a custom Newton's method implementation.
 **Action:** Always prefer library implementations for big integer roots over custom arithmetic loops.
+
+## 2026-02-18 - Montgomery Multiplication for u128
+**Learning:** Native `u128` arithmetic with manual Montgomery reduction is significantly faster than `BigUint` for modular exponentiation and Pollard's Rho, even without unstable intrinsics like `widening_mul`.
+**Action:** Use `Montgomery` struct for heavy modular arithmetic on `u128` inputs to avoid heap allocation overhead.
