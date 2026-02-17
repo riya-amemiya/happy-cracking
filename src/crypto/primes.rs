@@ -47,7 +47,7 @@ pub fn factorize(mut n: u128) -> Vec<(u128, u32)> {
     // 1. Remove small factors (2, 3, 5, 7, 11, 13) using trial division
     // This is cheap and effective, and helps Pollard's Rho.
     for &p in &[2, 3, 5, 7, 11, 13] {
-        while n.is_multiple_of(p) {
+        while n % p == 0 {
             factors_list.push(p);
             n /= p;
         }
@@ -93,7 +93,7 @@ fn factor_recursive(n: u128, factors: &mut Vec<u128>) {
         let mut temp_n = n;
         let mut d = 2;
         while d * d <= temp_n {
-            while temp_n.is_multiple_of(d) {
+            while temp_n % d == 0 {
                 factors.push(d);
                 temp_n /= d;
             }
@@ -129,7 +129,7 @@ fn miller_rabin(n: u128) -> bool {
     if n == 2 || n == 3 {
         return true;
     }
-    if n.is_multiple_of(2) {
+    if n % 2 == 0 {
         return false;
     }
 
@@ -140,7 +140,7 @@ fn miller_rabin(n: u128) -> bool {
     // Find d, s such that n - 1 = d * 2^s
     let mut d = n - 1;
     let mut s = 0;
-    while d.is_multiple_of(2) {
+    while d % 2 == 0 {
         d >>= 1;
         s += 1;
     }
@@ -202,7 +202,7 @@ fn miller_rabin_u64(n: u64) -> bool {
     if n == 2 || n == 3 {
         return true;
     }
-    if n.is_multiple_of(2) {
+    if n % 2 == 0 {
         return false;
     }
 
@@ -270,7 +270,7 @@ fn binary_gcd(mut u: u128, mut v: u128) -> u128 {
 
 // Pollard's Rho algorithm using Brent's cycle detection variant with batch GCD.
 fn pollard_rho(n: u128) -> u128 {
-    if n.is_multiple_of(2) {
+    if n % 2 == 0 {
         return 2;
     }
 
@@ -395,7 +395,7 @@ struct Montgomery {
 
 impl Montgomery {
     fn new(m: u128) -> Self {
-        if m.is_multiple_of(2) {
+        if m % 2 == 0 {
             panic!("Modulus must be odd for Montgomery arithmetic");
         }
 
