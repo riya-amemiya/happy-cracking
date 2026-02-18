@@ -250,6 +250,10 @@ pub fn integer_nth_root(n: &BigUint, k: u32) -> BigUint {
 
 // Fermat's factorization method for N with close prime factors.
 pub fn fermat_factor(n: &BigUint, max_iter: u64) -> Result<(BigUint, BigUint)> {
+    if n <= &BigUint::one() {
+        anyhow::bail!("Cannot factorize n <= 1");
+    }
+
     if n.is_even() {
         let two = BigUint::from(2u32);
         let other = n / &two;
@@ -285,6 +289,10 @@ pub fn fermat_factor(n: &BigUint, max_iter: u64) -> Result<(BigUint, BigUint)> {
 // Wiener's attack on RSA when d is small (e is large relative to n).
 // Uses continued fraction expansion of e/n to find candidate d values.
 pub fn wiener_attack(e: &BigUint, n: &BigUint) -> Result<BigUint> {
+    if n.is_zero() {
+        anyhow::bail!("Modulus must be non-zero");
+    }
+
     let convergents = continued_fraction_convergents(e, n);
 
     let one = BigUint::one();
@@ -399,6 +407,10 @@ pub fn hastad_broadcast(ciphertexts: &[BigUint], moduli: &[BigUint], e: u32) -> 
     let cs = &ciphertexts[..e_usize];
     let ns = &moduli[..e_usize];
 
+    if ns.iter().any(|n| n.is_zero()) {
+        anyhow::bail!("All moduli must be non-zero");
+    }
+
     // CRT: find x such that x ≡ c_i (mod n_i) for all i
     let big_n: BigUint = ns.iter().product();
     let mut x = BigUint::zero();
@@ -431,6 +443,10 @@ pub fn common_modulus_attack(
     c1: &BigUint,
     c2: &BigUint,
 ) -> Result<BigUint> {
+    if n.is_zero() {
+        anyhow::bail!("Modulus must be non-zero");
+    }
+
     let e1_int = e1.to_bigint().unwrap();
     let e2_int = e2.to_bigint().unwrap();
 
@@ -515,6 +531,10 @@ fn mod_pow_bigint(base: &BigInt, exp: &BigInt, modulus: &BigInt) -> Result<BigIn
 // Pollard's p-1 factorization.
 // Finds a factor of n when p-1 is B-smooth (all prime factors ≤ B).
 pub fn pollard_p1(n: &BigUint, b: u64) -> Result<(BigUint, BigUint)> {
+    if n <= &BigUint::one() {
+        anyhow::bail!("Cannot factorize n <= 1");
+    }
+
     if n.is_even() {
         let two = BigUint::from(2u32);
         let other = n / &two;
@@ -558,6 +578,10 @@ pub fn pollard_p1(n: &BigUint, b: u64) -> Result<(BigUint, BigUint)> {
 
 // Pollard's Rho factorization using Brent's cycle detection variant.
 pub fn pollard_rho_factor(n: &BigUint) -> Result<(BigUint, BigUint)> {
+    if n <= &BigUint::one() {
+        anyhow::bail!("Cannot factorize n <= 1");
+    }
+
     if n.is_even() {
         let two = BigUint::from(2u32);
         let other = n / &two;
