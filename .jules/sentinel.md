@@ -32,3 +32,8 @@
 **Vulnerability:** The JWT parser used a naive string search to extract the "alg" header, allowing an attacker to hide the real algorithm (e.g., "none") by injecting a fake "alg" string in a preceding field value or key, causing the security scanner to report "unknown" or the wrong algorithm.
 **Learning:** Custom parsers for structured data (like JSON) are extremely fragile and prone to "parser differential" attacks where the security tool sees something different than the actual verifier.
 **Prevention:** Always use established, robust parsing libraries (like `serde_json`) for structured data, especially when making security decisions based on the content.
+
+## 2026-02-19 - Panic on RSA Zero Modulus
+**Vulnerability:** Several RSA attack functions (`common_modulus_attack`, `hastad_broadcast`) panicked when provided with a zero modulus because `num-bigint` operations like modulo and division by zero panic.
+**Learning:** Mathematical libraries often panic on invalid inputs (like division by zero) rather than returning errors. Input validation is critical for any function exposed to user input, especially for mathematical parameters like moduli.
+**Prevention:** Explicitly check that moduli are non-zero (and preferably > 1) at the beginning of any cryptographic function and return a proper error.
