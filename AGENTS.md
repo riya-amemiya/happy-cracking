@@ -50,9 +50,11 @@ happy-cracking/
 │       ├── otp.rs        # One-time pad
 │       ├── playfair.rs   # Playfair cipher (5x5 digraph substitution)
 │       ├── polybius.rs   # Polybius square cipher
+│       ├── polybius_utils.rs # Helper for Polybius square-based ciphers
 │       ├── railfence.rs  # Rail Fence transposition cipher
 │       ├── rc4.rs        # RC4 stream cipher
 │       ├── rot.rs        # ROT13, ROT47, and generic rotation cipher
+│       ├── shared.rs     # Shared crypto utilities
 │       ├── substitution.rs # Simple substitution cipher
 │       ├── vigenere.rs   # Vigenere polyalphabetic cipher
 │       ├── xor.rs        # XOR cipher and single-byte bruteforce
@@ -206,6 +208,7 @@ cargo run -- caesar bruteforce "Khoor"
 cargo run -- xor cipher "48656c6c6f" --key "41"
 cargo run -- xor cipher "48656c6c6f" --key "A" --ascii
 cargo run -- xor bruteforce "48656c6c6f" --printable
+cargo run -- xor keylength "00112233445566778899aabbccddeeff" --max-len 40
 
 # Vigenere cipher
 cargo run -- vigenere encrypt "HELLO" --key "KEY"
@@ -255,9 +258,11 @@ cargo run -- baconian decode "AABBB AABAA ABABB ABABB ABBAB"
 
 # Polybius square
 cargo run -- polybius encrypt "HELLO"
+cargo run -- polybius decrypt "23 15 31 31 34"
 
 # One-time pad
 cargo run -- otp encrypt "Hello" --key "0102030405"
+cargo run -- otp decrypt "49676f686a" --key "0102030405"
 cargo run -- otp generate 16
 
 # AES-128
