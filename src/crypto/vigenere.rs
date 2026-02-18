@@ -157,7 +157,7 @@ fn index_of_coincidence(data: &[u8]) -> f64 {
     sum / (n * (n - 1.0))
 }
 
-fn kasiski_examination(input: &str) -> HashMap<usize, usize> {
+fn kasiski_examination(input: &str, max_key_len: usize) -> HashMap<usize, usize> {
     let letters = extract_alpha(input);
     let mut distances: Vec<usize> = Vec::new();
 
@@ -166,17 +166,20 @@ fn kasiski_examination(input: &str) -> HashMap<usize, usize> {
         if letters.len() < trigram_len {
             break;
         }
-        let mut positions: HashMap<Vec<u8>, Vec<usize>> = HashMap::new();
+        let mut positions: HashMap<u32, Vec<usize>> = HashMap::new();
         for i in 0..=letters.len() - trigram_len {
-            let trigram = letters[i..i + trigram_len].to_vec();
+            let mut trigram: u32 = 0;
+            for j in 0..trigram_len {
+                trigram = trigram * 26 + (letters[i + j] as u32);
+            }
             positions.entry(trigram).or_default().push(i);
         }
         for pos_list in positions.values() {
             if pos_list.len() >= 2 {
+                // Optimization: only consider adjacent occurrences.
+                // This reduces complexity from O(N^2) to O(N).
                 for i in 0..pos_list.len() - 1 {
-                    for j in i + 1..pos_list.len() {
-                        distances.push(pos_list[j] - pos_list[i]);
-                    }
+                    distances.push(pos_list[i + 1] - pos_list[i]);
                 }
             }
         }
@@ -185,7 +188,10 @@ fn kasiski_examination(input: &str) -> HashMap<usize, usize> {
     // Count factor occurrences
     let mut factor_counts: HashMap<usize, usize> = HashMap::new();
     for d in &distances {
-        for f in 2..=*d {
+        // Optimization: only check factors up to max_key_len.
+        // We only care about factors that are plausible key lengths.
+        let limit = (*d).min(max_key_len);
+        for f in 2..=limit {
             if d % f == 0 {
                 *factor_counts.entry(f).or_insert(0) += 1;
             }
@@ -220,7 +226,7 @@ pub fn estimate_key_length(input: &str, max_length: usize) -> Vec<(usize, f64)> 
     }
 
     // Use Kasiski to boost scores for lengths supported by repeated ngrams
-    let kasiski = kasiski_examination(input);
+    let kasiski = kasiski_examination(input, max_length);
 
     // Sort by how close IoC is to English IoC, with Kasiski as tiebreaker
     results.sort_by(|a, b| {
