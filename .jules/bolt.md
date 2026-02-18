@@ -21,3 +21,7 @@
 ## 2026-02-18 - Montgomery Multiplication for u128
 **Learning:** Native `u128` arithmetic with manual Montgomery reduction is significantly faster than `BigUint` for modular exponentiation and Pollard's Rho, even without unstable intrinsics like `widening_mul`.
 **Action:** Use `Montgomery` struct for heavy modular arithmetic on `u128` inputs to avoid heap allocation overhead.
+
+## 2026-02-19 - Kasiski Examination Complexity
+**Learning:** Naively iterating all pairs of occurrences for Kasiski examination results in $O(N^2)$ complexity, causing massive slowdowns on large texts (e.g., 3s for 3.5k chars). Adjacent differences are sufficient and reduce complexity to $O(N)$.
+**Action:** Always check loop complexity for pattern matching algorithms. Prefer linear scan (adjacent elements) over quadratic (all pairs) when statistical properties (like GCD) allow.
