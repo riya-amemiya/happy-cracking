@@ -1,6 +1,6 @@
 use happy_cracking::crypto::rsa;
 use num_bigint::BigUint;
-use num_traits::{Zero, One};
+use num_traits::{One, Zero};
 
 #[test]
 fn test_common_modulus_zero_modulus_panic() {
