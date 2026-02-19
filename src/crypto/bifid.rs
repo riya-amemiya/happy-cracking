@@ -58,7 +58,8 @@ pub fn encrypt(input: &str, key: &str) -> Result<String> {
     let mut rows = Vec::with_capacity(letters.len());
     let mut cols = Vec::with_capacity(letters.len());
     for &c in &letters {
-        let (r, col) = find_in_square(&square, c);
+        let (r, col) = find_in_square(&square, c)
+            .ok_or_else(|| anyhow::anyhow!("Character {} not in square", c))?;
         rows.push(r);
         cols.push(col);
     }
@@ -92,7 +93,8 @@ pub fn decrypt(input: &str, key: &str) -> Result<String> {
     // Step 1: convert each ciphertext letter to row/col pair
     let mut coords = Vec::with_capacity(letters.len() * 2);
     for &c in &letters {
-        let (r, col) = find_in_square(&square, c);
+        let (r, col) = find_in_square(&square, c)
+            .ok_or_else(|| anyhow::anyhow!("Character {} not in square", c))?;
         coords.push(r);
         coords.push(col);
     }
