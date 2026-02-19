@@ -23,7 +23,7 @@ pub fn build_polybius_square(key: &str) -> Vec<char> {
     square
 }
 
-pub fn find_in_square(square: &[char], c: char) -> (usize, usize) {
-    let idx = square.iter().position(|&s| s == c).unwrap();
-    (idx / 5, idx % 5)
+pub fn find_in_square(square: &[char], c: char) -> Option<(usize, usize)> {
+    let idx = square.iter().position(|&s| s == c)?;
+    Some((idx / 5, idx % 5))
 }

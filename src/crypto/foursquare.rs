@@ -78,8 +78,10 @@ pub fn encrypt(input: &str, key1: &str, key2: &str) -> Result<String> {
 
     let mut result = String::new();
     for pair in letters.chunks(2) {
-        let (row_a, col_a) = find_in_square(&STANDARD_SQUARE, pair[0]);
-        let (row_b, col_b) = find_in_square(&STANDARD_SQUARE, pair[1]);
+        let (row_a, col_a) = find_in_square(&STANDARD_SQUARE, pair[0])
+            .ok_or_else(|| anyhow::anyhow!("Character {} not in square", pair[0]))?;
+        let (row_b, col_b) = find_in_square(&STANDARD_SQUARE, pair[1])
+            .ok_or_else(|| anyhow::anyhow!("Character {} not in square", pair[1]))?;
 
         // Rectangle swap: top-right square at (row_a, col_b), bottom-left square at (row_b, col_a)
         result.push(top_right[row_a * 5 + col_b]);
@@ -112,8 +114,10 @@ pub fn decrypt(input: &str, key1: &str, key2: &str) -> Result<String> {
     let mut result = String::new();
     for pair in letters.chunks(2) {
         // pair[0] came from top-right, pair[1] from bottom-left
-        let (row_a, col_b) = find_in_square(&top_right, pair[0]);
-        let (row_b, col_a) = find_in_square(&bottom_left, pair[1]);
+        let (row_a, col_b) = find_in_square(&top_right, pair[0])
+            .ok_or_else(|| anyhow::anyhow!("Character {} not in square", pair[0]))?;
+        let (row_b, col_a) = find_in_square(&bottom_left, pair[1])
+            .ok_or_else(|| anyhow::anyhow!("Character {} not in square", pair[1]))?;
 
         // Look up in standard squares
         result.push(STANDARD_SQUARE[row_a * 5 + col_a]);

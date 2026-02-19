@@ -78,8 +78,10 @@ pub fn encrypt(input: &str, key: &str) -> Result<String> {
 
     let mut result = String::new();
     for (a, b) in digraphs {
-        let (ra, ca) = find_in_square(&matrix, a);
-        let (rb, cb) = find_in_square(&matrix, b);
+        let (ra, ca) = find_in_square(&matrix, a)
+            .ok_or_else(|| anyhow::anyhow!("Character {} not in square", a))?;
+        let (rb, cb) = find_in_square(&matrix, b)
+            .ok_or_else(|| anyhow::anyhow!("Character {} not in square", b))?;
 
         if ra == rb {
             // Same row: shift right
@@ -123,8 +125,10 @@ pub fn decrypt(input: &str, key: &str) -> Result<String> {
 
     let mut result = String::new();
     for pair in letters.chunks(2) {
-        let (ra, ca) = find_in_square(&matrix, pair[0]);
-        let (rb, cb) = find_in_square(&matrix, pair[1]);
+        let (ra, ca) = find_in_square(&matrix, pair[0])
+            .ok_or_else(|| anyhow::anyhow!("Character {} not in square", pair[0]))?;
+        let (rb, cb) = find_in_square(&matrix, pair[1])
+            .ok_or_else(|| anyhow::anyhow!("Character {} not in square", pair[1]))?;
 
         if ra == rb {
             // Same row: shift left
