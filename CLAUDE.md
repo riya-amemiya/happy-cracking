@@ -81,7 +81,9 @@ happy-cracking/
 │       ├── mathtools.rs  # Number theory (GCD, modinv, modpow)
 │       ├── numbersys.rs  # Number base conversion (2-36)
 │       ├── padding.rs    # Padding scheme utilities
+│       ├── polybius_utils.rs # Polybius square helpers
 │       ├── primes.rs     # Prime factorization and primality test
+│       ├── shared.rs     # Shared crypto utilities
 │       └── strtools.rs   # String tools (reverse, ord, chr)
 │
 ├── tests/                # Integration tests
@@ -206,6 +208,7 @@ cargo run -- caesar bruteforce "Khoor"
 cargo run -- xor cipher "48656c6c6f" --key "41"
 cargo run -- xor cipher "48656c6c6f" --key "A" --ascii
 cargo run -- xor bruteforce "48656c6c6f" --printable
+cargo run -- xor keylength "00112233445566778899aabbccddeeff" --max-len 40
 
 # Vigenere cipher
 cargo run -- vigenere encrypt "HELLO" --key "KEY"
@@ -370,8 +373,9 @@ cargo run -- numconv convert 255 --from 10 --to 16
 cargo run -- numconv convert ff --from 16 --to 2
 
 # Chain operations
-cargo run -- chain run "Hello" --ops "base64-encode"
-cargo run -- chain run "SGVsbG8=" --ops "base64-decode,reverse"
+# Ops: base64/32/hex/url/binary-encode/decode, rot13, rot47, reverse, upper, lower
+cargo run -- chain run "Hello" --ops "base64-encode,hex-encode"
+cargo run -- chain run "48656c6c6f" --ops "hex-decode,reverse"
 
 # Hexdump
 cargo run -- hexdump dump "Hello World"
@@ -460,6 +464,8 @@ All checks must pass before merging.
 | `num-traits` | Numeric traits |
 | `sha1` | SHA1 hash generation |
 | `sha2` | SHA256/SHA512 hash generation |
+| `serde` | Serialization framework |
+| `serde_json` | JSON serialization |
 | `urlencoding` | URL percent-encoding |
 
 ## Adding New Features
