@@ -38,7 +38,7 @@
 **Learning:** Mathematical libraries often panic on invalid inputs (like division by zero) rather than returning errors. Input validation is critical for any function exposed to user input, especially for mathematical parameters like moduli.
 **Prevention:** Explicitly check that moduli are non-zero (and preferably > 1) at the beginning of any cryptographic function and return a proper error.
 
-## 2026-02-21 - Panic in Polybius Square Lookup
+## 2026-02-19 - Panic in Polybius Square Lookup
 **Vulnerability:** `find_in_square` used `unwrap()` on search result, assuming input sanitization would always prevent invalid characters. A future change bypassing sanitization could trigger a panic (DoS).
 **Learning:** Defense in depth requires internal functions to be robust against invalid inputs, even if sanitization exists at the boundary. `unwrap()` should be avoided in shared utility functions.
 **Prevention:** Return `Option` or `Result` from lookup functions and handle missing values explicitly in the caller.
