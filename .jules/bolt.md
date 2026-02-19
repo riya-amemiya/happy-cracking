@@ -25,3 +25,7 @@
 ## 2026-02-19 - Kasiski Examination Complexity
 **Learning:** Naively iterating all pairs of occurrences for Kasiski examination results in $O(N^2)$ complexity, causing massive slowdowns on large texts (e.g., 3s for 3.5k chars). Adjacent differences are sufficient and reduce complexity to $O(N)$.
 **Action:** Always check loop complexity for pattern matching algorithms. Prefer linear scan (adjacent elements) over quadratic (all pairs) when statistical properties (like GCD) allow.
+
+## 2026-02-19 - Montgomery Optimization for u128 modpow
+**Learning:** `BigUint` modpow for `u128` values (specifically > `u64::MAX`) is ~6.9x slower than a manual Montgomery implementation on `u128`.
+**Action:** When working with fixed-width large integers (like `u128`), use specialized modular arithmetic structs (like `Montgomery`) instead of generic `BigUint` to avoid allocation overhead.

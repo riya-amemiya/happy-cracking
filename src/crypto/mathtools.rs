@@ -1,3 +1,4 @@
+#![allow(clippy::manual_is_multiple_of)]
 use anyhow::{Context, Result};
 use clap::Subcommand;
 use num_bigint::{BigInt, BigUint};
@@ -135,6 +136,16 @@ pub fn modpow(base: u128, exp: u128, m: u128) -> Result<u128> {
         return Ok(modpow_u64(base, exp, m as u64) as u128);
     }
 
+    // Optimization: if m is odd and fits in u128 (but > u64::MAX), use Montgomery
+    // to avoid BigUint allocation overhead.
+    if m % 2 != 0 {
+        let mont = Montgomery::new(m);
+        let base_mont = mont.transform(base);
+        let res_mont = mont.pow(base_mont, exp);
+        let res = mont.reduce_from(res_mont);
+        return Ok(res);
+    }
+
     // Use BigUint to prevent overflow during intermediate calculations (base * base)
     let base_big = BigUint::from(base);
     let exp_big = BigUint::from(exp);
@@ -160,4 +171,116 @@ fn modpow_u64(base: u128, mut exp: u128, m: u64) -> u64 {
         exp >>= 1;
     }
     res as u64
+}
+
+// Helper for 128-bit widening multiplication: (a * b) -> (lo, hi)
+fn widening_mul_u128(a: u128, b: u128) -> (u128, u128) {
+    let mask = 0xFFFF_FFFF_FFFF_FFFF;
+    let al = a & mask;
+    let ah = a >> 64;
+    let bl = b & mask;
+    let bh = b >> 64;
+
+    let t0 = al * bl;
+    let t1 = al * bh;
+    let t2 = ah * bl;
+    let t3 = ah * bh;
+
+    let (mid, carry_mid) = t1.overflowing_add(t2);
+    // mid represents bits 64..192
+    let mid_lo = mid << 64; // bits 64..128
+    let mid_hi = mid >> 64; // bits 128..192
+
+    let (lo, carry_lo) = t0.overflowing_add(mid_lo);
+
+    let mut hi = t3 + mid_hi;
+    if carry_mid {
+        hi += 1 << 64;
+    }
+    if carry_lo {
+        hi += 1;
+    }
+
+    (lo, hi)
+}
+
+pub struct Montgomery {
+    m: u128,
+    m_prime: u128, // -m^-1 mod 2^128
+    r2: u128,      // R^2 mod m
+}
+
+impl Montgomery {
+    pub fn new(m: u128) -> Self {
+        if m % 2 == 0 {
+            panic!("Modulus must be odd for Montgomery arithmetic");
+        }
+
+        // Calculate -m^-1 mod 2^128 using Newton's method
+        let mut inv = 1u128;
+        for _ in 0..7 {
+            inv = inv.wrapping_mul(2u128.wrapping_sub(m.wrapping_mul(inv)));
+        }
+        let m_prime = 0u128.wrapping_sub(inv);
+
+        // Calculate R^2 mod m where R = 2^128
+        let r_mod_m = (u128::MAX % m + 1) % m;
+        let r_big = BigUint::from(r_mod_m);
+        let m_big = BigUint::from(m);
+        let r2 = (&r_big * &r_big) % &m_big;
+        let r2 = r2.try_into().unwrap();
+
+        Self { m, m_prime, r2 }
+    }
+
+    // Montgomery reduction: computes T * R^-1 mod m
+    pub fn reduce(&self, lo: u128, hi: u128) -> u128 {
+        let m = self.m;
+        let m_prime = self.m_prime;
+
+        let m_factor = lo.wrapping_mul(m_prime);
+        let (prod_lo, prod_hi) = widening_mul_u128(m_factor, m);
+
+        let (_, carry_lo) = lo.overflowing_add(prod_lo);
+        let (sum, carry1) = hi.overflowing_add(prod_hi);
+        let (mut res, carry2) = sum.overflowing_add(if carry_lo { 1 } else { 0 });
+        let carry = carry1 || carry2;
+
+        if carry {
+            res = res.wrapping_sub(m);
+        } else if res >= m {
+            res -= m;
+        }
+        res
+    }
+
+    // Multiplication: a * b * R^-1 mod m
+    pub fn mul(&self, a: u128, b: u128) -> u128 {
+        let (lo, hi) = widening_mul_u128(a, b);
+        self.reduce(lo, hi)
+    }
+
+    // Transform to Montgomery form: a * R mod m
+    pub fn transform(&self, a: u128) -> u128 {
+        self.mul(a, self.r2)
+    }
+
+    // Transform from Montgomery form: a * R^-1 mod m
+    // Only used for final result, so we can pass 0 for high part
+    #[allow(dead_code)]
+    pub fn reduce_from(&self, a: u128) -> u128 {
+        self.reduce(a, 0)
+    }
+
+    pub fn pow(&self, mut base: u128, mut exp: u128) -> u128 {
+        let mut res = self.transform(1);
+        while exp > 0 {
+            if exp % 2 == 1 {
+                res = self.mul(res, base);
+            }
+            base = self.mul(base, base);
+            exp /= 2;
+        }
+        res
+    }
 }
