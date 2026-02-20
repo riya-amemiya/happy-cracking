@@ -42,3 +42,8 @@
 **Vulnerability:** `find_in_square` used `unwrap()` on search result, assuming input sanitization would always prevent invalid characters. A future change bypassing sanitization could trigger a panic (DoS).
 **Learning:** Defense in depth requires internal functions to be robust against invalid inputs, even if sanitization exists at the boundary. `unwrap()` should be avoided in shared utility functions.
 **Prevention:** Return `Option` or `Result` from lookup functions and handle missing values explicitly in the caller.
+
+## 2026-02-20 - Panic in Elliptic Curve Operations
+**Vulnerability:** `modp` and `mod_inverse` in EC module panicked on zero modulus, allowing DoS via CLI arguments.
+**Learning:** Mathematical helper functions in cryptographic implementations often assume valid inputs (e.g. p > 0) and panic otherwise. Input validation must happen at the API boundary (CLI or public function) to prevent this.
+**Prevention:** Add explicit `p.is_zero()` checks in all public functions accepting a modulus.

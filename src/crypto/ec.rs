@@ -75,6 +75,9 @@ pub fn run(action: EcAction) -> Result<()> {
             let a = a.parse::<BigInt>().context("Invalid number for a")?;
             let b = b.parse::<BigInt>().context("Invalid number for b")?;
             let p = p.parse::<BigInt>().context("Invalid number for p")?;
+            if p.is_zero() {
+                anyhow::bail!("Modulus p must be non-zero");
+            }
             validate_point_on_curve(&p1, &a, &b, &p)?;
             validate_point_on_curve(&p2, &a, &b, &p)?;
             let result = point_add(&p1, &p2, &a, &p)?;
@@ -86,6 +89,9 @@ pub fn run(action: EcAction) -> Result<()> {
             let a = a.parse::<BigInt>().context("Invalid number for a")?;
             let b = b.parse::<BigInt>().context("Invalid number for b")?;
             let p = p.parse::<BigInt>().context("Invalid number for p")?;
+            if p.is_zero() {
+                anyhow::bail!("Modulus p must be non-zero");
+            }
             validate_point_on_curve(&pt, &a, &b, &p)?;
             let result = scalar_multiply(&pt, &n, &a, &p)?;
             println!("{}", format_point(&result));
@@ -95,6 +101,9 @@ pub fn run(action: EcAction) -> Result<()> {
             let a = a.parse::<BigInt>().context("Invalid number for a")?;
             let b = b.parse::<BigInt>().context("Invalid number for b")?;
             let p = p.parse::<BigInt>().context("Invalid number for p")?;
+            if p.is_zero() {
+                anyhow::bail!("Modulus p must be non-zero");
+            }
             validate_point_on_curve(&pt, &a, &b, &p)?;
             let ord = point_order(&pt, &a, &p)?;
             println!("{}", ord);
@@ -112,6 +121,9 @@ pub fn run(action: EcAction) -> Result<()> {
             let a = a.parse::<BigInt>().context("Invalid number for a")?;
             let b = b.parse::<BigInt>().context("Invalid number for b")?;
             let p = p.parse::<BigInt>().context("Invalid number for p")?;
+            if p.is_zero() {
+                anyhow::bail!("Modulus p must be non-zero");
+            }
             let order = order
                 .parse::<BigUint>()
                 .context("Invalid number for order")?;
@@ -162,6 +174,9 @@ pub fn format_point(point: &ECPoint) -> String {
 
 // Check whether a point lies on the curve y^2 = x^3 + ax + b (mod p).
 pub fn is_on_curve(point: &ECPoint, a: &BigInt, b: &BigInt, p: &BigInt) -> bool {
+    if p.is_zero() {
+        return false;
+    }
     match point {
         ECPoint::Infinity => true,
         ECPoint::Affine { x, y } => {
@@ -202,6 +217,9 @@ fn modp(a: &BigInt, p: &BigInt) -> BigInt {
 // Add two points on the elliptic curve y^2 = x^3 + ax + b (mod p).
 // Parameter b is not needed for point addition.
 pub fn point_add(p1: &ECPoint, p2: &ECPoint, a: &BigInt, p: &BigInt) -> Result<ECPoint> {
+    if p.is_zero() {
+        anyhow::bail!("Modulus p must be non-zero");
+    }
     match (p1, p2) {
         (ECPoint::Infinity, _) => Ok(p2.clone()),
         (_, ECPoint::Infinity) => Ok(p1.clone()),
@@ -242,6 +260,9 @@ pub fn point_add(p1: &ECPoint, p2: &ECPoint, a: &BigInt, p: &BigInt) -> Result<E
 
 // Scalar multiplication using double-and-add (left-to-right binary method).
 pub fn scalar_multiply(point: &ECPoint, n: &BigUint, a: &BigInt, p: &BigInt) -> Result<ECPoint> {
+    if p.is_zero() {
+        anyhow::bail!("Modulus p must be non-zero");
+    }
     if n.is_zero() {
         return Ok(ECPoint::Infinity);
     }
@@ -264,6 +285,9 @@ pub fn scalar_multiply(point: &ECPoint, n: &BigUint, a: &BigInt, p: &BigInt) -> 
 // Find the order of a point on the curve by brute force.
 // Iterates from 1 until n*P = O. Only practical for small orders.
 pub fn point_order(point: &ECPoint, a: &BigInt, p: &BigInt) -> Result<BigUint> {
+    if p.is_zero() {
+        anyhow::bail!("Modulus p must be non-zero");
+    }
     if *point == ECPoint::Infinity {
         return Ok(BigUint::one());
     }
@@ -349,6 +373,9 @@ pub fn pohlig_hellman(
     p: &BigInt,
     order: &BigUint,
 ) -> Result<BigUint> {
+    if p.is_zero() {
+        anyhow::bail!("Modulus p must be non-zero");
+    }
     let factors = factor_biguint(order)?;
 
     if factors.is_empty() {
