@@ -30,6 +30,6 @@
 **Learning:** `BigUint` modpow for `u128` values (specifically > `u64::MAX`) is ~6.9x slower than a manual Montgomery implementation on `u128`.
 **Action:** When working with fixed-width large integers (like `u128`), use specialized modular arithmetic structs (like `Montgomery`) instead of generic `BigUint` to avoid allocation overhead.
 
-## 2026-02-24 - Montgomery Initialization Optimization
+## 2026-02-20 - Montgomery Initialization Optimization
 **Learning:** Initializing `Montgomery` struct with `BigUint` to compute $R^2 \pmod m$ incurs significant allocation overhead (~50% of runtime). Replacing it with an iterative bitwise doubling loop (`u128`) yields ~2x speedup despite potential branch mispredictions.
 **Action:** Avoid `BigUint` even for one-off initializations in hot paths if a simple iterative algorithm exists.
