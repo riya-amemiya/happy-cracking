@@ -83,9 +83,7 @@ happy-cracking/
 │       ├── mathtools.rs  # Number theory (GCD, modinv, modpow)
 │       ├── numbersys.rs  # Number base conversion (2-36)
 │       ├── padding.rs    # Padding scheme utilities
-│       ├── polybius_utils.rs # Polybius square helpers
 │       ├── primes.rs     # Prime factorization and primality test
-│       ├── shared.rs     # Shared crypto utilities
 │       └── strtools.rs   # String tools (reverse, ord, chr)
 │
 ├── tests/                # Integration tests
