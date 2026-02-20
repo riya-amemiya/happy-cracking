@@ -224,11 +224,21 @@ impl Montgomery {
         let m_prime = 0u128.wrapping_sub(inv);
 
         // Calculate R^2 mod m where R = 2^128
-        let r_mod_m = (u128::MAX % m + 1) % m;
-        let r_big = BigUint::from(r_mod_m);
-        let m_big = BigUint::from(m);
-        let r2 = (&r_big * &r_big) % &m_big;
-        let r2 = r2.try_into().unwrap();
+        // We compute R^2 mod m by doubling R mod m 128 times
+        let mut r2 = (u128::MAX % m + 1) % m; // R mod m
+
+        for _ in 0..128 {
+            // r2 = (r2 * 2) % m
+            let (mut val, overflow) = r2.overflowing_shl(1);
+            if overflow {
+                // val = (r2 * 2) - 2^128
+                // We want (r2 * 2) - m = val + 2^128 - m
+                val = val.wrapping_add(0u128.wrapping_sub(m));
+            } else if val >= m {
+                val -= m;
+            }
+            r2 = val;
+        }
 
         Self { m, m_prime, r2 }
     }
