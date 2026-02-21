@@ -34,6 +34,6 @@
 **Learning:** Initializing `Montgomery` struct with `BigUint` to compute $R^2 \pmod m$ incurs significant allocation overhead (~50% of runtime). Replacing it with an iterative bitwise doubling loop (`u128`) yields ~2x speedup despite potential branch mispredictions.
 **Action:** Avoid `BigUint` even for one-off initializations in hot paths if a simple iterative algorithm exists.
 
-## 2026-02-23 - HashMap Overhead in Frequency Analysis
+## 2026-02-21 - HashMap Overhead in Frequency Analysis
 **Learning:** `HashMap<char, usize>` introduces significant overhead for simple frequency analysis on alphabetic input ($O(n \cdot H)$), compared to direct array indexing ($O(n)$).
 **Action:** Always prefer `[usize; 26]` over `HashMap` for hot-path character counting when the domain is small and known (e.g., A-Z), yielding ~5x speedup.
