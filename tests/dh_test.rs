@@ -8,7 +8,7 @@ fn test_pubkey_basic() {
     let g = BigUint::from(2u32);
     let p = BigUint::from(23u32);
     let a = BigUint::from(6u32);
-    assert_eq!(dh::compute_pubkey(&g, &a, &p), BigUint::from(18u32));
+    assert_eq!(dh::compute_pubkey(&g, &a, &p).unwrap(), BigUint::from(18u32));
 }
 
 #[test]
@@ -18,7 +18,7 @@ fn test_pubkey_larger() {
     let p = BigUint::from(23u32);
     let a = BigUint::from(15u32);
     let expected = g.modpow(&a, &p);
-    assert_eq!(dh::compute_pubkey(&g, &a, &p), expected);
+    assert_eq!(dh::compute_pubkey(&g, &a, &p).unwrap(), expected);
 }
 
 #[test]
@@ -29,11 +29,11 @@ fn test_shared_secret_agreement() {
     let a = BigUint::from(6u32);
     let b = BigUint::from(15u32);
 
-    let pub_a = dh::compute_pubkey(&g, &a, &p);
-    let pub_b = dh::compute_pubkey(&g, &b, &p);
+    let pub_a = dh::compute_pubkey(&g, &a, &p).unwrap();
+    let pub_b = dh::compute_pubkey(&g, &b, &p).unwrap();
 
-    let secret_a = dh::compute_shared_secret(&pub_b, &a, &p);
-    let secret_b = dh::compute_shared_secret(&pub_a, &b, &p);
+    let secret_a = dh::compute_shared_secret(&pub_b, &a, &p).unwrap();
+    let secret_b = dh::compute_shared_secret(&pub_a, &b, &p).unwrap();
 
     assert_eq!(secret_a, secret_b);
 }
@@ -46,11 +46,11 @@ fn test_shared_secret_larger_prime() {
     let a = BigUint::from(37u32);
     let b = BigUint::from(73u32);
 
-    let pub_a = dh::compute_pubkey(&g, &a, &p);
-    let pub_b = dh::compute_pubkey(&g, &b, &p);
+    let pub_a = dh::compute_pubkey(&g, &a, &p).unwrap();
+    let pub_b = dh::compute_pubkey(&g, &b, &p).unwrap();
 
-    let secret_a = dh::compute_shared_secret(&pub_b, &a, &p);
-    let secret_b = dh::compute_shared_secret(&pub_a, &b, &p);
+    let secret_a = dh::compute_shared_secret(&pub_b, &a, &p).unwrap();
+    let secret_b = dh::compute_shared_secret(&pub_a, &b, &p).unwrap();
 
     assert_eq!(secret_a, secret_b);
 }
@@ -102,7 +102,7 @@ fn test_bsgs_ctf_scenario() {
     let order = BigUint::from(100u32);
     let secret = BigUint::from(42u32);
 
-    let pub_key = dh::compute_pubkey(&g, &secret, &p);
+    let pub_key = dh::compute_pubkey(&g, &secret, &p).unwrap();
     let recovered = dh::baby_step_giant_step(&g, &pub_key, &p, &order).unwrap();
 
     // The recovered value may differ from secret by a multiple of order,
@@ -119,17 +119,17 @@ fn test_full_dh_exchange_and_break() {
     let a_priv = BigUint::from(6u32);
     let b_priv = BigUint::from(15u32);
 
-    let a_pub = dh::compute_pubkey(&g, &a_priv, &p);
-    let b_pub = dh::compute_pubkey(&g, &b_priv, &p);
+    let a_pub = dh::compute_pubkey(&g, &a_priv, &p).unwrap();
+    let b_pub = dh::compute_pubkey(&g, &b_priv, &p).unwrap();
 
     // Shared secret via normal exchange
-    let shared = dh::compute_shared_secret(&b_pub, &a_priv, &p);
+    let shared = dh::compute_shared_secret(&b_pub, &a_priv, &p).unwrap();
 
     // Attacker uses BSGS to recover a's private key from a_pub
     let recovered_a = dh::baby_step_giant_step(&g, &a_pub, &p, &order).unwrap();
 
     // Attacker computes shared secret using recovered key
-    let broken_secret = dh::compute_shared_secret(&b_pub, &recovered_a, &p);
+    let broken_secret = dh::compute_shared_secret(&b_pub, &recovered_a, &p).unwrap();
     assert_eq!(shared, broken_secret);
 }
 
@@ -139,7 +139,7 @@ fn test_pubkey_exponent_zero() {
     let g = BigUint::from(7u32);
     let p = BigUint::from(23u32);
     let a = BigUint::from(0u32);
-    assert_eq!(dh::compute_pubkey(&g, &a, &p), BigUint::from(1u32));
+    assert_eq!(dh::compute_pubkey(&g, &a, &p).unwrap(), BigUint::from(1u32));
 }
 
 #[test]
@@ -148,7 +148,7 @@ fn test_pubkey_exponent_one() {
     let g = BigUint::from(7u32);
     let p = BigUint::from(23u32);
     let a = BigUint::from(1u32);
-    assert_eq!(dh::compute_pubkey(&g, &a, &p), BigUint::from(7u32));
+    assert_eq!(dh::compute_pubkey(&g, &a, &p).unwrap(), BigUint::from(7u32));
 }
 
 #[test]
