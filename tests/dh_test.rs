@@ -8,7 +8,10 @@ fn test_pubkey_basic() {
     let g = BigUint::from(2u32);
     let p = BigUint::from(23u32);
     let a = BigUint::from(6u32);
-    assert_eq!(dh::compute_pubkey(&g, &a, &p).unwrap(), BigUint::from(18u32));
+    assert_eq!(
+        dh::compute_pubkey(&g, &a, &p).unwrap(),
+        BigUint::from(18u32)
+    );
 }
 
 #[test]
