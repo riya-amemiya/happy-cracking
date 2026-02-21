@@ -491,4 +491,4 @@ All checks must pass before merging.
 - Commands in `main.rs` are organized by category with comments
 - Base85 and Base91 are implemented without external crates
 - The `chain` module references other crypto modules via `crate::crypto::*`
-- Math and primes modules use `u128` for number representation
+- Math and primes modules use `u128` for number representation, with Montgomery optimization for odd moduli
