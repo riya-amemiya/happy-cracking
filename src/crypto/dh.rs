@@ -43,7 +43,7 @@ pub fn run(action: DhAction) -> Result<()> {
             let g = g.parse::<BigUint>().context("Invalid number for g")?;
             let p = p.parse::<BigUint>().context("Invalid number for p")?;
             let a = a.parse::<BigUint>().context("Invalid number for a")?;
-            let pubkey = compute_pubkey(&g, &a, &p);
+            let pubkey = compute_pubkey(&g, &a, &p)?;
             println!("{}", pubkey);
         }
         DhAction::SharedSecret { public_key, p, a } => {
@@ -52,7 +52,7 @@ pub fn run(action: DhAction) -> Result<()> {
                 .context("Invalid number for public-key")?;
             let p = p.parse::<BigUint>().context("Invalid number for p")?;
             let a = a.parse::<BigUint>().context("Invalid number for a")?;
-            let secret = compute_shared_secret(&pk, &a, &p);
+            let secret = compute_shared_secret(&pk, &a, &p)?;
             println!("{}", secret);
         }
         DhAction::Dlog {
@@ -77,13 +77,19 @@ pub fn run(action: DhAction) -> Result<()> {
 }
 
 // Compute Diffie-Hellman public key: g^a mod p.
-pub fn compute_pubkey(g: &BigUint, a: &BigUint, p: &BigUint) -> BigUint {
-    g.modpow(a, p)
+pub fn compute_pubkey(g: &BigUint, a: &BigUint, p: &BigUint) -> Result<BigUint> {
+    if p.is_zero() {
+        anyhow::bail!("Modulus p must be non-zero");
+    }
+    Ok(g.modpow(a, p))
 }
 
 // Compute Diffie-Hellman shared secret: public_key^a mod p.
-pub fn compute_shared_secret(public_key: &BigUint, a: &BigUint, p: &BigUint) -> BigUint {
-    public_key.modpow(a, p)
+pub fn compute_shared_secret(public_key: &BigUint, a: &BigUint, p: &BigUint) -> Result<BigUint> {
+    if p.is_zero() {
+        anyhow::bail!("Modulus p must be non-zero");
+    }
+    Ok(public_key.modpow(a, p))
 }
 
 // Baby-step Giant-step algorithm for computing discrete logarithm.
@@ -145,7 +151,7 @@ mod tests {
         let p = BigUint::from(23u32);
         let a = BigUint::from(6u32);
         // 2^6 mod 23 = 64 mod 23 = 18
-        assert_eq!(compute_pubkey(&g, &a, &p), BigUint::from(18u32));
+        assert_eq!(compute_pubkey(&g, &a, &p).unwrap(), BigUint::from(18u32));
     }
 
     #[test]
@@ -154,10 +160,18 @@ mod tests {
         let p = BigUint::from(23u32);
         let a = BigUint::from(6u32);
         let b = BigUint::from(15u32);
-        let pub_a = compute_pubkey(&g, &a, &p);
-        let pub_b = compute_pubkey(&g, &b, &p);
-        let secret_a = compute_shared_secret(&pub_b, &a, &p);
-        let secret_b = compute_shared_secret(&pub_a, &b, &p);
+        let pub_a = compute_pubkey(&g, &a, &p).unwrap();
+        let pub_b = compute_pubkey(&g, &b, &p).unwrap();
+        let secret_a = compute_shared_secret(&pub_b, &a, &p).unwrap();
+        let secret_b = compute_shared_secret(&pub_a, &b, &p).unwrap();
         assert_eq!(secret_a, secret_b);
+    }
+
+    #[test]
+    fn test_error_on_zero_modulus() {
+        let g = BigUint::from(2u32);
+        let p = BigUint::from(0u32);
+        let a = BigUint::from(10u32);
+        assert!(compute_pubkey(&g, &a, &p).is_err());
     }
 }
