@@ -92,32 +92,49 @@ pub struct FrequencyResult {
 }
 
 pub fn analyze(input: &str, alpha_only: bool) -> FrequencyResult {
-    let mut counts: HashMap<char, usize> = HashMap::new();
+    let mut frequencies: Vec<(char, usize, f64)> = Vec::new();
     let mut total = 0usize;
 
     if alpha_only {
-        for c in input.chars().filter(|c| c.is_ascii_alphabetic()) {
-            *counts.entry(c.to_ascii_uppercase()).or_insert(0) += 1;
-            total += 1;
+        // Optimization: Use array instead of HashMap for pure alphabetic analysis
+        let mut counts = [0usize; 26];
+
+        for c in input.chars() {
+            if c.is_ascii_alphabetic() {
+                counts[(c.to_ascii_uppercase() as u8 - b'A') as usize] += 1;
+                total += 1;
+            }
+        }
+
+        for (i, &count) in counts.iter().enumerate() {
+            if count > 0 {
+                let percentage = if total > 0 {
+                    (count as f64 / total as f64) * 100.0
+                } else {
+                    0.0
+                };
+                frequencies.push(((b'A' + i as u8) as char, count, percentage));
+            }
         }
     } else {
+        let mut counts: HashMap<char, usize> = HashMap::new();
         for c in input.chars() {
             *counts.entry(c).or_insert(0) += 1;
             total += 1;
         }
-    }
 
-    let mut frequencies: Vec<(char, usize, f64)> = counts
-        .into_iter()
-        .map(|(c, count)| {
-            let percentage = if total > 0 {
-                (count as f64 / total as f64) * 100.0
-            } else {
-                0.0
-            };
-            (c, count, percentage)
-        })
-        .collect();
+        frequencies = counts
+            .into_iter()
+            .map(|(c, count)| {
+                let percentage = if total > 0 {
+                    (count as f64 / total as f64) * 100.0
+                } else {
+                    0.0
+                };
+                (c, count, percentage)
+            })
+            .collect();
+    }
 
     // Sort by count descending
     frequencies.sort_by(|a, b| b.1.cmp(&a.1));
