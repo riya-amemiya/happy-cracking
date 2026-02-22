@@ -271,7 +271,7 @@ fn binary_gcd(mut u: u128, mut v: u128) -> u128 {
 }
 
 // Pollard's Rho algorithm using Brent's cycle detection variant with batch GCD.
-fn pollard_rho(n: u128) -> u128 {
+pub fn pollard_rho(n: u128) -> u128 {
     if n % 2 == 0 {
         return 2;
     }

@@ -34,6 +34,10 @@
 **Learning:** Initializing `Montgomery` struct with `BigUint` to compute $R^2 \pmod m$ incurs significant allocation overhead (~50% of runtime). Replacing it with an iterative bitwise doubling loop (`u128`) yields ~2x speedup despite potential branch mispredictions.
 **Action:** Avoid `BigUint` even for one-off initializations in hot paths if a simple iterative algorithm exists.
 
+## 2026-02-21 - Pollard's Rho Optimization for u128
+**Learning:** Generic `BigUint` implementation of Pollard's Rho is ~300x slower per iteration than `u128` implementation. Additionally, arbitrary iteration limits in `BigUint` implementation can cause failures for factorable numbers (e.g., 120-bit semiprimes).
+**Action:** Dispatch factorization of numbers fitting in `u128` to optimized native implementations to enable solving larger instances and improve performance.
+
 ## 2026-02-21 - HashMap Overhead in Frequency Analysis
 **Learning:** `HashMap<char, usize>` introduces significant overhead for simple frequency analysis on alphabetic input ($O(n \cdot H)$), compared to direct array indexing ($O(n)$).
 **Action:** Always prefer `[usize; 26]` over `HashMap` for hot-path character counting when the domain is small and known (e.g., A-Z), yielding ~5x speedup.
