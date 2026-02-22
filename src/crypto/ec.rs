@@ -2,8 +2,10 @@ use anyhow::{Context, Result};
 use clap::Subcommand;
 use num_bigint::{BigInt, BigUint, ToBigInt};
 use num_integer::Integer;
-use num_traits::{One, Zero};
+use num_traits::{One, ToPrimitive, Zero};
 use std::collections::HashMap;
+
+use crate::crypto::primes;
 
 #[derive(Subcommand)]
 pub enum EcAction {
@@ -449,14 +451,27 @@ fn solve_prime_power_ecdlp(
     Ok(k)
 }
 
-// Factor a BigUint into prime factors with exponents (trial division for moderate sizes).
+// Factor a BigUint into prime factors with exponents.
+// Uses optimized Pollard's Rho for numbers fitting in u128, and naive trial division for larger.
 fn factor_biguint(n: &BigUint) -> Result<Vec<(BigUint, u32)>> {
+    if n <= &BigUint::one() {
+        return Ok(Vec::new());
+    }
+
+    // Optimization: if n fits in u128, use the much faster implementation from primes module
+    // which uses Pollard's Rho algorithm instead of trial division.
+    if let Some(n_u128) = n.to_u128() {
+        let factors = primes::factorize(n_u128);
+        return Ok(factors
+            .into_iter()
+            .map(|(p, e)| (BigUint::from(p), e))
+            .collect());
+    }
+
+    // Fallback: Naive trial division for numbers > u128::MAX
+    // This is slow but unavoidable without a BigUint Pollard's Rho implementation.
     let mut n = n.clone();
     let mut factors = Vec::new();
-
-    if n <= BigUint::one() {
-        return Ok(factors);
-    }
 
     let mut d = BigUint::from(2u32);
     while &d * &d <= n {
@@ -528,5 +543,16 @@ mod tests {
     fn test_parse_point_inf() {
         let pt = parse_point("inf").unwrap();
         assert_eq!(pt, ECPoint::Infinity);
+    }
+
+    #[test]
+    fn test_factor_biguint_large_prime() {
+        // Test with a large 64-bit prime: 18446744073709551557 (largest u64 prime)
+        // This would take very long with trial division but should be instant with Pollard's Rho.
+        let n = BigUint::from(18446744073709551557u64);
+        let factors = factor_biguint(&n).unwrap();
+        assert_eq!(factors.len(), 1);
+        assert_eq!(factors[0].0, n);
+        assert_eq!(factors[0].1, 1);
     }
 }
