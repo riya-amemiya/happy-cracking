@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 use clap::Subcommand;
 use num_bigint::{BigInt, BigUint, ToBigInt};
 use num_integer::Integer;
-use num_traits::{One, Zero};
+use num_traits::{One, ToPrimitive, Zero};
 
 #[derive(Subcommand)]
 pub enum RsaAction {
@@ -586,6 +586,17 @@ pub fn pollard_rho_factor(n: &BigUint) -> Result<(BigUint, BigUint)> {
         let two = BigUint::from(2u32);
         let other = n / &two;
         return Ok((two, other));
+    }
+
+    // Optimization: Use u128 implementation if n fits
+    if let Some(n_u128) = n.to_u128() {
+        let factor = crate::crypto::primes::pollard_rho(n_u128);
+        if factor == n_u128 || factor == 1 {
+            anyhow::bail!("Pollard's Rho failed to factor n");
+        }
+        let d = BigUint::from(factor);
+        let q = n / &d;
+        return Ok((d, q));
     }
 
     // Try multiple starting values
