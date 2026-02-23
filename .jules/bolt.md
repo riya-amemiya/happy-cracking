@@ -41,3 +41,7 @@
 ## 2026-02-21 - HashMap Overhead in Frequency Analysis
 **Learning:** `HashMap<char, usize>` introduces significant overhead for simple frequency analysis on alphabetic input ($O(n \cdot H)$), compared to direct array indexing ($O(n)$).
 **Action:** Always prefer `[usize; 26]` over `HashMap` for hot-path character counting when the domain is small and known (e.g., A-Z), yielding ~5x speedup.
+
+## 2026-02-23 - Montgomery Multiplication for u64
+**Learning:** Native division/remainder (`%`) for `u64` is significantly slower than Montgomery multiplication using `u128` intermediates. Implementing `Montgomery64` yielded ~8.7x speedup for `miller_rabin_u64`.
+**Action:** Use specialized Montgomery arithmetic for `u64` modular exponentiation when modulus is odd, avoiding expensive hardware division in hot loops.
