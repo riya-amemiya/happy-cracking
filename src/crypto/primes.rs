@@ -147,7 +147,7 @@ fn miller_rabin(n: u128) -> bool {
         s += 1;
     }
 
-    let mont = Montgomery::new(n);
+    let mont = Montgomery::new(n).expect("n is odd");
     let one_mont = mont.transform(1);
     let n_minus_1_mont = mont.transform(n - 1);
 
@@ -276,7 +276,7 @@ pub fn pollard_rho(n: u128) -> u128 {
         return 2;
     }
 
-    let mont = Montgomery::new(n);
+    let mont = Montgomery::new(n).expect("n is odd");
     let one = mont.transform(1);
 
     // Try different constants c if the first one fails
