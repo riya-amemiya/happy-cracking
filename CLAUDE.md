@@ -202,6 +202,7 @@ cargo run -- rot47 "Hello"
 
 # Caesar cipher
 cargo run -- caesar encrypt "Hello" --shift 3
+cargo run -- caesar decrypt "Khoor" --shift 3
 cargo run -- caesar bruteforce "Khoor"
 
 # XOR
@@ -213,6 +214,8 @@ cargo run -- xor keylength "00112233445566778899aabbccddeeff" --max-len 40
 # Vigenere cipher
 cargo run -- vigenere encrypt "HELLO" --key "KEY"
 cargo run -- vigenere decrypt "RIJVS" --key "KEY"
+cargo run -- vigenere crack "RIJVSRIJVSRIJVS"
+cargo run -- vigenere key-length "RIJVSRIJVSRIJVS"
 
 # Beaufort cipher
 cargo run -- beaufort encrypt "HELLO" --key "KEY"
@@ -227,11 +230,13 @@ cargo run -- atbash transform "HELLO"
 
 # Rail Fence cipher
 cargo run -- railfence encrypt "HELLO WORLD" --rails 3
-cargo run -- railfence decrypt "HORELWLOLD L" --rails 3
+cargo run -- railfence decrypt "HOREL OLLWD" --rails 3
+cargo run -- railfence bruteforce "HOREL OLLWD"
 
 # Affine cipher (ax+b mod 26)
 cargo run -- affine encrypt "HELLO" --a 5 --b 8
 cargo run -- affine decrypt "RCLLA" --a 5 --b 8
+cargo run -- affine bruteforce "RCLLA"
 
 # Playfair cipher
 cargo run -- playfair encrypt "HELLO WORLD" --key "MONARCHY"
@@ -239,18 +244,23 @@ cargo run -- playfair decrypt "CFSUPMOMZPD" --key "MONARCHY"
 
 # Four-square cipher
 cargo run -- foursquare encrypt "HELLO WORLD" --key1 "KEYONE" --key2 "KEYTWO"
+cargo run -- foursquare decrypt "FYGFHXHQLK" --key1 "KEYONE" --key2 "KEYTWO"
 
 # Hill cipher
 cargo run -- hill encrypt "HELLO" --key "6 24 1 13 16 10 20 17 15"
+cargo run -- hill decrypt "TFJJZX" --key "6 24 1 13 16 10 20 17 15"
 
 # Bifid cipher
 cargo run -- bifid encrypt "HELLO" --key "KEY"
+cargo run -- bifid decrypt "CMODH" --key "KEY"
 
 # ADFGVX cipher
 cargo run -- adfgvx encrypt "HELLO" --key "default" --transposition-key "KEY"
+cargo run -- adfgvx decrypt "DDXDVDFAXF" --key "default" --transposition-key "KEY"
 
 # Columnar Transposition cipher
 cargo run -- columnar encrypt "HELLO" --key "KEY"
+cargo run -- columnar decrypt "EOHLLX" --key "KEY"
 
 # Baconian cipher
 cargo run -- baconian encode "HELLO"
@@ -274,13 +284,18 @@ cargo run -- aes ecb-detect "00112233445566778899aabbccddeeff0011223344556677889
 
 # DES/Triple-DES
 cargo run -- des encrypt "0123456789abcdef" --key "133457799bbcdff1"
+cargo run -- des decrypt "85e813540f0ab405" --key "133457799bbcdff1"
 cargo run -- des tdes-encrypt "0123456789abcdef" --key "0123456789abcdef0123456789abcdef0123456789abcdef"
+cargo run -- des tdes-decrypt "56cc09e7cfdc4cef" --key "0123456789abcdef0123456789abcdef0123456789abcdef"
 
 # RC4
-cargo run -- rc4 cipher "48656c6c6f" --key "Key" --ascii
+cargo run -- rc4 cipher "48656c6c6f" --key "4b6579"
+cargo run -- rc4 cipher-ascii "Hello" --key "Key"
+cargo run -- rc4 sbox --key "4b6579"
 
 # Simple Substitution
 cargo run -- substitution encode "Hello" --alphabet "QWERTYUIOPASDFGHJKLZXCVBNM"
+cargo run -- substitution decode "Itssg" --alphabet "QWERTYUIOPASDFGHJKLZXCVBNM"
 cargo run -- substitution solve "Itssg"
 ```
 
@@ -298,10 +313,14 @@ cargo run -- hash all "password"
 cargo run -- hashid identify "5d41402abc4b2a76b9719d911017c592"
 
 # HMAC
+cargo run -- hmac md5 "message" --key "secret"
+cargo run -- hmac sha1 "message" --key "secret"
 cargo run -- hmac sha256 "message" --key "secret"
+cargo run -- hmac sha512 "message" --key "secret"
 
 # CRC32
 cargo run -- crc32 compute "hello"
+cargo run -- crc32 verify "hello" --checksum "3610a686"
 cargo run -- crc32-forge forge "deadbeef" --target "cafebabe"
 cargo run -- crc32-forge verify "deadbeef" --suffix "12345678" --target "cafebabe"
 
