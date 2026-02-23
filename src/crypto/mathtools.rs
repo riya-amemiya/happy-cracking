@@ -139,7 +139,7 @@ pub fn modpow(base: u128, exp: u128, m: u128) -> Result<u128> {
     // Optimization: if m is odd and fits in u128 (but > u64::MAX), use Montgomery
     // to avoid BigUint allocation overhead.
     if m % 2 != 0 {
-        let mont = Montgomery::new(m);
+        let mont = Montgomery::new(m)?;
         let base_mont = mont.transform(base);
         let res_mont = mont.pow(base_mont, exp);
         let res = mont.reduce_from(res_mont);
@@ -315,6 +315,7 @@ fn widening_mul_u128(a: u128, b: u128) -> (u128, u128) {
     (lo, hi)
 }
 
+#[derive(Debug)]
 pub struct Montgomery {
     m: u128,
     m_prime: u128, // -m^-1 mod 2^128
@@ -322,9 +323,9 @@ pub struct Montgomery {
 }
 
 impl Montgomery {
-    pub fn new(m: u128) -> Self {
+    pub fn new(m: u128) -> Result<Self> {
         if m % 2 == 0 {
-            panic!("Modulus must be odd for Montgomery arithmetic");
+            anyhow::bail!("Modulus must be odd for Montgomery arithmetic");
         }
 
         // Calculate -m^-1 mod 2^128 using Newton's method
@@ -351,7 +352,7 @@ impl Montgomery {
             r2 = val;
         }
 
-        Self { m, m_prime, r2 }
+        Ok(Self { m, m_prime, r2 })
     }
 
     // Montgomery reduction: computes T * R^-1 mod m
