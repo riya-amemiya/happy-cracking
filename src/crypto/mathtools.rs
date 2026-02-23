@@ -159,6 +159,16 @@ pub fn modpow(base: u128, exp: u128, m: u128) -> Result<u128> {
 
 // Optimized modular exponentiation for u64 modulus using u128 arithmetic.
 fn modpow_u64(base: u128, mut exp: u128, m: u64) -> u64 {
+    // If m is odd, use Montgomery multiplication to avoid slow division in the loop
+    if m % 2 != 0 {
+        let mont = Montgomery64::new(m);
+        // We need base mod m first
+        let base_val = (base % (m as u128)) as u64;
+        let base_mont = mont.transform(base_val);
+        let res_mont = mont.pow(base_mont, exp);
+        return mont.reduce_from(res_mont);
+    }
+
     let m_u128 = m as u128;
     let mut res: u128 = 1;
     let mut base = base % m_u128;
@@ -171,6 +181,107 @@ fn modpow_u64(base: u128, mut exp: u128, m: u64) -> u64 {
         exp >>= 1;
     }
     res as u64
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct Montgomery64 {
+    m: u64,
+    m_prime: u64, // -m^-1 mod 2^64
+    r2: u64,      // R^2 mod m
+}
+
+impl Montgomery64 {
+    pub fn new(m: u64) -> Self {
+        debug_assert!(m % 2 != 0, "Modulus must be odd");
+
+        // Calculate -m^-1 mod 2^64 using Newton's method
+        // Start with 1. 2^64 has 64 bits.
+        // x_{i+1} = x_i * (2 - m * x_i) mod 2^64
+        // 6 iterations: 1 -> 2 -> 4 -> 8 -> 16 -> 32 -> 64
+        let mut inv = 1u64;
+        for _ in 0..6 {
+            inv = inv.wrapping_mul(2u64.wrapping_sub(m.wrapping_mul(inv)));
+        }
+        let m_prime = 0u64.wrapping_sub(inv);
+
+        // Calculate R^2 mod m where R = 2^64
+        // R % m = (2^64) % m = (u64::MAX % m + 1) % m
+        let r_mod_m = (u64::MAX % m).wrapping_add(1) % m;
+        let r2 = ((r_mod_m as u128 * r_mod_m as u128) % m as u128) as u64;
+
+        Self { m, m_prime, r2 }
+    }
+
+    // Montgomery reduction: computes T * R^-1 mod m
+    // T is u128 product.
+    #[inline(always)]
+    pub fn reduce(&self, t: u128) -> u64 {
+        let m = self.m;
+        let m_prime = self.m_prime;
+
+        // m_factor = (t mod R) * m_prime mod R
+        let m_factor = (t as u64).wrapping_mul(m_prime);
+
+        // t_correction = m_factor * m
+        let t_correction = (m_factor as u128) * (m as u128);
+
+        // val = t + t_correction
+        // Since t < m*m and t_correction < R*m, sum fits in u128?
+        // Actually, t < m*R (if reducing product of two numbers < m, then t < m*m < m*R).
+        // But t could be larger if not from strict mul.
+        // Assuming strict mul (inputs < m), t < m^2.
+        // t_correction < R*m.
+        // sum < m^2 + R*m < 2*R*m.
+        // We divide by R (shift 64). Result < 2m.
+
+        let (val, overflow) = t.overflowing_add(t_correction);
+
+        // res = val / R = val >> 64
+        let mut res = (val >> 64) as u64;
+
+        // If val overflowed u128, it means there is a carry to bit 128.
+        // Divided by R (2^64), this carry adds 2^64 to the quotient.
+        // So real result is res + 2^64.
+        // Since we want result mod m, and m < 2^64, we can subtract m.
+        // res + 2^64 - m = res + (2^64 - m).
+        // In u64 arithmetic, this is res.wrapping_sub(m).
+        if overflow {
+            res = res.wrapping_sub(m);
+        } else if res >= m {
+            res -= m;
+        }
+        res
+    }
+
+    #[inline(always)]
+    pub fn mul(&self, a: u64, b: u64) -> u64 {
+        let prod = (a as u128) * (b as u128);
+        self.reduce(prod)
+    }
+
+    pub fn transform(&self, a: u64) -> u64 {
+        self.mul(a, self.r2)
+    }
+
+    #[allow(dead_code)]
+    pub fn reduce_from(&self, a: u64) -> u64 {
+        // To reduce from Montgomery form X*R, we compute X*R * R^-1 = X.
+        // reduce takes u128 T.
+        // We pass a as u128.
+        self.reduce(a as u128)
+    }
+
+    pub fn pow(&self, mut base: u64, mut exp: u128) -> u64 {
+        let mut res = self.transform(1);
+        while exp > 0 {
+            if exp % 2 == 1 {
+                res = self.mul(res, base);
+            }
+            base = self.mul(base, base);
+            exp /= 2;
+        }
+        res
+    }
 }
 
 // Helper for 128-bit widening multiplication: (a * b) -> (lo, hi)
