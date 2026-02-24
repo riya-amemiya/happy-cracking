@@ -57,25 +57,20 @@ fn ksa(key: &[u8]) -> [u8; 256] {
         *val = i as u8;
     }
     let mut j: u8 = 0;
+    let mut key_idx = 0;
+    let key_len = key.len();
+
+    // Optimization: Use a manual counter instead of expensive modulo operator
     for i in 0..256 {
-        j = j.wrapping_add(s[i]).wrapping_add(key[i % key.len()]);
+        j = j.wrapping_add(s[i]).wrapping_add(key[key_idx]);
         s.swap(i, j as usize);
+
+        key_idx += 1;
+        if key_idx >= key_len {
+            key_idx = 0;
+        }
     }
     s
-}
-
-fn prga(s: &mut [u8; 256], length: usize) -> Vec<u8> {
-    let mut i: u8 = 0;
-    let mut j: u8 = 0;
-    let mut keystream = Vec::with_capacity(length);
-    for _ in 0..length {
-        i = i.wrapping_add(1);
-        j = j.wrapping_add(s[i as usize]);
-        s.swap(i as usize, j as usize);
-        let k = s[(s[i as usize].wrapping_add(s[j as usize])) as usize];
-        keystream.push(k);
-    }
-    keystream
 }
 
 pub fn rc4(data: &[u8], key: &[u8]) -> Result<Vec<u8>> {
@@ -83,12 +78,21 @@ pub fn rc4(data: &[u8], key: &[u8]) -> Result<Vec<u8>> {
         anyhow::bail!("RC4 key must not be empty");
     }
     let mut s = ksa(key);
-    let keystream = prga(&mut s, data.len());
-    Ok(data
-        .iter()
-        .zip(keystream.iter())
-        .map(|(&d, &k)| d ^ k)
-        .collect())
+
+    // Optimization: Stream processing to avoid intermediate allocation of keystream vector
+    let mut i: u8 = 0;
+    let mut j: u8 = 0;
+    let mut result = Vec::with_capacity(data.len());
+
+    for &b in data {
+        i = i.wrapping_add(1);
+        j = j.wrapping_add(s[i as usize]);
+        s.swap(i as usize, j as usize);
+        let k = s[(s[i as usize].wrapping_add(s[j as usize])) as usize];
+        result.push(b ^ k);
+    }
+
+    Ok(result)
 }
 
 pub fn rc4_sbox(key: &[u8]) -> Result<[u8; 256]> {
