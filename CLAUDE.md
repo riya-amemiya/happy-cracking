@@ -50,11 +50,9 @@ happy-cracking/
 │       ├── otp.rs        # One-time pad
 │       ├── playfair.rs   # Playfair cipher (5x5 digraph substitution)
 │       ├── polybius.rs   # Polybius square cipher
-│       ├── polybius_utils.rs # Helper for Polybius square-based ciphers
 │       ├── railfence.rs  # Rail Fence transposition cipher
 │       ├── rc4.rs        # RC4 stream cipher
 │       ├── rot.rs        # ROT13, ROT47, and generic rotation cipher
-│       ├── shared.rs     # Shared crypto utilities
 │       ├── substitution.rs # Simple substitution cipher
 │       ├── vigenere.rs   # Vigenere polyalphabetic cipher
 │       ├── xor.rs        # XOR cipher and single-byte bruteforce
@@ -83,7 +81,9 @@ happy-cracking/
 │       ├── mathtools.rs  # Number theory (GCD, modinv, modpow)
 │       ├── numbersys.rs  # Number base conversion (2-36)
 │       ├── padding.rs    # Padding scheme utilities
+│       ├── polybius_utils.rs # Helper for Polybius square-based ciphers
 │       ├── primes.rs     # Prime factorization and primality test
+│       ├── shared.rs     # Shared crypto utilities
 │       └── strtools.rs   # String tools (reverse, ord, chr)
 │
 ├── tests/                # Integration tests
