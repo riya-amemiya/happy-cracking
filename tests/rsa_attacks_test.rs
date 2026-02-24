@@ -176,7 +176,7 @@ fn test_pollard_p1_full_ctf_scenario() {
 fn test_pollard_rho_small() {
     // n = 91 = 7 * 13
     let n = BigUint::from(91u32);
-    let (p, q) = rsa::pollard_rho_factor(&n).unwrap();
+    let (p, q) = happy_cracking::crypto::primes::pollard_rho_biguint(&n).unwrap();
     assert_eq!(&p * &q, n);
 }
 
@@ -186,14 +186,14 @@ fn test_pollard_rho_medium() {
     let p = BigUint::from(1009u32);
     let q = BigUint::from(1013u32);
     let n = &p * &q;
-    let (fp, fq) = rsa::pollard_rho_factor(&n).unwrap();
+    let (fp, fq) = happy_cracking::crypto::primes::pollard_rho_biguint(&n).unwrap();
     assert_eq!(&fp * &fq, n);
 }
 
 #[test]
 fn test_pollard_rho_even() {
     let n = BigUint::from(100u32);
-    let (p, q) = rsa::pollard_rho_factor(&n).unwrap();
+    let (p, q) = happy_cracking::crypto::primes::pollard_rho_biguint(&n).unwrap();
     assert_eq!(&p * &q, n);
     assert_eq!(p, BigUint::from(2u32));
 }
@@ -202,7 +202,7 @@ fn test_pollard_rho_even() {
 fn test_pollard_rho_larger() {
     // n = 10403 = 101 * 103
     let n = BigUint::from(10403u32);
-    let (p, q) = rsa::pollard_rho_factor(&n).unwrap();
+    let (p, q) = happy_cracking::crypto::primes::pollard_rho_biguint(&n).unwrap();
     assert_eq!(&p * &q, n);
 }
 
@@ -217,7 +217,7 @@ fn test_pollard_rho_full_ctf_scenario() {
 
     let c = rsa::big_modpow(&m, &e, &n).unwrap();
 
-    let (fp, fq) = rsa::pollard_rho_factor(&n).unwrap();
+    let (fp, fq) = happy_cracking::crypto::primes::pollard_rho_biguint(&n).unwrap();
     let phi = (&fp - BigUint::one()) * (&fq - BigUint::one());
     let d = rsa::big_modinv(&e, &phi).unwrap();
     let decrypted = rsa::big_modpow(&c, &d, &n).unwrap();

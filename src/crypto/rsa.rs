@@ -576,7 +576,6 @@ pub fn pollard_p1(n: &BigUint, b: u64) -> Result<(BigUint, BigUint)> {
     anyhow::bail!("Pollard p-1 failed to factor n with bound B={}", b)
 }
 
-
 // Convert a BigUint to an ASCII string by interpreting its bytes.
 pub fn bigint_to_ascii(n: &BigUint) -> String {
     if n.is_zero() {

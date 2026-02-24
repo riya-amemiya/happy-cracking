@@ -52,3 +52,8 @@
 **Vulnerability:** The `factor_biguint` helper function fell back to naive trial division for numbers exceeding `u128::MAX` (which are common in Elliptic Curve cryptography), causing indefinite hangs (DoS) on large inputs.
 **Learning:** Security tools dealing with large numbers (like `BigUint`) must avoid algorithms with exponential time complexity (like trial division) as fallbacks.
 **Prevention:** Implement and use efficient algorithms like Pollard's Rho for `BigUint` factorization to handle large composites gracefully.
+
+## 2026-02-23 - Breaking Changes in Refactoring
+**Vulnerability:** Moving utility functions (like `pollard_rho_factor`) from one module to another broke existing tests that relied on the old location, causing CI failure.
+**Learning:** When refactoring security primitives, always check for test files that import specific functions, not just the main library code. `grep` is your friend.
+**Prevention:** Run `cargo test` locally before submitting, even for "simple" refactors.

@@ -363,7 +363,10 @@ pub fn factorize_biguint(n: BigUint) -> Vec<(BigUint, u32)> {
     // Optimization: u128
     if let Some(n_u128) = n.to_u128() {
         let factors = factorize(n_u128);
-        return factors.into_iter().map(|(p, e)| (BigUint::from(p), e)).collect();
+        return factors
+            .into_iter()
+            .map(|(p, e)| (BigUint::from(p), e))
+            .collect();
     }
 
     // Recursive BigUint factorization
@@ -372,7 +375,9 @@ pub fn factorize_biguint(n: BigUint) -> Vec<(BigUint, u32)> {
 
     // Group by prime
     let mut result = Vec::new();
-    if factors_list.is_empty() { return result; }
+    if factors_list.is_empty() {
+        return result;
+    }
     let mut current_p = factors_list[0].clone();
     let mut current_count = 1;
     for p in factors_list.iter().skip(1) {
@@ -389,17 +394,19 @@ pub fn factorize_biguint(n: BigUint) -> Vec<(BigUint, u32)> {
 }
 
 fn factor_recursive_biguint(n: BigUint, factors: &mut Vec<BigUint>) {
-    if n <= BigUint::one() { return; }
+    if n <= BigUint::one() {
+        return;
+    }
 
     // Fallback to u128 if small enough
     if let Some(n_u128) = n.to_u128() {
-         let sub_factors = factorize(n_u128);
-         for (p, e) in sub_factors {
-             for _ in 0..e {
-                 factors.push(BigUint::from(p));
-             }
-         }
-         return;
+        let sub_factors = factorize(n_u128);
+        for (p, e) in sub_factors {
+            for _ in 0..e {
+                factors.push(BigUint::from(p));
+            }
+        }
+        return;
     }
 
     // Try Pollard's Rho
