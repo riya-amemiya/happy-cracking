@@ -1,6 +1,9 @@
 #![allow(clippy::manual_is_multiple_of)]
 use anyhow::Result;
 use clap::Subcommand;
+use num_bigint::BigUint;
+use num_integer::Integer;
+use num_traits::{One, ToPrimitive};
 
 use crate::crypto::mathtools::{Montgomery, Montgomery64};
 
@@ -347,4 +350,170 @@ pub fn format_factors(factors: &[(u128, u32)]) -> String {
         })
         .collect::<Vec<_>>()
         .join(" × ")
+}
+
+// Factorize a BigUint into prime factors.
+// Uses optimized Pollard's Rho for numbers fitting in u128, and Pollard's Rho for BigUint for larger.
+pub fn factorize_biguint(n: BigUint) -> Vec<(BigUint, u32)> {
+    let mut factors_list = Vec::new();
+    if n <= BigUint::one() {
+        return Vec::new();
+    }
+
+    // Optimization: u128
+    if let Some(n_u128) = n.to_u128() {
+        let factors = factorize(n_u128);
+        return factors
+            .into_iter()
+            .map(|(p, e)| (BigUint::from(p), e))
+            .collect();
+    }
+
+    // Recursive BigUint factorization
+    factor_recursive_biguint(n, &mut factors_list);
+    factors_list.sort();
+
+    // Group by prime
+    let mut result = Vec::new();
+    if factors_list.is_empty() {
+        return result;
+    }
+    let mut current_p = factors_list[0].clone();
+    let mut current_count = 1;
+    for p in factors_list.iter().skip(1) {
+        if *p == current_p {
+            current_count += 1;
+        } else {
+            result.push((current_p.clone(), current_count));
+            current_p = p.clone();
+            current_count = 1;
+        }
+    }
+    result.push((current_p, current_count));
+    result
+}
+
+fn factor_recursive_biguint(n: BigUint, factors: &mut Vec<BigUint>) {
+    if n <= BigUint::one() {
+        return;
+    }
+
+    // Fallback to u128 if small enough
+    if let Some(n_u128) = n.to_u128() {
+        let sub_factors = factorize(n_u128);
+        for (p, e) in sub_factors {
+            for _ in 0..e {
+                factors.push(BigUint::from(p));
+            }
+        }
+        return;
+    }
+
+    // Try Pollard's Rho
+    match pollard_rho_biguint(&n) {
+        Ok((d, q)) => {
+            // Found a factor d. Recurse on d and n/d (q).
+            factor_recursive_biguint(d, factors);
+            factor_recursive_biguint(q, factors);
+        }
+        Err(_) => {
+            // Failed to factor. Treat as prime/indivisible.
+            factors.push(n);
+        }
+    }
+}
+
+// Pollard's Rho factorization for BigUint using Brent's cycle detection variant.
+pub fn pollard_rho_biguint(n: &BigUint) -> Result<(BigUint, BigUint)> {
+    if n <= &BigUint::one() {
+        anyhow::bail!("Cannot factorize n <= 1");
+    }
+
+    if n.is_even() {
+        let two = BigUint::from(2u32);
+        let other = n / &two;
+        return Ok((two, other));
+    }
+
+    // Optimization: Use u128 implementation if n fits
+    if let Some(n_u128) = n.to_u128() {
+        let factor = pollard_rho(n_u128);
+        if factor == n_u128 || factor == 1 {
+            anyhow::bail!("Pollard's Rho failed to factor n");
+        }
+        let d = BigUint::from(factor);
+        let q = n / &d;
+        return Ok((d, q));
+    }
+
+    // Try multiple starting values
+    for c_val in 1u64..20 {
+        let c = BigUint::from(c_val);
+        if let Some(d) = pollard_rho_brent(n, &c)
+            && d > BigUint::one()
+            && &d < n
+        {
+            let q = n / &d;
+            return Ok((d, q));
+        }
+    }
+
+    anyhow::bail!("Pollard's Rho failed to factor n")
+}
+
+// Brent's variant of Pollard's Rho for BigUint. Returns a non-trivial factor or None.
+fn pollard_rho_brent(n: &BigUint, c: &BigUint) -> Option<BigUint> {
+    let f = |x: &BigUint| -> BigUint { (x * x + c) % n };
+
+    let mut y = BigUint::from(2u32);
+    let mut r: u64 = 1;
+    let mut q = BigUint::one();
+
+    let mut x = y.clone();
+    let mut ys = y.clone();
+    let mut g = BigUint::one();
+
+    while g == BigUint::one() {
+        x = y.clone();
+
+        for _ in 0..r {
+            y = f(&y);
+        }
+
+        let mut k: u64 = 0;
+        while k < r && g == BigUint::one() {
+            ys = y.clone();
+
+            let batch_size = std::cmp::min(128, r - k);
+            for _ in 0..batch_size {
+                y = f(&y);
+                let diff = if x > y { &x - &y } else { &y - &x };
+                q = (q * diff) % n;
+            }
+
+            g = q.gcd(n);
+            k += batch_size;
+        }
+
+        r *= 2;
+
+        // Safety limit
+        if r > 1_000_000 {
+            return None;
+        }
+    }
+
+    if &g == n {
+        // Backtrack
+        loop {
+            ys = f(&ys);
+            let diff = if x > ys { &x - &ys } else { &ys - &x };
+            g = diff.gcd(n);
+            if g > BigUint::one() {
+                break;
+            }
+        }
+    }
+
+    if &g == n { None } else { Some(g) }
 }
