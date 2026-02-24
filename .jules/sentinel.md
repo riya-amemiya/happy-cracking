@@ -47,3 +47,8 @@
 **Vulnerability:** `modp` and `mod_inverse` in EC module panicked on zero modulus, allowing DoS via CLI arguments.
 **Learning:** Mathematical helper functions in cryptographic implementations often assume valid inputs (e.g. p > 0) and panic otherwise. Input validation must happen at the API boundary (CLI or public function) to prevent this.
 **Prevention:** Add explicit `p.is_zero()` checks in all public functions accepting a modulus.
+
+## 2026-02-23 - DoS via Naive Factorization Fallback
+**Vulnerability:** The `factor_biguint` helper function fell back to naive trial division for numbers exceeding `u128::MAX` (which are common in Elliptic Curve cryptography), causing indefinite hangs (DoS) on large inputs.
+**Learning:** Security tools dealing with large numbers (like `BigUint`) must avoid algorithms with exponential time complexity (like trial division) as fallbacks.
+**Prevention:** Implement and use efficient algorithms like Pollard's Rho for `BigUint` factorization to handle large composites gracefully.

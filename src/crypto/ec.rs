@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 use clap::Subcommand;
 use num_bigint::{BigInt, BigUint, ToBigInt};
 use num_integer::Integer;
-use num_traits::{One, ToPrimitive, Zero};
+use num_traits::{One, Zero};
 use std::collections::HashMap;
 
 use crate::crypto::primes;
@@ -452,44 +452,10 @@ fn solve_prime_power_ecdlp(
 }
 
 // Factor a BigUint into prime factors with exponents.
-// Uses optimized Pollard's Rho for numbers fitting in u128, and naive trial division for larger.
+// Uses recursive Pollard's Rho algorithm.
 fn factor_biguint(n: &BigUint) -> Result<Vec<(BigUint, u32)>> {
-    if n <= &BigUint::one() {
-        return Ok(Vec::new());
-    }
-
-    // Optimization: if n fits in u128, use the much faster implementation from primes module
-    // which uses Pollard's Rho algorithm instead of trial division.
-    if let Some(n_u128) = n.to_u128() {
-        let factors = primes::factorize(n_u128);
-        return Ok(factors
-            .into_iter()
-            .map(|(p, e)| (BigUint::from(p), e))
-            .collect());
-    }
-
-    // Fallback: Naive trial division for numbers > u128::MAX
-    // This is slow but unavoidable without a BigUint Pollard's Rho implementation.
-    let mut n = n.clone();
-    let mut factors = Vec::new();
-
-    let mut d = BigUint::from(2u32);
-    while &d * &d <= n {
-        let mut exp = 0u32;
-        while (&n % &d).is_zero() {
-            n /= &d;
-            exp += 1;
-        }
-        if exp > 0 {
-            factors.push((d.clone(), exp));
-        }
-        d += BigUint::one();
-    }
-    if n > BigUint::one() {
-        factors.push((n, 1));
-    }
-
-    Ok(factors)
+    // Delegate to the comprehensive implementation in primes module
+    Ok(primes::factorize_biguint(n.clone()))
 }
 
 // Chinese Remainder Theorem for BigUint.
