@@ -108,10 +108,23 @@ pub fn xor_bytes(data: &[u8], key: &[u8]) -> Vec<u8> {
     if key.is_empty() {
         return data.to_vec();
     }
-    data.iter()
-        .enumerate()
-        .map(|(i, &b)| b ^ key[i % key.len()])
-        .collect()
+    // Optimization: Process data in full chunks of key length to avoid
+    // expensive modulo operations per byte (i % key_len) and enable
+    // better compiler vectorization/unrolling.
+    let mut out = Vec::with_capacity(data.len());
+    let key_len = key.len();
+
+    let chunks = data.chunks_exact(key_len);
+    let remainder = chunks.remainder();
+
+    for chunk in chunks {
+        out.extend(chunk.iter().zip(key).map(|(b, k)| b ^ k));
+    }
+
+    if !remainder.is_empty() {
+        out.extend(remainder.iter().zip(key).map(|(b, k)| b ^ k));
+    }
+    out
 }
 
 pub fn single_byte_xor_bruteforce(data: &[u8]) -> Vec<(u8, Vec<u8>)> {
