@@ -57,3 +57,8 @@
 **Vulnerability:** Moving utility functions (like `pollard_rho_factor`) from one module to another broke existing tests that relied on the old location, causing CI failure.
 **Learning:** When refactoring security primitives, always check for test files that import specific functions, not just the main library code. `grep` is your friend.
 **Prevention:** Run `cargo test` locally before submitting, even for "simple" refactors.
+
+## 2026-02-25 - Unbounded Loop in Pollard's Rho DoS
+**Vulnerability:** Pollard's Rho factorization algorithm for `u128` (up to 128-bit integers) lacked an iteration limit, causing infinite loops on hard-to-factor semiprimes.
+**Learning:** Mathematical algorithms with probabilistic runtime (like Pollard's Rho) must always have an upper bound on iterations when exposed to user input to prevent Algorithmic Complexity DoS.
+**Prevention:** Always add a safety loop counter or timeout to `while` loops in cryptographic/mathematical primitives.
