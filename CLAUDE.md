@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-**happy-cracking** is a CTF (Capture The Flag) toolkit written in Rust, providing command-line utilities for cryptographic encoding/decoding, classic ciphers, hash operations, and analysis tools commonly used in security competitions.
+**happy-cracking** is a CTF (Capture The Flag) toolkit written in Rust, providing command-line utilities for cryptographic encoding/decoding, classic ciphers, hash operations, and analysis tools commonly used in security competitions. It emphasizes correctness, performance, and robustness against Denial of Service (DoS) attacks in its cryptographic implementations.
 
 ## Codebase Structure
 
@@ -511,3 +511,4 @@ All checks must pass before merging.
 - Base85 and Base91 are implemented without external crates
 - The `chain` module references other crypto modules via `crate::crypto::*`
 - Math and primes modules use `u128` for number representation, with Montgomery optimization for odd moduli
+- Security regression tests in `tests/` (like `ec_dos.rs`) ensure robustness against DoS attacks

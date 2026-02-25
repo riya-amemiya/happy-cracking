@@ -454,7 +454,14 @@ pub fn my_function(input: &str) -> Result<String> {
 
 ### Testing Conventions
 
-Integration tests go in `tests/` directory. Test files follow `{module}_test.rs` naming. Include empty string tests, roundtrip tests, error case tests, and CTF-style test data (e.g., `flag{...}` format).
+Integration tests go in `tests/` directory. Test files follow `{module}_test.rs` naming. Include empty string tests, roundtrip tests, error case tests, and CTF-style test data (e.g., `flag{...}` format). Include security regression tests (e.g., `tests/ec_dos.rs`, `tests/rsa_dos.rs`) to prevent performance regressions or DoS vulnerabilities.
+
+### Security & Robustness Guidelines
+
+- **DoS Prevention:** Always check for zero moduli, zero denominators, or invalid parameters that could cause panics before performing mathematical operations.
+- **Resource Limits:** Respect resource limits (e.g., `chain` module's 50-operation limit and 50MB output size). Avoid infinite loops or unbounded recursion.
+- **Algorithm Efficiency:** Use `BigUint` optimized methods (like `nth_root`) over naive loops. Use Pollard's Rho for factorization instead of trial division for large numbers to prevent hangs.
+- **Input Validation:** Validate all inputs before processing, especially for complex structures like JWTs or elliptic curve points.
 
 ## CI/CD Pipeline
 
@@ -511,3 +518,4 @@ All checks must pass before merging.
 - Base85 and Base91 are implemented without external crates
 - The `chain` module references other crypto modules via `crate::crypto::*`
 - Math and primes modules use `u128` for number representation, with Montgomery optimization for odd moduli
+- Security regression tests in `tests/` (like `ec_dos.rs`) ensure robustness against DoS attacks
