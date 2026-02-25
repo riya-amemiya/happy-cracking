@@ -311,6 +311,12 @@ pub fn pollard_rho(n: u128) -> u128 {
                 k = batch_end;
             }
             r *= 2;
+
+            // Safety limit to prevent DoS (infinite loop) on hard composites.
+            // 2^20 iterations is enough for most CTF challenges but prevents hanging.
+            if r > (1 << 20) {
+                return n;
+            }
         }
 
         if d == n {
