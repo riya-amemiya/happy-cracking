@@ -78,7 +78,7 @@ happy-cracking/
 │       ├── entropy.rs    # Shannon entropy analysis
 │       ├── frequency.rs  # Character frequency analysis
 │       ├── hexdump.rs    # Hex dump display
-│       ├── mathtools.rs  # Number theory (GCD, modinv, modpow)
+│       ├── mathtools.rs  # Number theory (GCD, modinv, modpow, Montgomery)
 │       ├── numbersys.rs  # Number base conversion (2-36)
 │       ├── padding.rs    # Padding scheme utilities
 │       ├── polybius_utils.rs # Helper for Polybius square-based ciphers
@@ -87,7 +87,11 @@ happy-cracking/
 │       └── strtools.rs   # String tools (reverse, ord, chr)
 │
 ├── tests/                # Integration tests
-│   ├── ...
+│   ├── ec_dos.rs         # Regression test for EC DoS
+│   ├── mathtools_security_test.rs # Math security tests
+│   ├── primes_dos.rs     # Regression test for Pollard's Rho DoS
+│   ├── rsa_dos.rs        # Regression test for RSA DoS
+│   └── ...
 │
 ├── Cargo.toml            # Project manifest (Rust 2024 edition)
 ├── Cargo.lock            # Dependency lock file
@@ -460,7 +464,7 @@ Integration tests go in `tests/` directory. Test files follow `{module}_test.rs`
 
 - **DoS Prevention:** Always check for zero moduli, zero denominators, or invalid parameters that could cause panics before performing mathematical operations.
 - **Resource Limits:** Respect resource limits (e.g., `chain` module's 50-operation limit and 50MB output size). Avoid infinite loops or unbounded recursion.
-- **Algorithm Efficiency:** Use `BigUint` optimized methods (like `nth_root`) over naive loops. Use Pollard's Rho for factorization instead of trial division for large numbers to prevent hangs.
+- **Algorithm Efficiency:** Use `BigUint` optimized methods (like `nth_root`) over naive loops. Use Pollard's Rho for factorization instead of trial division for large numbers to prevent hangs. Use `Montgomery` optimization in `mathtools.rs` for `u128` modular arithmetic to avoid `BigUint` allocation overhead.
 - **Input Validation:** Validate all inputs before processing, especially for complex structures like JWTs or elliptic curve points.
 
 ## CI/CD Pipeline
@@ -512,7 +516,6 @@ All checks must pass before merging.
 - The Rust edition is 2024 (nightly features may be used)
 - All code must pass clippy with `-D warnings` (warnings as errors)
 - Keep functions pure and testable where possible
-- XOR module uses `let-else` patterns (Rust 1.65+ feature)
 - Prefer `&str` for input parameters, return owned `String` for results
 - Commands in `main.rs` are organized by category with comments
 - Base85 and Base91 are implemented without external crates

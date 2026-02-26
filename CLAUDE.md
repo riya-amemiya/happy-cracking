@@ -78,7 +78,7 @@ happy-cracking/
 │       ├── entropy.rs    # Shannon entropy analysis
 │       ├── frequency.rs  # Character frequency analysis
 │       ├── hexdump.rs    # Hex dump display
-│       ├── mathtools.rs  # Number theory (GCD, modinv, modpow)
+│       ├── mathtools.rs  # Number theory (GCD, modinv, modpow, Montgomery)
 │       ├── numbersys.rs  # Number base conversion (2-36)
 │       ├── padding.rs    # Padding scheme utilities
 │       ├── polybius_utils.rs # Helper for Polybius square-based ciphers
@@ -87,7 +87,11 @@ happy-cracking/
 │       └── strtools.rs   # String tools (reverse, ord, chr)
 │
 ├── tests/                # Integration tests
-│   ├── ...
+│   ├── ec_dos.rs         # Regression test for EC DoS
+│   ├── mathtools_security_test.rs # Math security tests
+│   ├── primes_dos.rs     # Regression test for Pollard's Rho DoS
+│   ├── rsa_dos.rs        # Regression test for RSA DoS
+│   └── ...
 │
 ├── Cargo.toml            # Project manifest (Rust 2024 edition)
 ├── Cargo.lock            # Dependency lock file
@@ -505,7 +509,6 @@ All checks must pass before merging.
 - The Rust edition is 2024 (nightly features may be used)
 - All code must pass clippy with `-D warnings` (warnings as errors)
 - Keep functions pure and testable where possible
-- XOR module uses `let-else` patterns (Rust 1.65+ feature)
 - Prefer `&str` for input parameters, return owned `String` for results
 - Commands in `main.rs` are organized by category with comments
 - Base85 and Base91 are implemented without external crates
