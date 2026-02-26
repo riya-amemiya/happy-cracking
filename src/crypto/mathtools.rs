@@ -286,16 +286,18 @@ impl Montgomery64 {
 
 // Helper for 128-bit widening multiplication: (a * b) -> (lo, hi)
 fn widening_mul_u128(a: u128, b: u128) -> (u128, u128) {
-    let mask = 0xFFFF_FFFF_FFFF_FFFF;
-    let al = a & mask;
-    let ah = a >> 64;
-    let bl = b & mask;
-    let bh = b >> 64;
+    // Optimized for u64 decomposition to leverage hardware MUL if possible.
+    // This explicitly uses 64-bit multiplications extended to 128-bit,
+    // avoiding potential full 128-bit multiplication overheads in the compiler.
+    let al = a as u64;
+    let ah = (a >> 64) as u64;
+    let bl = b as u64;
+    let bh = (b >> 64) as u64;
 
-    let t0 = al * bl;
-    let t1 = al * bh;
-    let t2 = ah * bl;
-    let t3 = ah * bh;
+    let t0 = (al as u128) * (bl as u128);
+    let t1 = (al as u128) * (bh as u128);
+    let t2 = (ah as u128) * (bl as u128);
+    let t3 = (ah as u128) * (bh as u128);
 
     let (mid, carry_mid) = t1.overflowing_add(t2);
     // mid represents bits 64..192
