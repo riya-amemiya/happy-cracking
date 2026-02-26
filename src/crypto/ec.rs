@@ -7,6 +7,14 @@ use std::collections::HashMap;
 
 use crate::crypto::primes;
 
+// Safety limit for BSGS algorithm (approx 4 million entries in hash map).
+// Prevents OOM when users provide large prime orders.
+// 2^22 = 4,194,304.
+const MAX_BSGS_ITERATIONS: u64 = 1 << 22;
+
+// Safety limit for brute force point order calculation.
+const MAX_POINT_ORDER_ITERATIONS: u64 = 1 << 22;
+
 #[derive(Subcommand)]
 pub enum EcAction {
     #[command(about = "Add two points on an elliptic curve (y^2 = x^3 + ax + b mod p)")]
@@ -300,16 +308,24 @@ pub fn point_order(point: &ECPoint, a: &BigInt, p: &BigInt) -> Result<BigUint> {
 
     let mut current = point.clone();
     let mut n = BigUint::one();
+    let mut iterations = 0u64;
 
     loop {
         if n > max_order {
             anyhow::bail!("Could not find point order within Hasse bound");
+        }
+        if iterations > MAX_POINT_ORDER_ITERATIONS {
+            anyhow::bail!(
+                "Point order calculation limit exceeded (limit: {})",
+                MAX_POINT_ORDER_ITERATIONS
+            );
         }
         if current == ECPoint::Infinity {
             return Ok(n);
         }
         current = point_add(&current, point, a, p)?;
         n += BigUint::one();
+        iterations += 1;
     }
 }
 
@@ -323,6 +339,13 @@ fn bsgs_ecdlp(
     order: &BigUint,
 ) -> Result<BigUint> {
     let m_val = order.sqrt() + BigUint::one();
+
+    if m_val > BigUint::from(MAX_BSGS_ITERATIONS) {
+        anyhow::bail!(
+            "Order too large for BSGS algorithm (limit: sqrt(order) <= {})",
+            MAX_BSGS_ITERATIONS
+        );
+    }
 
     // Baby step: store j -> j*G for j in [0, m)
     let mut table: HashMap<String, BigUint> = HashMap::new();
