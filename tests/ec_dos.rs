@@ -85,5 +85,7 @@ fn test_point_order_dos_large_p() {
 
     let err_msg = result.unwrap_err().to_string();
     println!("Error message: {}", err_msg);
-    assert!(err_msg.contains("limit exceeded") || err_msg.contains("Point order calculation limit"));
+    assert!(
+        err_msg.contains("limit exceeded") || err_msg.contains("Point order calculation limit")
+    );
 }
