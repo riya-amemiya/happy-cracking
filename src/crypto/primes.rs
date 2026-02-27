@@ -260,8 +260,35 @@ fn binary_gcd(mut u: u128, mut v: u128) -> u128 {
     u << shift
 }
 
+// Binary GCD algorithm for u64
+fn binary_gcd_u64(mut u: u64, mut v: u64) -> u64 {
+    if u == 0 {
+        return v;
+    }
+    if v == 0 {
+        return u;
+    }
+    let shift = (u | v).trailing_zeros();
+    u >>= u.trailing_zeros();
+    loop {
+        v >>= v.trailing_zeros();
+        if u > v {
+            std::mem::swap(&mut u, &mut v);
+        }
+        v -= u;
+        if v == 0 {
+            break;
+        }
+    }
+    u << shift
+}
+
 // Pollard's Rho algorithm using Brent's cycle detection variant with batch GCD.
 pub fn pollard_rho(n: u128) -> u128 {
+    if n <= u64::MAX as u128 {
+        return pollard_rho_u64(n as u64) as u128;
+    }
+
     if n % 2 == 0 {
         return 2;
     }
@@ -324,6 +351,85 @@ pub fn pollard_rho(n: u128) -> u128 {
             loop {
                 ys = f(ys);
                 d = binary_gcd(x.abs_diff(ys), n);
+                if d != 1 {
+                    break;
+                }
+            }
+        }
+
+        if d != n {
+            return d;
+        }
+    }
+
+    // If all fail, return n (factorization failed)
+    n
+}
+
+// Optimized Pollard's Rho for u64 using u64 arithmetic (Montgomery64).
+fn pollard_rho_u64(n: u64) -> u64 {
+    if n % 2 == 0 {
+        return 2;
+    }
+
+    let mont = Montgomery64::new(n);
+    let one = mont.transform(1);
+
+    // Try different constants c if the first one fails
+    for c_val in [1, 3, 5, 7, 2, 4, 6, 8] {
+        let c = mont.transform(c_val);
+
+        let f = |x: u64| -> u64 {
+            let x2 = mont.mul(x, x);
+            // x^2 + c
+            let (sum, carry) = x2.overflowing_add(c);
+            if carry || sum >= n {
+                sum.wrapping_sub(n)
+            } else {
+                sum
+            }
+        };
+
+        // Brent's variant: only update y at powers of 2
+        let mut y = mont.transform(2);
+        let mut x = y;
+        let mut q = one;
+        let mut r: u64 = 1;
+        let mut d: u64 = 1;
+        let mut ys = y;
+
+        while d == 1 {
+            x = y;
+            for _ in 0..r {
+                y = f(y);
+            }
+
+            let mut k: u64 = 0;
+            while k < r && d == 1 {
+                ys = y;
+                // Batch GCD: accumulate product of differences over ~100 iterations
+                let batch_end = (k + 100).min(r);
+                for _ in k..batch_end {
+                    y = f(y);
+                    q = mont.mul(q, x.abs_diff(y));
+                }
+                d = binary_gcd_u64(q, n);
+                k = batch_end;
+            }
+            r *= 2;
+
+            // Safety limit to prevent DoS (infinite loop) on hard composites.
+            // 2^20 iterations is enough for most CTF challenges but prevents hanging.
+            if r > (1 << 20) {
+                return n;
+            }
+        }
+
+        if d == n {
+            // Backtrack: retry without batching from ys
+            loop {
+                ys = f(ys);
+                d = binary_gcd_u64(x.abs_diff(ys), n);
                 if d != 1 {
                     break;
                 }
