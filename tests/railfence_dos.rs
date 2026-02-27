@@ -20,7 +20,11 @@ mod tests {
         assert_eq!(result.unwrap(), "Hello, World!");
 
         // Ensure it runs quickly (DoS check)
-        assert!(duration.as_millis() < 100, "Encrypt took too long: {:?}", duration);
+        assert!(
+            duration.as_millis() < 100,
+            "Encrypt took too long: {:?}",
+            duration
+        );
     }
 
     #[test]
@@ -38,6 +42,10 @@ mod tests {
         assert_eq!(result.unwrap(), "Hello, World!");
 
         // Ensure it runs quickly (DoS check)
-        assert!(duration.as_millis() < 100, "Decrypt took too long: {:?}", duration);
+        assert!(
+            duration.as_millis() < 100,
+            "Decrypt took too long: {:?}",
+            duration
+        );
     }
 }
