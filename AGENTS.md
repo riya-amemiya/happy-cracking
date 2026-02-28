@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-**happy-cracking** is a CTF (Capture The Flag) toolkit written in Rust, providing command-line utilities for cryptographic encoding/decoding, classic ciphers, hash operations, and analysis tools commonly used in security competitions.
+**happy-cracking** is a CTF (Capture The Flag) toolkit written in Rust, providing command-line utilities for cryptographic encoding/decoding, classic ciphers, hash operations, and analysis tools commonly used in security competitions. It emphasizes correctness, performance, and robustness against Denial of Service (DoS) attacks in its cryptographic implementations.
 
 ## Codebase Structure
 
@@ -90,6 +90,7 @@ happy-cracking/
 │   ├── ec_dos.rs         # Regression test for EC DoS
 │   ├── mathtools_security_test.rs # Math security tests
 │   ├── primes_dos.rs     # Regression test for Pollard's Rho DoS
+│   ├── railfence_dos.rs  # Regression test for Rail Fence DoS
 │   ├── rsa_dos.rs        # Regression test for RSA DoS
 │   └── ...
 │
