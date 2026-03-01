@@ -88,9 +88,11 @@ happy-cracking/
 │
 ├── tests/                # Integration tests
 │   ├── ec_dos.rs         # Regression test for EC DoS
+│   ├── ec_security_test.rs # Security tests for Elliptic Curve
 │   ├── mathtools_security_test.rs # Math security tests
 │   ├── primes_dos.rs     # Regression test for Pollard's Rho DoS
 │   ├── rsa_dos.rs        # Regression test for RSA DoS
+│   ├── rsa_zero_mod_fix.rs # Regression test for RSA zero modulus
 │   └── ...
 │
 ├── Cargo.toml            # Project manifest (Rust 2024 edition)
