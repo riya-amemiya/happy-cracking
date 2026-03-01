@@ -1,6 +1,5 @@
 use anyhow::Result;
 use clap::Subcommand;
-use std::collections::HashMap;
 
 #[derive(Subcommand)]
 pub enum EntropyAction {
@@ -33,15 +32,19 @@ pub fn calculate(input: &str) -> f64 {
     let bytes = input.as_bytes();
     let len = bytes.len() as f64;
 
-    let mut counts: HashMap<u8, usize> = HashMap::new();
+    // Optimization: Use array instead of HashMap for pure byte counting
+    // Avoids hashing overhead and memory allocation
+    let mut counts = [0usize; 256];
     for &b in bytes {
-        *counts.entry(b).or_insert(0) += 1;
+        counts[b as usize] += 1;
     }
 
     let mut entropy = 0.0;
-    for &count in counts.values() {
-        let p = count as f64 / len;
-        entropy -= p * p.log2();
+    for &count in counts.iter() {
+        if count > 0 {
+            let p = count as f64 / len;
+            entropy -= p * p.log2();
+        }
     }
 
     entropy
