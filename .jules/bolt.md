@@ -45,3 +45,7 @@
 ## 2026-02-23 - Montgomery Multiplication for u64
 **Learning:** Native division/remainder (`%`) for `u64` is significantly slower than Montgomery multiplication using `u128` intermediates. Implementing `Montgomery64` yielded ~8.7x speedup for `miller_rabin_u64`.
 **Action:** Use specialized Montgomery arithmetic for `u64` modular exponentiation when modulus is odd, avoiding expensive hardware division in hot loops.
+
+## 2024-05-31 - [Zero-Copy UTF-8 Safe Byte Mutation for ASCII Ciphers]
+**Learning:** In Rust, string manipulations that purely substitute ASCII characters (like ROT13 or ROT47) suffer a major performance penalty when using `.chars().map(...).collect()`. This invokes full UTF-8 decoding and re-encoding for every character. Because valid UTF-8 guarantees that multi-byte sequences never contain bytes below 128 (`0x80`), it is completely safe and roughly 3-4x faster to convert the string to a byte vector, mutate the ASCII bytes in-place, and reconstruct the string with `unsafe { String::from_utf8_unchecked(bytes) }`.
+**Action:** When implementing or optimizing ciphers or transformations that only affect the ASCII range, always prefer `input.as_bytes().to_vec()` and byte-level iteration over `.chars()`. Ensure an `unsafe` block is used to reconstruct the string only after strictly validating that no bytes outside the ASCII subset were generated.
