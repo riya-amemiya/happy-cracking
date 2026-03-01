@@ -63,7 +63,7 @@
 **Learning:** Mathematical algorithms with probabilistic runtime (like Pollard's Rho) must always have an upper bound on iterations when exposed to user input to prevent Algorithmic Complexity DoS.
 **Prevention:** Always add a safety loop counter or timeout to `while` loops in cryptographic/mathematical primitives.
 
-## $(date +%Y-%m-%d) - [DoS / Memory Exhaustion Protection in BSGS Algorithm]
+ Memory Exhaustion Protection in BSGS Algorithm]/ Memory Exhaustion Protection in BSGS Algorithm]
 **Vulnerability:** The Baby-Step Giant-Step algorithm for computing Diffie-Hellman discrete logarithms attempts to populate a `HashMap` of size `sqrt(order)`. With very large user-provided inputs (e.g., primes like $2^{61}-1$), this will exhaust the available system memory (Out-Of-Memory/OOM), causing a Denial of Service (DoS) vulnerability.
 **Learning:** Math-heavy security or algorithmic tools are highly prone to CPU or memory exhaustion vectors if the attacker can control algorithmic parameters such as iteration bounds or expected set sizes.
 **Prevention:** Always introduce explicit sanity bounds or hard safety limits (`const MAX_BSGS_ITERATIONS: u64 = 1 << 22;`) and check variable inputs against these limitations before starting iterative tasks. Return a safe error value like `anyhow::bail!` to prevent crashes and ensure graceful degradation.
