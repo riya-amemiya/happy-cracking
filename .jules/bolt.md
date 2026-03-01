@@ -45,3 +45,7 @@
 ## 2026-02-23 - Montgomery Multiplication for u64
 **Learning:** Native division/remainder (`%`) for `u64` is significantly slower than Montgomery multiplication using `u128` intermediates. Implementing `Montgomery64` yielded ~8.7x speedup for `miller_rabin_u64`.
 **Action:** Use specialized Montgomery arithmetic for `u64` modular exponentiation when modulus is odd, avoiding expensive hardware division in hot loops.
+
+## 2026-02-24 - Array vs HashMap for Byte Frequencies
+**Learning:** Computing frequencies of 8-bit bytes using `HashMap<u8, usize>` incurs unnecessary allocation and hashing overhead compared to a fixed-size `[usize; 256]` array.
+**Action:** Always prefer `[usize; 256]` over `HashMap` for byte-level frequency analysis in hot paths, avoiding $O(N \cdot H)$ operations in favor of $O(N)$.
