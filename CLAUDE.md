@@ -90,6 +90,7 @@ happy-cracking/
 │   ├── ec_dos.rs         # Regression test for EC DoS
 │   ├── mathtools_security_test.rs # Math security tests
 │   ├── primes_dos.rs     # Regression test for Pollard's Rho DoS
+│   ├── railfence_dos.rs  # Regression test for Rail Fence DoS
 │   ├── rsa_dos.rs        # Regression test for RSA DoS
 │   └── ...
 │
@@ -458,7 +459,14 @@ pub fn my_function(input: &str) -> Result<String> {
 
 ### Testing Conventions
 
-Integration tests go in `tests/` directory. Test files follow `{module}_test.rs` naming. Include empty string tests, roundtrip tests, error case tests, and CTF-style test data (e.g., `flag{...}` format).
+Integration tests go in `tests/` directory. Test files follow `{module}_test.rs` naming. Include empty string tests, roundtrip tests, error case tests, and CTF-style test data (e.g., `flag{...}` format). Include security regression tests (e.g., `tests/ec_dos.rs`, `tests/rsa_dos.rs`, `tests/railfence_dos.rs`) to prevent performance regressions or DoS vulnerabilities.
+
+### Security & Robustness Guidelines
+
+- **DoS Prevention:** Always check for zero moduli, zero denominators, or invalid parameters that could cause panics before performing mathematical operations.
+- **Resource Limits:** Respect resource limits (e.g., `chain` module's 50-operation limit and 50MB output size). Avoid infinite loops or unbounded recursion.
+- **Algorithm Efficiency:** Use `BigUint` optimized methods (like `nth_root`) over naive loops. Use Pollard's Rho for factorization instead of trial division for large numbers to prevent hangs. Use `Montgomery` optimization in `mathtools.rs` for `u128` modular arithmetic to avoid `BigUint` allocation overhead.
+- **Input Validation:** Validate all inputs before processing, especially for complex structures like JWTs or elliptic curve points.
 
 ## CI/CD Pipeline
 
