@@ -461,7 +461,7 @@ pub fn my_function(input: &str) -> Result<String> {
 
 ### Testing Conventions
 
-Integration tests go in `tests/` directory. Test files follow `{module}_test.rs` naming. Include empty string tests, roundtrip tests, error case tests, and CTF-style test data (e.g., `flag{...}` format). Include security regression tests (e.g., `tests/ec_dos.rs`, `tests/rsa_dos.rs`) to prevent performance regressions or DoS vulnerabilities.
+Integration tests go in `tests/` directory. Test files follow `{module}_test.rs` naming. Include empty string tests, roundtrip tests, error case tests, and CTF-style test data (e.g., `flag{...}` format). Include security regression tests (e.g., `tests/ec_dos.rs`, `tests/rsa_dos.rs`, `tests/railfence_dos.rs`) to prevent performance regressions or DoS vulnerabilities.
 
 ### Security & Robustness Guidelines
 
