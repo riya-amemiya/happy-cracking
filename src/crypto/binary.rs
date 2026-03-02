@@ -28,25 +28,49 @@ pub fn run(action: BinaryAction) -> Result<()> {
 }
 
 pub fn encode(input: &str) -> String {
-    input
-        .bytes()
-        .map(|b| format!("{:08b}", b))
-        .collect::<Vec<_>>()
-        .join(" ")
+    if input.is_empty() {
+        return String::new();
+    }
+
+    // Optimization: Pre-allocate the exact string capacity needed to avoid multiple allocations.
+    // Length is (8 bits + 1 space) per byte, minus the trailing space.
+    let mut out = String::with_capacity(input.len() * 9 - 1);
+    for (i, b) in input.bytes().enumerate() {
+        if i > 0 {
+            out.push(' ');
+        }
+
+        // Optimization: Manually compute bits instead of using format!("{:08b}", b)
+        // which introduces dynamic formatting overhead.
+        let mut bits = [0u8; 8];
+        for j in 0..8 {
+            bits[7 - j] = b'0' + ((b >> j) & 1);
+        }
+        // SAFETY: bits only contains b'0' and b'1' which are valid ASCII/UTF-8
+        out.push_str(unsafe { std::str::from_utf8_unchecked(&bits) });
+    }
+    out
 }
 
 pub fn decode(input: &str) -> Result<String> {
-    let cleaned: String = input.chars().filter(|c| *c == '0' || *c == '1').collect();
+    // Optimization: Filter at the byte level directly into a pre-allocated Vec<u8>
+    // to bypass `char` conversion overhead and intermediate String allocation.
+    let mut cleaned_bytes = Vec::with_capacity(input.len());
+    for b in input.bytes() {
+        if b == b'0' || b == b'1' {
+            cleaned_bytes.push(b);
+        }
+    }
 
-    if !cleaned.len().is_multiple_of(8) {
+    if !cleaned_bytes.len().is_multiple_of(8) {
         anyhow::bail!("Binary string length must be a multiple of 8");
     }
 
-    let bytes: Result<Vec<u8>, _> = cleaned
-        .as_bytes()
+    let bytes: Result<Vec<u8>, _> = cleaned_bytes
         .chunks(8)
         .map(|chunk| {
-            let s = std::str::from_utf8(chunk).unwrap();
+            // SAFETY: We only pushed b'0' and b'1' into cleaned_bytes, which are valid ASCII/UTF-8
+            let s = unsafe { std::str::from_utf8_unchecked(chunk) };
             u8::from_str_radix(s, 2)
         })
         .collect();
