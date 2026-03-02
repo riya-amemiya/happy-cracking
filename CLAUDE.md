@@ -92,6 +92,7 @@ happy-cracking/
 │   ├── mathtools_security_test.rs # Math security tests
 │   ├── primes_dos.rs     # Regression test for Pollard's Rho DoS
 │   ├── railfence_dos.rs  # Regression test for Rail Fence DoS
+│   ├── rsa_attacks_test.rs # RSA attacks tests
 │   ├── rsa_dos.rs        # Regression test for RSA DoS
 │   ├── rsa_zero_mod_fix.rs # Regression test for RSA zero modulus
 │   └── ...
