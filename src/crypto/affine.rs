@@ -56,19 +56,21 @@ pub fn encrypt(input: &str, a: i32, b: i32) -> Result<String> {
         anyhow::bail!("'a' must be coprime with 26. Valid values: {:?}", VALID_A);
     }
 
-    Ok(input
-        .chars()
-        .map(|c| {
-            if c.is_ascii_alphabetic() {
-                let base = if c.is_ascii_uppercase() { b'A' } else { b'a' };
-                let x = (c as u8 - base) as i32;
-                let encrypted = ((a * x + b) % 26 + 26) % 26;
-                (encrypted as u8 + base) as char
+    let mut bytes = input.as_bytes().to_vec();
+    for byte in &mut bytes {
+        if byte.is_ascii_alphabetic() {
+            let base = if byte.is_ascii_uppercase() {
+                b'A'
             } else {
-                c
-            }
-        })
-        .collect())
+                b'a'
+            };
+            let x = (*byte - base) as i32;
+            let encrypted = ((a * x + b) % 26 + 26) % 26;
+            *byte = encrypted as u8 + base;
+        }
+    }
+    // Safety: we only modify ASCII alphabetic characters to other ASCII alphabetic characters.
+    Ok(unsafe { String::from_utf8_unchecked(bytes) })
 }
 
 pub fn decrypt(input: &str, a: i32, b: i32) -> Result<String> {
@@ -76,19 +78,21 @@ pub fn decrypt(input: &str, a: i32, b: i32) -> Result<String> {
         anyhow::anyhow!("'a' must be coprime with 26. Valid values: {:?}", VALID_A)
     })?;
 
-    Ok(input
-        .chars()
-        .map(|c| {
-            if c.is_ascii_alphabetic() {
-                let base = if c.is_ascii_uppercase() { b'A' } else { b'a' };
-                let y = (c as u8 - base) as i32;
-                let decrypted = ((a_inv * (y - b)) % 26 + 26) % 26;
-                (decrypted as u8 + base) as char
+    let mut bytes = input.as_bytes().to_vec();
+    for byte in &mut bytes {
+        if byte.is_ascii_alphabetic() {
+            let base = if byte.is_ascii_uppercase() {
+                b'A'
             } else {
-                c
-            }
-        })
-        .collect())
+                b'a'
+            };
+            let y = (*byte - base) as i32;
+            let decrypted = ((a_inv * (y - b)) % 26 + 26) % 26;
+            *byte = decrypted as u8 + base;
+        }
+    }
+    // Safety: we only modify ASCII alphabetic characters to other ASCII alphabetic characters.
+    Ok(unsafe { String::from_utf8_unchecked(bytes) })
 }
 
 pub fn bruteforce(input: &str) {

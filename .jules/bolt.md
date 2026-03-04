@@ -53,3 +53,7 @@
 ## 2026-03-02 - Binary Encoding Formatting Overhead
 **Learning:** Using `format!("{:08b}", b)` inside an iterator loop to construct strings for binary encoding introduces massive overhead (multiple allocations, dynamic dispatch, formatting parsing). Similarly, using intermediate `Vec<String>` and `.join(" ")` allocates many small strings.
 **Action:** When encoding fixed-width binary representations, pre-allocate a single string, compute bits manually into a small byte array `[u8; 8]`, and use `push_str` with `unsafe { std::str::from_utf8_unchecked }`. This yields ~22x speedup.
+
+## 2026-03-02 - ASCII Substitution Overhead
+**Learning:** `chars().map().collect()` incurs high overhead for ASCII-only transformations (like Atbash, ROT, Affine) due to Unicode boundary decoding and allocations. Direct byte mutation avoids this.
+**Action:** When performing simple character substitutions that are guaranteed to map ASCII to ASCII, convert to a byte vector `let mut bytes = input.as_bytes().to_vec();`, mutate the bytes in place, and reconstruct the string safely using `unsafe { String::from_utf8_unchecked(bytes) }`.
