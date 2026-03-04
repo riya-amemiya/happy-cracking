@@ -59,7 +59,11 @@ pub fn encrypt(input: &str, a: i32, b: i32) -> Result<String> {
     let mut bytes = input.as_bytes().to_vec();
     for byte in &mut bytes {
         if byte.is_ascii_alphabetic() {
-            let base = if byte.is_ascii_uppercase() { b'A' } else { b'a' };
+            let base = if byte.is_ascii_uppercase() {
+                b'A'
+            } else {
+                b'a'
+            };
             let x = (*byte - base) as i32;
             let encrypted = ((a * x + b) % 26 + 26) % 26;
             *byte = encrypted as u8 + base;
@@ -77,7 +81,11 @@ pub fn decrypt(input: &str, a: i32, b: i32) -> Result<String> {
     let mut bytes = input.as_bytes().to_vec();
     for byte in &mut bytes {
         if byte.is_ascii_alphabetic() {
-            let base = if byte.is_ascii_uppercase() { b'A' } else { b'a' };
+            let base = if byte.is_ascii_uppercase() {
+                b'A'
+            } else {
+                b'a'
+            };
             let y = (*byte - base) as i32;
             let decrypted = ((a_inv * (y - b)) % 26 + 26) % 26;
             *byte = decrypted as u8 + base;
