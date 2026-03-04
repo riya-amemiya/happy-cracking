@@ -82,18 +82,16 @@ fn validate_alphabet(alphabet: &str) -> Result<[u8; 26]> {
 
 pub fn encode(input: &str, alphabet: &str) -> Result<String> {
     let mapping = validate_alphabet(alphabet)?;
-    Ok(input
-        .chars()
-        .map(|c| {
-            if c.is_ascii_uppercase() {
-                mapping[(c as u8 - b'A') as usize] as char
-            } else if c.is_ascii_lowercase() {
-                (mapping[(c as u8 - b'a') as usize] - b'A' + b'a') as char
-            } else {
-                c
-            }
-        })
-        .collect())
+    let mut bytes = input.as_bytes().to_vec();
+    for b in &mut bytes {
+        if b.is_ascii_uppercase() {
+            *b = mapping[(*b - b'A') as usize];
+        } else if b.is_ascii_lowercase() {
+            *b = mapping[(*b - b'a') as usize] - b'A' + b'a';
+        }
+    }
+    // Safety: we only modify ASCII alphabetic characters to other ASCII alphabetic characters.
+    Ok(unsafe { String::from_utf8_unchecked(bytes) })
 }
 
 pub fn decode(input: &str, alphabet: &str) -> Result<String> {
@@ -102,18 +100,16 @@ pub fn decode(input: &str, alphabet: &str) -> Result<String> {
     for (i, &m) in mapping.iter().enumerate() {
         reverse[(m - b'A') as usize] = b'A' + i as u8;
     }
-    Ok(input
-        .chars()
-        .map(|c| {
-            if c.is_ascii_uppercase() {
-                reverse[(c as u8 - b'A') as usize] as char
-            } else if c.is_ascii_lowercase() {
-                (reverse[(c as u8 - b'a') as usize] - b'A' + b'a') as char
-            } else {
-                c
-            }
-        })
-        .collect())
+    let mut bytes = input.as_bytes().to_vec();
+    for b in &mut bytes {
+        if b.is_ascii_uppercase() {
+            *b = reverse[(*b - b'A') as usize];
+        } else if b.is_ascii_lowercase() {
+            *b = reverse[(*b - b'a') as usize] - b'A' + b'a';
+        }
+    }
+    // Safety: we only modify ASCII alphabetic characters to other ASCII alphabetic characters.
+    Ok(unsafe { String::from_utf8_unchecked(bytes) })
 }
 
 // English letter frequencies (A-Z) used for scoring
@@ -195,18 +191,16 @@ fn score_text(text: &str) -> f64 {
 }
 
 fn apply_key(input: &str, key: &[u8; 26]) -> String {
-    input
-        .chars()
-        .map(|c| {
-            if c.is_ascii_uppercase() {
-                key[(c as u8 - b'A') as usize] as char
-            } else if c.is_ascii_lowercase() {
-                (key[(c as u8 - b'a') as usize] - b'A' + b'a') as char
-            } else {
-                c
-            }
-        })
-        .collect()
+    let mut bytes = input.as_bytes().to_vec();
+    for b in &mut bytes {
+        if b.is_ascii_uppercase() {
+            *b = key[(*b - b'A') as usize];
+        } else if b.is_ascii_lowercase() {
+            *b = key[(*b - b'a') as usize] - b'A' + b'a';
+        }
+    }
+    // Safety: we only modify ASCII alphabetic characters to other ASCII alphabetic characters.
+    unsafe { String::from_utf8_unchecked(bytes) }
 }
 
 fn frequency_based_initial_key(input: &str) -> [u8; 26] {

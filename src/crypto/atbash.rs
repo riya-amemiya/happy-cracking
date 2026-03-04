@@ -20,16 +20,15 @@ pub fn run(action: AtbashAction) -> Result<()> {
 }
 
 pub fn transform(input: &str) -> String {
-    input
-        .chars()
-        .map(|c| {
-            if c.is_ascii_uppercase() {
-                (b'Z' - (c as u8 - b'A')) as char
-            } else if c.is_ascii_lowercase() {
-                (b'z' - (c as u8 - b'a')) as char
-            } else {
-                c
-            }
-        })
-        .collect()
+    let mut bytes = input.as_bytes().to_vec();
+    for b in &mut bytes {
+        if b.is_ascii_uppercase() {
+            *b = b'Z' - (*b - b'A');
+        } else if b.is_ascii_lowercase() {
+            *b = b'z' - (*b - b'a');
+        }
+    }
+    // Safety: we only modify ASCII alphabetic characters to other ASCII alphabetic characters.
+    // Therefore, any valid UTF-8 sequences are preserved correctly.
+    unsafe { String::from_utf8_unchecked(bytes) }
 }
