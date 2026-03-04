@@ -87,14 +87,76 @@ happy-cracking/
 │       └── strtools.rs   # String tools (reverse, ord, chr)
 │
 ├── tests/                # Integration tests
-│   ├── ec_dos.rs         # Regression test for EC DoS
+│   ├── a1z26_test.rs # Integration tests
+│   ├── adfgvx_test.rs # Integration tests
+│   ├── aes_cipher_test.rs # Integration tests
+│   ├── affine_test.rs # Integration tests
+│   ├── atbash_test.rs # Integration tests
+│   ├── autodecode_test.rs # Integration tests
+│   ├── baconian_test.rs # Integration tests
+│   ├── base32_test.rs # Integration tests
+│   ├── base58_test.rs # Integration tests
+│   ├── base62_test.rs # Integration tests
+│   ├── base64_test.rs # Integration tests
+│   ├── base85_test.rs # Integration tests
+│   ├── base91_test.rs # Integration tests
+│   ├── baudot_test.rs # Integration tests
+│   ├── beaufort_test.rs # Integration tests
+│   ├── bifid_test.rs # Integration tests
+│   ├── binary_test.rs # Integration tests
+│   ├── bitrot_test.rs # Integration tests
+│   ├── braille_test.rs # Integration tests
+│   ├── chain_test.rs # Integration tests
+│   ├── columnar_test.rs # Integration tests
+│   ├── crc32_forge_test.rs # Integration tests
+│   ├── crc32_test.rs # Integration tests
+│   ├── des_cipher_test.rs # Integration tests
+│   ├── dh_test.rs    # Integration tests
+│   ├── ec_dos.rs     # Regression test for EC DoS
 │   ├── ec_security_test.rs # Security tests for Elliptic Curve
+│   ├── ec_test.rs    # Integration tests
+│   ├── entropy_test.rs # Integration tests
+│   ├── foursquare_test.rs # Integration tests
+│   ├── frequency_chi_ioc_test.rs # Integration tests
+│   ├── frequency_test.rs # Integration tests
+│   ├── gronsfeld_test.rs # Integration tests
+│   ├── hash_ext_test.rs # Integration tests
+│   ├── hash_test.rs  # Integration tests
+│   ├── hashid_test.rs # Integration tests
+│   ├── hex_test.rs   # Integration tests
+│   ├── hexdump_test.rs # Integration tests
+│   ├── hill_test.rs  # Integration tests
+│   ├── hmac_test.rs  # Integration tests
+│   ├── jwt_test.rs   # Integration tests
 │   ├── mathtools_security_test.rs # Math security tests
-│   ├── primes_dos.rs     # Regression test for Pollard's Rho DoS
-│   ├── railfence_dos.rs  # Regression test for Rail Fence DoS
+│   ├── mathtools_test.rs # Integration tests
+│   ├── morse_test.rs # Integration tests
+│   ├── nato_test.rs  # Integration tests
+│   ├── numbersys_test.rs # Integration tests
+│   ├── otp_test.rs   # Integration tests
+│   ├── padding_test.rs # Integration tests
+│   ├── phone_test.rs # Integration tests
+│   ├── playfair_test.rs # Integration tests
+│   ├── polybius_test.rs # Integration tests
+│   ├── primes_dos.rs # Regression test for Pollard's Rho DoS
+│   ├── primes_test.rs # Integration tests
+│   ├── railfence_dos.rs # Regression test for Rail Fence DoS
+│   ├── railfence_test.rs # Integration tests
+│   ├── rc4_test.rs   # Integration tests
+│   ├── rot_test.rs   # Integration tests
 │   ├── rsa_attacks_test.rs # RSA attacks tests
-│   ├── rsa_dos.rs        # Regression test for RSA DoS
+│   ├── rsa_dos.rs    # Regression test for RSA DoS
+│   ├── rsa_test.rs   # Integration tests
 │   ├── rsa_zero_mod_fix.rs # Regression test for RSA zero modulus
+│   ├── semaphore_test.rs # Integration tests
+│   ├── strtools_test.rs # Integration tests
+│   ├── substitution_test.rs # Integration tests
+│   ├── tapcode_test.rs # Integration tests
+│   ├── url_test.rs   # Integration tests
+│   ├── vigenere_crack_test.rs # Integration tests
+│   ├── vigenere_test.rs # Integration tests
+│   ├── xor_keylength_test.rs # Integration tests
+│   ├── xor_test.rs   # Integration tests
 │   └── ...
 │
 ├── Cargo.toml            # Project manifest (Rust 2024 edition)
