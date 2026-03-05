@@ -54,7 +54,7 @@ pub fn dump_bytes(data: &[u8]) -> String {
 
         loop {
             start_idx -= 1;
-            buf[start_idx] = hex_chars[(offset_hex & 0xf) as usize];
+            buf[start_idx] = hex_chars[offset_hex & 0xf];
             offset_hex >>= 4;
             if offset_hex == 0 && start_idx <= 8 {
                 break;
