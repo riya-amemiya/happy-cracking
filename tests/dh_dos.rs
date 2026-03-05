@@ -1,5 +1,5 @@
-use num_bigint::BigUint;
 use happy_cracking::crypto::dh;
+use num_bigint::BigUint;
 
 #[test]
 fn test_dh_bsgs_dos() {
