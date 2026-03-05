@@ -92,6 +92,11 @@ pub fn compute_shared_secret(public_key: &BigUint, a: &BigUint, p: &BigUint) -> 
     Ok(public_key.modpow(a, p))
 }
 
+// Safety limit for BSGS algorithm (approx 4 million entries in hash map).
+// Prevents OOM when users provide large prime orders.
+// 2^22 = 4,194,304.
+const MAX_BSGS_ITERATIONS: u64 = 1 << 22;
+
 // Baby-step Giant-step algorithm for computing discrete logarithm.
 // Finds x such that g^x ≡ target (mod p), where g has the given order.
 // Time and space complexity: O(sqrt(order)).
@@ -109,6 +114,13 @@ pub fn baby_step_giant_step(
     }
 
     let m = order.sqrt() + BigUint::one();
+
+    if m > BigUint::from(MAX_BSGS_ITERATIONS) {
+        anyhow::bail!(
+            "Order too large for BSGS algorithm (limit: sqrt(order) <= {})",
+            MAX_BSGS_ITERATIONS
+        );
+    }
 
     // Baby step: build table of j -> g^j mod p for j in [0, m)
     let mut table: HashMap<BigUint, BigUint> = HashMap::new();
