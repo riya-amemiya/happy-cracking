@@ -62,3 +62,8 @@
 **Vulnerability:** Pollard's Rho factorization algorithm for `u128` (up to 128-bit integers) lacked an iteration limit, causing infinite loops on hard-to-factor semiprimes.
 **Learning:** Mathematical algorithms with probabilistic runtime (like Pollard's Rho) must always have an upper bound on iterations when exposed to user input to prevent Algorithmic Complexity DoS.
 **Prevention:** Always add a safety loop counter or timeout to `while` loops in cryptographic/mathematical primitives.
+
+## 2024-03-05 - DoS via Unbounded HashMap Allocation in DH BSGS
+**Vulnerability:** The `baby_step_giant_step` implementation in `src/crypto/dh.rs` allocated a `HashMap` of size proportional to `order.sqrt()`. For huge generator orders, this caused massive iteration counts and memory exhaustion (OOM), leading to a Denial of Service.
+**Learning:** Even well-known algorithms like BSGS can become DoS vectors when processing user-controlled domain parameters (like prime group orders) without hard safety limits. Rust's `HashMap` will panic on allocation failure when memory is exhausted.
+**Prevention:** Always enforce hard maximum iteration/allocation bounds (`MAX_BSGS_ITERATIONS`) when user input dictates loop counts or collection sizes, especially in cryptographic group operations.
