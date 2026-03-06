@@ -62,3 +62,8 @@
 **Vulnerability:** Pollard's Rho factorization algorithm for `u128` (up to 128-bit integers) lacked an iteration limit, causing infinite loops on hard-to-factor semiprimes.
 **Learning:** Mathematical algorithms with probabilistic runtime (like Pollard's Rho) must always have an upper bound on iterations when exposed to user input to prevent Algorithmic Complexity DoS.
 **Prevention:** Always add a safety loop counter or timeout to `while` loops in cryptographic/mathematical primitives.
+
+## 2025-03-05 - Missing BSGS limit in DH implementation allows DoS
+**Vulnerability:** The Baby-step Giant-step (BSGS) implementation in `src/crypto/dh.rs` lacked a safety limit for its iteration count (`m`), which dynamically depended on the `order` parameter provided by the user. By passing an extremely large `order` (e.g., $2^{64}$), an attacker could exhaust memory and CPU due to allocating an excessive number of elements in a `HashMap`.
+**Learning:** In cryptography implementations, parameters defining loop bounds or dynamic allocations (such as hash maps in BSGS or similar time-memory tradeoff algorithms) must always be bounded by a hardcoded maximum (like `MAX_BSGS_ITERATIONS`), even if they rely on "expected" logical relationships like the order of a group.
+**Prevention:** Always bound dynamically computed capacities and iterations to a safe maximum using constants like `const MAX_ITERATIONS = 1 << 22;` before performing memory allocation or large loops.

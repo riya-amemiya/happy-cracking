@@ -112,6 +112,7 @@ happy-cracking/
 │   ├── crc32_test.rs # Integration tests
 │   ├── des_cipher_test.rs # Integration tests
 │   ├── dh_test.rs    # Integration tests
+│   ├── dh_dos.rs     # Regression test for DH DoS
 │   ├── ec_dos.rs     # Regression test for EC DoS
 │   ├── ec_security_test.rs # Security tests for Elliptic Curve
 │   ├── ec_test.rs    # Integration tests
