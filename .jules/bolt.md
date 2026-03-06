@@ -57,3 +57,7 @@
 ## 2026-03-02 - ASCII Substitution Overhead
 **Learning:** `chars().map().collect()` incurs high overhead for ASCII-only transformations (like Atbash, ROT, Affine) due to Unicode boundary decoding and allocations. Direct byte mutation avoids this.
 **Action:** When performing simple character substitutions that are guaranteed to map ASCII to ASCII, convert to a byte vector `let mut bytes = input.as_bytes().to_vec();`, mutate the bytes in place, and reconstruct the string safely using `unsafe { String::from_utf8_unchecked(bytes) }`.
+
+## 2026-03-03 - format! Overhead for Hex Dump Output
+**Learning:** Using `format!("{:02x}", b)` inside hot loops for hex dumping incurs significant overhead (formatting macros, dynamic allocations, dynamic dispatch). Replacing it with manual array lookup (`b"0123456789abcdef"`) and appending raw bytes using `unsafe { std::str::from_utf8_unchecked(...) }` yields a ~10x speedup.
+**Action:** Always avoid `format!` macros inside tight loops when generating simple repeating structures (like hex bytes or offsets). Instead, allocate a `String` with `with_capacity` and precompute small byte blocks manually before appending.
