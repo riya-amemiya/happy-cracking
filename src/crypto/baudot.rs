@@ -69,6 +69,14 @@ const ITA2_TABLE: &[(char, char)] = &[
 const FIGS_SHIFT: u8 = 0b11011;
 const LTRS_SHIFT: u8 = 0b11111;
 
+// Pre-computed 5-bit binary string representations of ITA2 codes
+const ITA2_BIN_TABLE: &[&str; 32] = &[
+    "00000", "00001", "00010", "00011", "00100", "00101", "00110", "00111", "01000", "01001",
+    "01010", "01011", "01100", "01101", "01110", "01111", "10000", "10001", "10010", "10011",
+    "10100", "10101", "10110", "10111", "11000", "11001", "11010", "11011", "11100", "11101",
+    "11110", "11111",
+];
+
 // Maps a character to (code, is_figure) for O(1) encode lookups
 static CHAR_TO_CODE: LazyLock<HashMap<char, (u8, bool)>> = LazyLock::new(|| {
     let mut map = HashMap::new();
@@ -93,23 +101,32 @@ pub fn encode(input: &str) -> Result<String> {
     }
 
     let upper = input.to_uppercase();
-    let mut codes: Vec<String> = Vec::new();
+    let mut out = String::with_capacity(input.len() * 6);
     let mut in_figures = false;
 
     for c in upper.chars() {
         if let Some(&(code, is_figure)) = CHAR_TO_CODE.get(&c) {
             if is_figure && !in_figures {
-                codes.push(format!("{:05b}", FIGS_SHIFT));
+                if !out.is_empty() {
+                    out.push(' ');
+                }
+                out.push_str(ITA2_BIN_TABLE[FIGS_SHIFT as usize]);
                 in_figures = true;
             } else if !is_figure && in_figures && c != ' ' {
-                codes.push(format!("{:05b}", LTRS_SHIFT));
+                if !out.is_empty() {
+                    out.push(' ');
+                }
+                out.push_str(ITA2_BIN_TABLE[LTRS_SHIFT as usize]);
                 in_figures = false;
             }
-            codes.push(format!("{:05b}", code));
+            if !out.is_empty() {
+                out.push(' ');
+            }
+            out.push_str(ITA2_BIN_TABLE[code as usize]);
         }
     }
 
-    Ok(codes.join(" "))
+    Ok(out)
 }
 
 pub fn decode(input: &str) -> Result<String> {

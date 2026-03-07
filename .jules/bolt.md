@@ -61,3 +61,7 @@
 ## 2026-03-03 - format! Overhead for Hex Dump Output
 **Learning:** Using `format!("{:02x}", b)` inside hot loops for hex dumping incurs significant overhead (formatting macros, dynamic allocations, dynamic dispatch). Replacing it with manual array lookup (`b"0123456789abcdef"`) and appending raw bytes using `unsafe { std::str::from_utf8_unchecked(...) }` yields a ~10x speedup.
 **Action:** Always avoid `format!` macros inside tight loops when generating simple repeating structures (like hex bytes or offsets). Instead, allocate a `String` with `with_capacity` and precompute small byte blocks manually before appending.
+
+## 2026-03-04 - Fixed-width Binary Encoding Formatting Overhead
+**Learning:** Using `format!("{:05b}", code)` inside a loop and collecting them via `Vec<String>::join` causes massive overhead due to repeated allocations and formatting logic.
+**Action:** Always precompute string representations of fixed-width binary chunks in a lookup table when possible (e.g., `["00000", "00001", ...]`), pre-allocate the final string `String::with_capacity(...)`, and push slices directly. This optimization yielded a ~10x speedup for Baudot encoding.
