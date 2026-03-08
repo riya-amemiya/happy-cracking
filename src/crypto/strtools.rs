@@ -42,11 +42,42 @@ pub fn reverse(input: &str) -> String {
 
 // Return each character with its code point in "A=65 B=66" format.
 pub fn ord(input: &str) -> String {
-    input
-        .chars()
-        .map(|c| format!("{}={}", c, c as u32))
-        .collect::<Vec<_>>()
-        .join(" ")
+    if input.is_empty() {
+        return String::new();
+    }
+
+    // Optimization: avoid format! and collect overhead by pre-allocating
+    // and manually formatting the numbers into a buffer.
+    // Each entry is max 1 char + 1 '=' + 7 digits (max u32 for char is 1114111) + 1 space = 10 chars.
+    let mut out = String::with_capacity(input.len() * 10);
+    let mut first = true;
+
+    for c in input.chars() {
+        if !first {
+            out.push(' ');
+        }
+        first = false;
+
+        out.push(c);
+        out.push('=');
+
+        let mut n = c as u32;
+        if n == 0 {
+            out.push('0');
+        } else {
+            let mut buf = [0u8; 10];
+            let mut i = 10;
+            while n > 0 {
+                i -= 1;
+                buf[i] = (n % 10) as u8 + b'0';
+                n /= 10;
+            }
+            // SAFETY: buf only contains ascii digits b'0'..=b'9'
+            out.push_str(unsafe { std::str::from_utf8_unchecked(&buf[i..]) });
+        }
+    }
+
+    out
 }
 
 // Convert space-separated numeric values to a string.

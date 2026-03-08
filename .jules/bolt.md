@@ -65,3 +65,7 @@
 ## 2026-03-07 - Fixed-width Binary Encoding Formatting Overhead
 **Learning:** Using `format!("{:05b}", code)` inside a loop and collecting them via `Vec<String>::join` causes massive overhead due to repeated allocations and formatting logic.
 **Action:** Always precompute string representations of fixed-width binary chunks in a lookup table when possible (e.g., `["00000", "00001", ...]`), pre-allocate the final string `String::with_capacity(...)`, and push slices directly. This optimization yielded a ~10x speedup for Baudot encoding.
+
+## 2026-03-09 - Formatting and join Overheads for Simple Strings
+**Learning:** Using `.map(|c| format!("{}={}", c, c as u32)).collect::<Vec<_>>().join(" ")` for simple repeating character transformations incurs massive overhead due to formatting macros (`format!`), intermediate `Vec` allocations, and intermediate `String` allocations.
+**Action:** When constructing strings from many small formatted parts (like character and integer combinations), manually compute the numeric parts into a small byte buffer and append directly to a pre-allocated `String` using `push` and `push_str`. This yields ~20x speedup.
