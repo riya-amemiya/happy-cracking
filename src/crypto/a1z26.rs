@@ -28,28 +28,34 @@ pub fn run(action: A1z26Action) -> Result<()> {
 }
 
 pub fn encode(input: &str) -> String {
-    let mut result = Vec::new();
-    let mut pending_numbers: Vec<String> = Vec::new();
+    if input.is_empty() {
+        return String::new();
+    }
+
+    // Optimization: Avoid intermediate Vec<String> and .join() overhead.
+    // Pre-allocate assuming max 3 chars per letter (e.g., "26-").
+    let mut out = String::with_capacity(input.len() * 3);
+    let mut in_number_seq = false;
 
     for c in input.chars() {
         if c.is_ascii_alphabetic() {
-            let upper = c.to_ascii_uppercase();
-            let num = (upper as u8 - b'A' + 1).to_string();
-            pending_numbers.push(num);
-        } else {
-            if !pending_numbers.is_empty() {
-                result.push(pending_numbers.join("-"));
-                pending_numbers.clear();
+            if in_number_seq {
+                out.push('-');
             }
-            result.push(c.to_string());
+            let num = c.to_ascii_uppercase() as u8 - b'A' + 1;
+            if num >= 10 {
+                out.push((b'0' + (num / 10)) as char);
+                out.push((b'0' + (num % 10)) as char);
+            } else {
+                out.push((b'0' + num) as char);
+            }
+            in_number_seq = true;
+        } else {
+            in_number_seq = false;
+            out.push(c);
         }
     }
-
-    if !pending_numbers.is_empty() {
-        result.push(pending_numbers.join("-"));
-    }
-
-    result.join("")
+    out
 }
 
 fn parse_a1z26_number(s: &str) -> Result<char> {

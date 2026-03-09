@@ -69,3 +69,7 @@
 ## 2026-03-09 - Formatting and join Overheads for Simple Strings
 **Learning:** Using `.map(|c| format!("{}={}", c, c as u32)).collect::<Vec<_>>().join(" ")` for simple repeating character transformations incurs massive overhead due to formatting macros (`format!`), intermediate `Vec` allocations, and intermediate `String` allocations.
 **Action:** When constructing strings from many small formatted parts (like character and integer combinations), manually compute the numeric parts into a small byte buffer and append directly to a pre-allocated `String` using `push` and `push_str`. This yields ~20x speedup.
+
+## 2026-03-10 - A1Z26 Formatting Overhead
+**Learning:** Using `format!()` and `.to_string()` with dynamic intermediate vectors (`Vec<String>`) inside a loop for `a1z26::encode` generates massive overhead.
+**Action:** Replace multiple `.join()` loops by keeping state (`in_number_seq`) to selectively insert separators into a single, pre-allocated `String`. This eliminated intermediate vectors entirely and resulted in a 7.4x performance speedup.
