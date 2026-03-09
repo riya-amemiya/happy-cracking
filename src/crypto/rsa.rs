@@ -528,9 +528,19 @@ fn mod_pow_bigint(base: &BigInt, exp: &BigInt, modulus: &BigInt) -> Result<BigIn
     Ok(base_uint.modpow(&exp_uint, &mod_uint).to_bigint().unwrap())
 }
 
+// Maximum allowed smoothness bound B to prevent CPU Exhaustion DoS attacks.
+pub const MAX_POLLARD_P1_BOUND: u64 = 10_000_000;
+
 // Pollard's p-1 factorization.
 // Finds a factor of n when p-1 is B-smooth (all prime factors ≤ B).
 pub fn pollard_p1(n: &BigUint, b: u64) -> Result<(BigUint, BigUint)> {
+    if b > MAX_POLLARD_P1_BOUND {
+        anyhow::bail!(
+            "Smoothness bound B exceeds the maximum allowed limit of {} to prevent DoS",
+            MAX_POLLARD_P1_BOUND
+        );
+    }
+
     if n <= &BigUint::one() {
         anyhow::bail!("Cannot factorize n <= 1");
     }
