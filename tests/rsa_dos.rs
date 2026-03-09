@@ -68,3 +68,12 @@ fn test_fermat_factor_one_modulus() {
     let res = rsa::fermat_factor(&n, 100);
     assert!(res.is_err());
 }
+#[test]
+fn test_pollard_p1_dos_large_bound() {
+    let n = BigUint::from(3233u32);
+    let b = rsa::MAX_POLLARD_P1_BOUND + 1;
+    let res = rsa::pollard_p1(&n, b);
+    assert!(res.is_err());
+    let err_msg = res.unwrap_err().to_string();
+    assert!(err_msg.contains("exceeds the maximum allowed limit"));
+}
