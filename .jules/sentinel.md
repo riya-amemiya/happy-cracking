@@ -68,7 +68,7 @@
 **Learning:** In cryptography implementations, parameters defining loop bounds or dynamic allocations (such as hash maps in BSGS or similar time-memory tradeoff algorithms) must always be bounded by a hardcoded maximum (like `MAX_BSGS_ITERATIONS`), even if they rely on "expected" logical relationships like the order of a group.
 **Prevention:** Always bound dynamically computed capacities and iterations to a safe maximum using constants like `const MAX_ITERATIONS = 1 << 22;` before performing memory allocation or large loops.
 
-## 2025-03-05 - CPU Exhaustion in Pollard p-1
+## 2026-03-09 - CPU Exhaustion in Pollard p-1
 **Vulnerability:** The Pollard's p-1 factorization algorithm accepted an unbounded smoothness bound `b` from the user. Because the algorithm iterates `b` times and performs modular exponentiation in each step, an arbitrarily large `b` could lead to CPU exhaustion and Denial of Service (DoS).
 **Learning:** Mathematical algorithms with user-supplied loop bounds are prime vectors for algorithmic complexity DoS. Even if the algorithm is logically correct, unrestricted resource consumption must be prevented.
 **Prevention:** Always enforce hardcoded safety limits (`MAX_POLLARD_P1_BOUND`) on user-supplied parameters that dictate loop iterations or resource allocation.
