@@ -73,3 +73,7 @@
 ## 2026-03-10 - A1Z26 Formatting Overhead
 **Learning:** Using `format!()` and `.to_string()` with dynamic intermediate vectors (`Vec<String>`) inside a loop for `a1z26::encode` generates massive overhead.
 **Action:** Replace multiple `.join()` loops by keeping state (`in_number_seq`) to selectively insert separators into a single, pre-allocated `String`. This eliminated intermediate vectors entirely and resulted in a 7.4x performance speedup.
+
+## 2026-03-12 - Dynamic Array Initialization Overhead in Hot Loops
+**Learning:** Rebuilding small cryptographic lookup tables (e.g., CRC32 lookup tables) on every function call incurs severe performance penalties in hot paths. Even if the array is small (256 elements), the overhead of dynamic computation and allocation dramatically outweighs the operation time, adding >5x to the runtime.
+**Action:** Always precompute fixed lookup tables dynamically at runtime only once using `std::sync::LazyLock` (or `once_cell`), avoiding overhead entirely and making algorithms pure $O(n)$ where $n$ is the data length.

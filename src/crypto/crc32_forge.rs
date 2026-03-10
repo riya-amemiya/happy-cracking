@@ -1,3 +1,5 @@
+use std::sync::LazyLock;
+
 use anyhow::{Context, Result};
 use clap::Subcommand;
 
@@ -55,7 +57,7 @@ pub fn run(action: Crc32ForgeAction) -> Result<()> {
 // CRC32 polynomial (reversed, IEEE 802.3).
 const CRC32_POLY: u32 = 0xEDB88320;
 
-fn build_table() -> [u32; 256] {
+static CRC32_TABLE: LazyLock<[u32; 256]> = LazyLock::new(|| {
     let mut table = [0u32; 256];
     for i in 0..256u32 {
         let mut crc = i;
@@ -69,11 +71,20 @@ fn build_table() -> [u32; 256] {
         table[i as usize] = crc;
     }
     table
-}
+});
+
+static INV_TABLE: LazyLock<[u8; 256]> = LazyLock::new(|| {
+    let table = &*CRC32_TABLE;
+    let mut inv = [0u8; 256];
+    for (i, &entry) in table.iter().enumerate() {
+        inv[(entry >> 24) as usize] = i as u8;
+    }
+    inv
+});
 
 // Compute CRC32 checksum of a byte slice (IEEE 802.3 / ISO 3309).
 pub fn crc32_compute(data: &[u8]) -> u32 {
-    let table = build_table();
+    let table = &*CRC32_TABLE;
     let mut crc = 0xFFFF_FFFFu32;
     for &byte in data {
         let index = ((crc ^ u32::from(byte)) & 0xFF) as usize;
@@ -93,7 +104,7 @@ pub fn crc32_compute(data: &[u8]) -> u32 {
 // only affect lower bit positions, so they decouple byte-by-byte when
 // we set the reversed result equal to the known current state.
 pub fn forge_crc32(data: &[u8], target_crc: u32) -> [u8; 4] {
-    let table = build_table();
+    let table = &*CRC32_TABLE;
 
     // Compute CRC32 internal state after processing data (before final XOR).
     let mut crc_after_data = 0xFFFF_FFFFu32;
@@ -104,12 +115,7 @@ pub fn forge_crc32(data: &[u8], target_crc: u32) -> [u8; 4] {
 
     let target_state = target_crc ^ 0xFFFF_FFFF;
 
-    // Build inverse table: maps top byte of table entry back to index.
-    // CRC32 table entries have unique top bytes, so this is a bijection.
-    let mut inv = [0u8; 256];
-    for (i, &entry) in table.iter().enumerate() {
-        inv[(entry >> 24) as usize] = i as u8;
-    }
+    let inv = &*INV_TABLE;
 
     // Reverse 4 CRC steps from target_state.
     // At each level, idx = inv[state >> 24], base = (state ^ table[idx]) << 8.
