@@ -198,7 +198,7 @@ fn miller_rabin_u64(n: u64) -> bool {
     let s = d_init.trailing_zeros();
     let d = d_init >> s;
 
-    let mont = Montgomery64::new(n);
+    let mont = Montgomery64::new(n).expect("n is odd");
     let one_mont = mont.transform(1);
     let n_minus_1_mont = mont.transform(n - 1);
 
@@ -372,7 +372,7 @@ fn pollard_rho_u64(n: u64) -> u64 {
         return 2;
     }
 
-    let mont = Montgomery64::new(n);
+    let mont = Montgomery64::new(n).expect("n is odd");
     let one = mont.transform(1);
 
     // Try different constants c if the first one fails

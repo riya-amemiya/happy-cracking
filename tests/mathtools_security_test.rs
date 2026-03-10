@@ -31,3 +31,11 @@ fn test_montgomery_new_even_modulus() {
         "Modulus must be odd for Montgomery arithmetic"
     );
 }
+
+#[test]
+fn test_montgomery64_new_even_modulus() {
+    // Should return Err, not panic
+    let result = mathtools::Montgomery64::new(2);
+    assert!(result.is_err());
+    assert_eq!(result.unwrap_err().to_string(), "Modulus must be odd");
+}

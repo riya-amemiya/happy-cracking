@@ -161,7 +161,7 @@ pub fn modpow(base: u128, exp: u128, m: u128) -> Result<u128> {
 fn modpow_u64(base: u128, mut exp: u128, m: u64) -> u64 {
     // If m is odd, use Montgomery multiplication to avoid slow division in the loop
     if m % 2 != 0 {
-        let mont = Montgomery64::new(m);
+        let mont = Montgomery64::new(m).expect("m is odd");
         // We need base mod m first
         let base_val = (base % (m as u128)) as u64;
         let base_mont = mont.transform(base_val);
@@ -191,8 +191,10 @@ pub struct Montgomery64 {
 }
 
 impl Montgomery64 {
-    pub fn new(m: u64) -> Self {
-        debug_assert!(m % 2 != 0, "Modulus must be odd");
+    pub fn new(m: u64) -> Result<Self> {
+        if m % 2 == 0 {
+            anyhow::bail!("Modulus must be odd");
+        }
 
         // Calculate -m^-1 mod 2^64 using Newton's method
         // Start with 1. 2^64 has 64 bits.
@@ -209,7 +211,7 @@ impl Montgomery64 {
         let r_mod_m = (u64::MAX % m).wrapping_add(1) % m;
         let r2 = ((r_mod_m as u128 * r_mod_m as u128) % m as u128) as u64;
 
-        Self { m, m_prime, r2 }
+        Ok(Self { m, m_prime, r2 })
     }
 
     // Montgomery reduction: computes T * R^-1 mod m
