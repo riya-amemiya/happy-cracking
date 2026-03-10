@@ -72,3 +72,8 @@
 **Vulnerability:** The Pollard's p-1 factorization algorithm accepted an unbounded smoothness bound `b` from the user. Because the algorithm iterates `b` times and performs modular exponentiation in each step, an arbitrarily large `b` could lead to CPU exhaustion and Denial of Service (DoS).
 **Learning:** Mathematical algorithms with user-supplied loop bounds are prime vectors for algorithmic complexity DoS. Even if the algorithm is logically correct, unrestricted resource consumption must be prevented.
 **Prevention:** Always enforce hardcoded safety limits (`MAX_POLLARD_P1_BOUND`) on user-supplied parameters that dictate loop iterations or resource allocation.
+
+## 2026-03-10 - Montgomery64 Panics on Even Modulus
+**Vulnerability:** The `Montgomery64::new` constructor used a `debug_assert!` to check for an odd modulus. While this might avoid panics in release builds, it would cause wrong mathematical results, and any future switch to explicit panics or running in debug profiles could trigger a DoS via division-by-zero or related mathematical errors when supplied with an even modulus.
+**Learning:** `debug_assert!` is not a security boundary or input validation mechanism. It should not be used to enforce mathematical invariants on user-controlled data.
+**Prevention:** Constructor functions for mathematical primitives (like Montgomery arithmetic) should always validate inputs and return a `Result` (e.g., `Result<Self>`) when an invalid parameter (like an even modulus) is provided.
