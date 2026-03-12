@@ -77,3 +77,7 @@
 ## 2026-03-12 - Dynamic Array Initialization Overhead in Hot Loops
 **Learning:** Rebuilding small cryptographic lookup tables (e.g., CRC32 lookup tables) on every function call incurs severe performance penalties in hot paths. Even if the array is small (256 elements), the overhead of dynamic computation and allocation dramatically outweighs the operation time, adding >5x to the runtime.
 **Action:** Always precompute fixed lookup tables dynamically at runtime only once using `std::sync::LazyLock` (or `once_cell`), avoiding overhead entirely and making algorithms pure $O(n)$ where $n$ is the data length.
+
+## 2026-03-12 - Polybius format! and Vec overhead
+**Learning:** Using `format!("{}{}", row, col)` inside an iterator loop to construct strings for polybius encoding, and `.collect::<Vec<_>>().join(" ")` introduces massive overhead. Similarly, creating temporary vectors like `Vec<usize>` inside decryption loops causes unnecessary allocations.
+**Action:** Always pre-allocate a single byte array (`Vec<u8>` or `String::with_capacity()`), compute characters manually, and reconstruct the string safely avoiding `format!` macro overhead. Also avoid generating intermediate vectors in parsing loops when token bytes can be read directly.

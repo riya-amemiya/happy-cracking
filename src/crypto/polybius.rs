@@ -33,26 +33,40 @@ const GRID: [char; 25] = [
     'U', 'V', 'W', 'X', 'Y', 'Z',
 ];
 
-fn char_to_position(c: char) -> Option<(usize, usize)> {
-    let c = if c == 'J' { 'I' } else { c };
-    GRID.iter()
-        .position(|&g| g == c)
-        .map(|idx| (idx / 5 + 1, idx % 5 + 1))
-}
-
 pub fn encrypt(input: &str) -> Result<String> {
-    let pairs: Vec<String> = input
-        .to_uppercase()
-        .chars()
-        .filter(|c| c.is_ascii_uppercase())
-        .filter_map(|c| char_to_position(c).map(|(row, col)| format!("{}{}", row, col)))
-        .collect();
+    // Optimization: Avoid `format!` overhead in hot loop and `Vec<String>::join`
+    let mut bytes = Vec::with_capacity(input.len() * 3);
 
-    if pairs.is_empty() && input.chars().any(|c| c.is_ascii_alphabetic()) {
+    for b in input.bytes() {
+        if !b.is_ascii_alphabetic() {
+            continue;
+        }
+
+        let mut b = b.to_ascii_uppercase();
+        if b == b'J' { b = b'I'; }
+
+        let idx = b - b'A';
+        let (row, col) = match b {
+            b'A'..=b'I' => (idx / 5 + 1, idx % 5 + 1),
+            b'K'..=b'Z' => {
+                let shifted_idx = idx - 1; // Since J is skipped
+                (shifted_idx / 5 + 1, shifted_idx % 5 + 1)
+            },
+            _ => continue
+        };
+
+        if !bytes.is_empty() {
+            bytes.push(b' ');
+        }
+        bytes.push(b'0' + row);
+        bytes.push(b'0' + col);
+    }
+
+    if bytes.is_empty() && input.chars().any(|c| c.is_ascii_alphabetic()) {
         anyhow::bail!("Failed to encrypt input");
     }
 
-    Ok(pairs.join(" "))
+    Ok(unsafe { String::from_utf8_unchecked(bytes) })
 }
 
 pub fn decrypt(input: &str) -> Result<String> {
@@ -60,27 +74,26 @@ pub fn decrypt(input: &str) -> Result<String> {
         return Ok(String::new());
     }
 
-    let mut result = String::new();
+    // Optimization: Avoid dynamic allocations in loop by working with bytes directly
+    let mut result = String::with_capacity(input.len() / 3);
     for token in input.split_whitespace() {
-        if token.len() != 2 {
+        let bytes = token.as_bytes();
+        if bytes.len() != 2 {
             anyhow::bail!("Invalid Polybius pair: {}", token);
         }
 
-        let digits: Vec<usize> = token
-            .chars()
-            .map(|c| {
-                c.to_digit(10)
-                    .map(|d| d as usize)
-                    .ok_or_else(|| anyhow::anyhow!("Invalid digit in pair: {}", token))
-            })
-            .collect::<Result<Vec<_>>>()?;
+        let r_byte = bytes[0];
+        let c_byte = bytes[1];
 
-        let row = digits[0];
-        let col = digits[1];
-
-        if !(1..=5).contains(&row) || !(1..=5).contains(&col) {
+        if !(b'1'..=b'5').contains(&r_byte) || !(b'1'..=b'5').contains(&c_byte) {
+            if !r_byte.is_ascii_digit() || !c_byte.is_ascii_digit() {
+                anyhow::bail!("Invalid digit in pair: {}", token);
+            }
             anyhow::bail!("Polybius coordinates out of range (1-5): {}", token);
         }
+
+        let row = (r_byte - b'0') as usize;
+        let col = (c_byte - b'0') as usize;
 
         let idx = (row - 1) * 5 + (col - 1);
         result.push(GRID[idx]);
