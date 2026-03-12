@@ -43,7 +43,9 @@ pub fn encrypt(input: &str) -> Result<String> {
         }
 
         let mut b = b.to_ascii_uppercase();
-        if b == b'J' { b = b'I'; }
+        if b == b'J' {
+            b = b'I';
+        }
 
         let idx = b - b'A';
         let (row, col) = match b {
@@ -51,8 +53,8 @@ pub fn encrypt(input: &str) -> Result<String> {
             b'K'..=b'Z' => {
                 let shifted_idx = idx - 1; // Since J is skipped
                 (shifted_idx / 5 + 1, shifted_idx % 5 + 1)
-            },
-            _ => continue
+            }
+            _ => continue,
         };
 
         if !bytes.is_empty() {
