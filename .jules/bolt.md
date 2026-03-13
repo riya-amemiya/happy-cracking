@@ -77,3 +77,7 @@
 ## 2026-03-12 - Dynamic Array Initialization Overhead in Hot Loops
 **Learning:** Rebuilding small cryptographic lookup tables (e.g., CRC32 lookup tables) on every function call incurs severe performance penalties in hot paths. Even if the array is small (256 elements), the overhead of dynamic computation and allocation dramatically outweighs the operation time, adding >5x to the runtime.
 **Action:** Always precompute fixed lookup tables dynamically at runtime only once using `std::sync::LazyLock` (or `once_cell`), avoiding overhead entirely and making algorithms pure $O(n)$ where $n$ is the data length.
+
+## 2025-01-28 - Optimizing grid lookups and string allocation in Polybius cipher
+**Learning:** For algorithms mapping characters to fixed 2D grids (like the Polybius square), doing a linear search on an array `[char; 25]` inside a tight loop causes significant lookup overhead. By using the natural ordering of ASCII bytes, this can be transformed into a direct O(1) mathematical calculation. Furthermore, dynamically building strings per character and joining them leads to unnecessary intermediate vector and string allocations.
+**Action:** Replace `array.iter().position(...)` with ASCII byte arithmetic (e.g. `(b - b'A')`) for alphabetical grid lookups. Pre-allocate the full required `String` capacity upfront and push manually calculated ASCII digit chars into it directly to avoid multiple allocations and `format!` overhead.

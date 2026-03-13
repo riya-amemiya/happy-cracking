@@ -34,25 +34,53 @@ const GRID: [char; 25] = [
 ];
 
 fn char_to_position(c: char) -> Option<(usize, usize)> {
-    let c = if c == 'J' { 'I' } else { c };
-    GRID.iter()
-        .position(|&g| g == c)
-        .map(|idx| (idx / 5 + 1, idx % 5 + 1))
+    if !c.is_ascii_uppercase() {
+        return None;
+    }
+    let b = c as u8;
+
+    // Optimization: Calculate grid index using direct byte arithmetic instead of
+    // linear array search over GRID to eliminate lookup overhead.
+    let idx = match b {
+        b'A'..=b'I' => (b - b'A') as usize,
+        b'J' => (b'I' - b'A') as usize, // J merged with I
+        b'K'..=b'Z' => (b - b'A' - 1) as usize, // Shifted by 1 due to missing J
+        _ => return None,
+    };
+
+    Some((idx / 5 + 1, idx % 5 + 1))
 }
 
 pub fn encrypt(input: &str) -> Result<String> {
-    let pairs: Vec<String> = input
-        .to_uppercase()
-        .chars()
-        .filter(|c| c.is_ascii_uppercase())
-        .filter_map(|c| char_to_position(c).map(|(row, col)| format!("{}{}", row, col)))
-        .collect();
+    // Optimization: Pre-allocate String to prevent multiple dynamic allocations.
+    // Each character produces "RC " (3 bytes).
+    let mut result = String::with_capacity(input.len() * 3);
+    let mut encrypted_count = 0;
 
-    if pairs.is_empty() && input.chars().any(|c| c.is_ascii_alphabetic()) {
+    // Optimization: Process by bytes to bypass multi-byte unicode decoding overhead.
+    // ASCII alphabetic check inherently skips non-ASCII UTF-8 sequences safely.
+    for b in input.bytes() {
+        if b.is_ascii_alphabetic() {
+            let upper_c = b.to_ascii_uppercase() as char;
+            if let Some((row, col)) = char_to_position(upper_c) {
+                // Optimization: use unsafe and manual push rather than format! inside hot loop.
+                result.push((b'0' + row as u8) as char);
+                result.push((b'0' + col as u8) as char);
+                result.push(' ');
+                encrypted_count += 1;
+            }
+        }
+    }
+
+    if encrypted_count == 0 && input.bytes().any(|b| b.is_ascii_alphabetic()) {
         anyhow::bail!("Failed to encrypt input");
     }
 
-    Ok(pairs.join(" "))
+    if !result.is_empty() {
+        result.pop(); // Remove the trailing space
+    }
+
+    Ok(result)
 }
 
 pub fn decrypt(input: &str) -> Result<String> {
@@ -60,23 +88,24 @@ pub fn decrypt(input: &str) -> Result<String> {
         return Ok(String::new());
     }
 
-    let mut result = String::new();
+    let mut result = String::with_capacity(input.len() / 3 + 1);
+
+    // Optimization: Avoid allocating temporary Vectors for parsed digits.
+    // Process input token's bytes directly and do simple ascii byte arithmetic.
     for token in input.split_whitespace() {
         if token.len() != 2 {
             anyhow::bail!("Invalid Polybius pair: {}", token);
         }
 
-        let digits: Vec<usize> = token
-            .chars()
-            .map(|c| {
-                c.to_digit(10)
-                    .map(|d| d as usize)
-                    .ok_or_else(|| anyhow::anyhow!("Invalid digit in pair: {}", token))
-            })
-            .collect::<Result<Vec<_>>>()?;
+        let b_row = token.as_bytes()[0];
+        let b_col = token.as_bytes()[1];
 
-        let row = digits[0];
-        let col = digits[1];
+        if !b_row.is_ascii_digit() || !b_col.is_ascii_digit() {
+             anyhow::bail!("Invalid digit in pair: {}", token);
+        }
+
+        let row = (b_row - b'0') as usize;
+        let col = (b_col - b'0') as usize;
 
         if !(1..=5).contains(&row) || !(1..=5).contains(&col) {
             anyhow::bail!("Polybius coordinates out of range (1-5): {}", token);
