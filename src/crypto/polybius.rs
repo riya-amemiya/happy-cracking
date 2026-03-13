@@ -43,7 +43,7 @@ fn char_to_position(c: char) -> Option<(usize, usize)> {
     // linear array search over GRID to eliminate lookup overhead.
     let idx = match b {
         b'A'..=b'I' => (b - b'A') as usize,
-        b'J' => (b'I' - b'A') as usize, // J merged with I
+        b'J' => (b'I' - b'A') as usize,         // J merged with I
         b'K'..=b'Z' => (b - b'A' - 1) as usize, // Shifted by 1 due to missing J
         _ => return None,
     };
@@ -101,7 +101,7 @@ pub fn decrypt(input: &str) -> Result<String> {
         let b_col = token.as_bytes()[1];
 
         if !b_row.is_ascii_digit() || !b_col.is_ascii_digit() {
-             anyhow::bail!("Invalid digit in pair: {}", token);
+            anyhow::bail!("Invalid digit in pair: {}", token);
         }
 
         let row = (b_row - b'0') as usize;
