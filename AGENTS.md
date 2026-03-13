@@ -157,8 +157,7 @@ happy-cracking/
 │   ├── vigenere_crack_test.rs # Integration tests
 │   ├── vigenere_test.rs # Integration tests
 │   ├── xor_keylength_test.rs # Integration tests
-│   ├── xor_test.rs   # Integration tests
-│   └── ...
+│   └── xor_test.rs   # Integration tests
 │
 ├── Cargo.toml            # Project manifest (Rust 2024 edition)
 ├── Cargo.lock            # Dependency lock file
