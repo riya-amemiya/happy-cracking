@@ -54,11 +54,7 @@ pub fn encode(input: &str) -> String {
                     b = b'C';
                 }
 
-                let idx = if b >= b'L' {
-                    b - b'A' - 1
-                } else {
-                    b - b'A'
-                };
+                let idx = if b >= b'L' { b - b'A' - 1 } else { b - b'A' };
 
                 let row = (idx / 5 + 1) as usize;
                 let col = (idx % 5 + 1) as usize;
