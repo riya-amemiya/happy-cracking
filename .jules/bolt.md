@@ -81,3 +81,6 @@
 ## 2026-03-12 - Polybius format! and Vec overhead
 **Learning:** Using `format!("{}{}", row, col)` inside an iterator loop to construct strings for polybius encoding, and `.collect::<Vec<_>>().join(" ")` introduces massive overhead. Similarly, creating temporary vectors like `Vec<usize>` inside decryption loops causes unnecessary allocations.
 **Action:** Always pre-allocate a single byte array (`Vec<u8>` or `String::with_capacity()`), compute characters manually, and reconstruct the string safely avoiding `format!` macro overhead. Also avoid generating intermediate vectors in parsing loops when token bytes can be read directly.
+## 2026-03-12 - Format and Join Overhead in Tapcode Encoding
+**Learning:** Using `format!()` inside iterator loops to construct strings for dot sequences, combined with `.collect::<Vec<_>>().join(" ")` causes immense overhead (~20x slowdown) due to multiple allocations and format parsing.
+**Action:** When creating fixed repeating string structures, always pre-allocate a single `String` buffer and manually compute and push characters or slices instead of relying on `format!` and iterator combinations.

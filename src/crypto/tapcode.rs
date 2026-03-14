@@ -33,30 +33,58 @@ const GRID: [char; 25] = [
     'U', 'V', 'W', 'X', 'Y', 'Z',
 ];
 
-fn char_to_taps(c: char) -> Option<(usize, usize)> {
-    let c = if c == 'K' { 'C' } else { c };
-    GRID.iter()
-        .position(|&g| g == c)
-        .map(|idx| (idx / 5 + 1, idx % 5 + 1))
-}
-
-fn taps_to_dots(row: usize, col: usize) -> String {
-    format!("{} {}", ".".repeat(row), ".".repeat(col))
-}
-
 pub fn encode(input: &str) -> String {
-    input
-        .to_uppercase()
-        .split_whitespace()
-        .map(|word| {
-            word.chars()
-                .filter(|c| c.is_ascii_alphabetic())
-                .filter_map(|c| char_to_taps(c).map(|(row, col)| taps_to_dots(row, col)))
-                .collect::<Vec<_>>()
-                .join("   ")
-        })
-        .collect::<Vec<_>>()
-        .join(" / ")
+    if input.is_empty() {
+        return String::new();
+    }
+
+    // Optimization: Pre-allocate output buffer, manually construct dots
+    // and avoid intermediate String/Vec allocations + format! + join
+    let mut out = String::with_capacity(input.len() * 15);
+    let mut first_word = true;
+
+    for word in input.split_whitespace() {
+        let mut word_str = String::new();
+        let mut first_char = true;
+
+        for c in word.chars() {
+            if c.is_ascii_alphabetic() {
+                let mut b = c.to_ascii_uppercase() as u8;
+                if b == b'K' {
+                    b = b'C';
+                }
+
+                let idx = if b >= b'L' {
+                    b - b'A' - 1
+                } else {
+                    b - b'A'
+                };
+
+                let row = (idx / 5 + 1) as usize;
+                let col = (idx % 5 + 1) as usize;
+
+                if !first_char {
+                    word_str.push_str("   ");
+                }
+                first_char = false;
+
+                for _ in 0..row {
+                    word_str.push('.');
+                }
+                word_str.push(' ');
+                for _ in 0..col {
+                    word_str.push('.');
+                }
+            }
+        }
+
+        if !first_word {
+            out.push_str(" / ");
+        }
+        first_word = false;
+        out.push_str(&word_str);
+    }
+    out
 }
 
 pub fn decode(input: &str) -> Result<String> {
