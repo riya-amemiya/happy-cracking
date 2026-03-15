@@ -1,6 +1,5 @@
 use anyhow::Result;
 use clap::Subcommand;
-use std::collections::HashMap;
 use std::sync::LazyLock;
 
 #[derive(Subcommand)]
@@ -41,79 +40,96 @@ const KEYPAD: &[(char, &[char])] = &[
     ('9', &['W', 'X', 'Y', 'Z']),
 ];
 
-// Maps char -> (digit, position), e.g. 'A' -> ('2', 0), 'B' -> ('2', 1)
-static CHAR_TO_KEY: LazyLock<HashMap<char, (char, usize)>> = LazyLock::new(|| {
-    let mut map = HashMap::new();
+// Maps char -> (digit, position), e.g. 'A' -> (b'2', 0), 'B' -> (b'2', 1)
+// We use a fixed size array mapping from A-Z (0-25) to avoid HashMap overhead
+static CHAR_TO_KEY: LazyLock<[(u8, usize); 26]> = LazyLock::new(|| {
+    let mut map = [(0, 0); 26];
     for &(digit, letters) in KEYPAD {
         for (pos, &letter) in letters.iter().enumerate() {
-            map.insert(letter, (digit, pos));
+            let idx = (letter as u8 - b'A') as usize;
+            map[idx] = (digit as u8, pos);
         }
     }
     map
 });
 
-// Maps (digit, press_count) -> char, e.g. ('2', 1) -> 'A', ('2', 2) -> 'B'
-static KEY_TO_CHAR: LazyLock<HashMap<(char, usize), char>> = LazyLock::new(|| {
-    let mut map = HashMap::new();
-    for &(digit, letters) in KEYPAD {
-        for (pos, &letter) in letters.iter().enumerate() {
-            map.insert((digit, pos + 1), letter);
-        }
+fn push_char_presses(c: char, out: &mut String) -> Option<()> {
+    if !c.is_ascii_uppercase() {
+        return None;
     }
-    map
-});
-
-fn char_to_presses(c: char) -> Option<String> {
-    CHAR_TO_KEY
-        .get(&c)
-        .map(|&(digit, pos)| digit.to_string().repeat(pos + 1))
+    let idx = (c as u8 - b'A') as usize;
+    let (digit, pos) = CHAR_TO_KEY[idx];
+    if digit == 0 {
+        return None;
+    }
+    let d = digit as char;
+    for _ in 0..=pos {
+        out.push(d);
+    }
+    Some(())
 }
 
 fn key_for_char(c: char) -> Option<char> {
-    CHAR_TO_KEY.get(&c).map(|&(digit, _)| digit)
+    if !c.is_ascii_uppercase() {
+        return None;
+    }
+    let idx = (c as u8 - b'A') as usize;
+    let digit = CHAR_TO_KEY[idx].0;
+    if digit == 0 {
+        return None;
+    }
+    Some(digit as char)
 }
 
-pub fn encode(input: &str) -> String {
-    let upper = input.to_uppercase();
-    let mut groups: Vec<String> = Vec::new();
-    let mut prev_key: Option<char> = None;
-    let mut current_group: Vec<String> = Vec::new();
+// Maps (digit - '0', press_count) -> char. Max digit is '9' (index 9), max presses 4 (index 4)
+// We use an array rather than HashMap to avoid allocation and hashing overhead
+static KEY_TO_CHAR: LazyLock<[[char; 5]; 10]> = LazyLock::new(|| {
+    let mut map = [['\0'; 5]; 10];
+    for &(digit, letters) in KEYPAD {
+        let d_idx = (digit as u8 - b'0') as usize;
+        for (pos, &letter) in letters.iter().enumerate() {
+            map[d_idx][pos + 1] = letter;
+        }
+    }
+    map
+});
 
-    for c in upper.chars() {
-        if c == ' ' {
-            if !current_group.is_empty() {
-                groups.push(current_group.join("-"));
-                current_group.clear();
+// Optimization: Pre-allocate the exact string capacity needed to avoid multiple allocations.
+pub fn encode(input: &str) -> String {
+    let mut out = String::with_capacity(input.len() * 4);
+    let mut prev_key: Option<char> = None;
+
+    // Optimization: Filter at the byte level to avoid Unicode boundary decoding overhead
+    for &b in input.as_bytes() {
+        if b == b' ' {
+            if !out.is_empty() {
+                out.push(' ');
             }
-            groups.push("0".to_string());
+            out.push('0');
             prev_key = None;
             continue;
         }
 
-        if !c.is_ascii_alphabetic() {
+        if !b.is_ascii_alphabetic() {
             continue;
         }
 
-        let cur_key = key_for_char(c);
-        if let Some(presses) = char_to_presses(c) {
-            if prev_key.is_some() && prev_key == cur_key {
-                current_group.push(presses);
-            } else {
-                if !current_group.is_empty() {
-                    groups.push(current_group.join("-"));
-                    current_group.clear();
+        let upper_c = b.to_ascii_uppercase() as char;
+        let cur_key = key_for_char(upper_c);
+        if cur_key.is_some() {
+            if !out.is_empty() && out.ends_with(|ch| ch != ' ') {
+                if prev_key.is_some() && prev_key == cur_key {
+                    out.push('-');
+                } else {
+                    out.push(' ');
                 }
-                current_group.push(presses);
             }
+            push_char_presses(upper_c, &mut out);
             prev_key = cur_key;
         }
     }
 
-    if !current_group.is_empty() {
-        groups.push(current_group.join("-"));
-    }
-
-    groups.join(" ")
+    out
 }
 
 fn presses_to_char(s: &str) -> Result<char> {
@@ -121,21 +137,28 @@ fn presses_to_char(s: &str) -> Result<char> {
         anyhow::bail!("Empty press sequence");
     }
 
-    let digit = s.chars().next().unwrap();
-    if !s.chars().all(|c| c == digit) {
+    let bytes = s.as_bytes();
+    let digit = bytes[0];
+    if !bytes.iter().all(|&b| b == digit) {
         anyhow::bail!("Mixed digits in press sequence: {}", s);
     }
 
-    let count = s.len();
+    let count = bytes.len();
 
-    if digit == '0' {
+    if digit == b'0' {
         return Ok(' ');
     }
 
-    KEY_TO_CHAR
-        .get(&(digit, count))
-        .copied()
-        .ok_or_else(|| anyhow::anyhow!("Invalid press count {} for key {}", count, digit))
+    if !digit.is_ascii_digit() || count > 4 {
+         anyhow::bail!("Invalid press count {} for key {}", count, digit as char);
+    }
+
+    let ch = KEY_TO_CHAR[(digit - b'0') as usize][count];
+    if ch == '\0' {
+        anyhow::bail!("Invalid press count {} for key {}", count, digit as char);
+    }
+
+    Ok(ch)
 }
 
 pub fn decode(input: &str) -> Result<String> {

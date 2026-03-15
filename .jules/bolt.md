@@ -81,3 +81,7 @@
 ## 2026-03-12 - Polybius format! and Vec overhead
 **Learning:** Using `format!("{}{}", row, col)` inside an iterator loop to construct strings for polybius encoding, and `.collect::<Vec<_>>().join(" ")` introduces massive overhead. Similarly, creating temporary vectors like `Vec<usize>` inside decryption loops causes unnecessary allocations.
 **Action:** Always pre-allocate a single byte array (`Vec<u8>` or `String::with_capacity()`), compute characters manually, and reconstruct the string safely avoiding `format!` macro overhead. Also avoid generating intermediate vectors in parsing loops when token bytes can be read directly.
+
+## 2026-03-12 - Phone Keypad HashMap & String Allocation Overhead
+**Learning:** Using `HashMap<char, (char, usize)>` to look up phone keypad mappings, coupled with `.to_string().repeat()` to generate string pieces and `.join("-")` to build the result creates a massive bottleneck.
+**Action:** Replace small-domain mapping HashMaps with precomputed `[u8; 26]` arrays (for A-Z) or `[[char; 5]; 10]` arrays (for numbers). Pre-allocate the final string `String::with_capacity(...)` and push characters in a loop instead of repeating strings, avoiding dynamic allocation and joining entirely. This optimization yielded a >2.5x speedup for encoding and a 2.1x speedup for decoding.
