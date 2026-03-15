@@ -150,7 +150,7 @@ fn presses_to_char(s: &str) -> Result<char> {
     }
 
     if !digit.is_ascii_digit() || count > 4 {
-         anyhow::bail!("Invalid press count {} for key {}", count, digit as char);
+        anyhow::bail!("Invalid press count {} for key {}", count, digit as char);
     }
 
     let ch = KEY_TO_CHAR[(digit - b'0') as usize][count];
