@@ -9,160 +9,160 @@
 ```tree
 happy-cracking/
 ├── src/
-│   ├── main.rs           # CLI entry point with clap subcommands
-│   ├── lib.rs            # Library root, exposes crypto module
-│   └── crypto/           # Cryptographic operations
-│       ├── mod.rs        # Module exports
+│   ├── main.rs              # CLI entry point with clap subcommands
+│   ├── lib.rs               # Library root, exposes crypto module
+│   └── crypto/              # Cryptographic operations
+│       ├── mod.rs           # Module exports
 │       │
 │       │ # Encoding
-│       ├── a1z26.rs      # A=1, Z=26 number-letter cipher
-│       ├── base32.rs     # Base32 encode/decode
-│       ├── base58.rs     # Base58 encode/decode
-│       ├── base62.rs     # Base62 encode/decode
-│       ├── base64.rs     # Base64 encode/decode
-│       ├── base85.rs     # Base85 (ASCII85) encode/decode
-│       ├── base91.rs     # Base91 encode/decode
-│       ├── baudot.rs     # Baudot/ITA2 telegraph code
-│       ├── binary.rs     # Binary (8-bit) encode/decode
-│       ├── braille.rs    # Braille encoding
-│       ├── hex.rs        # Hex encode/decode
-│       ├── morse.rs      # Morse code encode/decode
-│       ├── nato.rs       # NATO phonetic alphabet
-│       ├── phone.rs      # Phone keypad multi-tap
-│       ├── semaphore.rs  # Flag semaphore encoding
-│       ├── tapcode.rs    # Tap code encoding
-│       ├── url.rs        # URL encode/decode (percent-encoding)
+│       ├── a1z26.rs             # A=1, Z=26 number-letter cipher
+│       ├── base32.rs            # Base32 encode/decode
+│       ├── base58.rs            # Base58 encode/decode
+│       ├── base62.rs            # Base62 encode/decode
+│       ├── base64.rs            # Base64 encode/decode
+│       ├── base85.rs            # Base85 (ASCII85) encode/decode
+│       ├── base91.rs            # Base91 encode/decode
+│       ├── baudot.rs            # Baudot/ITA2 telegraph code
+│       ├── binary.rs            # Binary (8-bit) encode/decode
+│       ├── braille.rs           # Braille encoding
+│       ├── hex.rs               # Hex encode/decode
+│       ├── morse.rs             # Morse code encode/decode
+│       ├── nato.rs              # NATO phonetic alphabet
+│       ├── phone.rs             # Phone keypad multi-tap
+│       ├── semaphore.rs         # Flag semaphore encoding
+│       ├── tapcode.rs           # Tap code encoding
+│       ├── url.rs               # URL encode/decode (percent-encoding)
 │       │
 │       │ # Classic Ciphers
-│       ├── adfgvx.rs     # ADFGVX cipher
-│       ├── aes_cipher.rs # AES-128 ECB/CBC encrypt/decrypt
-│       ├── affine.rs     # Affine cipher (ax+b mod 26)
-│       ├── atbash.rs     # Atbash cipher (A↔Z substitution)
-│       ├── baconian.rs   # Baconian cipher (5-bit A/B encoding)
-│       ├── beaufort.rs   # Beaufort cipher (self-reciprocal Vigenere variant)
-│       ├── bifid.rs      # Bifid cipher
-│       ├── caesar.rs     # Caesar cipher encrypt/decrypt/bruteforce
-│       ├── columnar.rs   # Columnar transposition cipher
-│       ├── des_cipher.rs # DES/Triple-DES encrypt/decrypt
-│       ├── foursquare.rs # Four-square cipher
-│       ├── gronsfeld.rs  # Gronsfeld cipher (numeric Vigenere)
-│       ├── hill.rs       # Hill cipher (matrix-based)
-│       ├── otp.rs        # One-time pad
-│       ├── playfair.rs   # Playfair cipher (5x5 digraph substitution)
-│       ├── polybius.rs   # Polybius square cipher
-│       ├── railfence.rs  # Rail Fence transposition cipher
-│       ├── rc4.rs        # RC4 stream cipher
-│       ├── rot.rs        # ROT13, ROT47, and generic rotation cipher
-│       ├── substitution.rs # Simple substitution cipher
-│       ├── vigenere.rs   # Vigenere polyalphabetic cipher
-│       ├── xor.rs        # XOR cipher and single-byte bruteforce
+│       ├── adfgvx.rs            # ADFGVX cipher
+│       ├── aes_cipher.rs        # AES-128 ECB/CBC encrypt/decrypt
+│       ├── affine.rs            # Affine cipher (ax+b mod 26)
+│       ├── atbash.rs            # Atbash cipher (A↔Z substitution)
+│       ├── baconian.rs          # Baconian cipher (5-bit A/B encoding)
+│       ├── beaufort.rs          # Beaufort cipher (self-reciprocal Vigenere variant)
+│       ├── bifid.rs             # Bifid cipher
+│       ├── caesar.rs            # Caesar cipher encrypt/decrypt/bruteforce
+│       ├── columnar.rs          # Columnar transposition cipher
+│       ├── des_cipher.rs        # DES/Triple-DES encrypt/decrypt
+│       ├── foursquare.rs        # Four-square cipher
+│       ├── gronsfeld.rs         # Gronsfeld cipher (numeric Vigenere)
+│       ├── hill.rs              # Hill cipher (matrix-based)
+│       ├── otp.rs               # One-time pad
+│       ├── playfair.rs          # Playfair cipher (5x5 digraph substitution)
+│       ├── polybius.rs          # Polybius square cipher
+│       ├── railfence.rs         # Rail Fence transposition cipher
+│       ├── rc4.rs               # RC4 stream cipher
+│       ├── rot.rs               # ROT13, ROT47, and generic rotation cipher
+│       ├── substitution.rs      # Simple substitution cipher
+│       ├── vigenere.rs          # Vigenere polyalphabetic cipher
+│       ├── xor.rs               # XOR cipher and single-byte bruteforce
 │       │
 │       │ # Hash / Crypto
-│       ├── crc32.rs      # CRC32 checksum
-│       ├── crc32_forge.rs # CRC32 forgery
-│       ├── hash.rs       # Generate MD5, SHA1, SHA256, SHA512
-│       ├── hash_ext.rs   # Hash length extension attack
-│       ├── hashid.rs     # Identify hash type from string
-│       ├── hmac.rs       # HMAC calculation
-│       ├── jwt.rs        # JWT decode and analysis
-│       ├── rsa.rs        # RSA utilities
+│       ├── crc32.rs             # CRC32 checksum
+│       ├── crc32_forge.rs       # CRC32 forgery
+│       ├── hash.rs              # Generate MD5, SHA1, SHA256, SHA512
+│       ├── hash_ext.rs          # Hash length extension attack
+│       ├── hashid.rs            # Identify hash type from string
+│       ├── hmac.rs              # HMAC calculation
+│       ├── jwt.rs               # JWT decode and analysis
+│       ├── rsa.rs               # RSA utilities
 │       │
 │       │ # Advanced Crypto
-│       ├── dh.rs         # Diffie-Hellman key exchange
-│       ├── ec.rs         # Elliptic curve operations
+│       ├── dh.rs                # Diffie-Hellman key exchange
+│       ├── ec.rs                # Elliptic curve operations
 │       │
 │       │ # Utilities
-│       ├── autodecode.rs # Auto-detect and decode common encodings
-│       ├── bitrot.rs     # Bit rotation operations
-│       ├── chain.rs      # Chain multiple operations (CyberChef-style)
-│       ├── entropy.rs    # Shannon entropy analysis
-│       ├── frequency.rs  # Character frequency analysis
-│       ├── hexdump.rs    # Hex dump display
-│       ├── mathtools.rs  # Number theory (GCD, modinv, modpow, Montgomery)
-│       ├── numbersys.rs  # Number base conversion (2-36)
-│       ├── padding.rs    # Padding scheme utilities
-│       ├── polybius_utils.rs # Helper for Polybius square-based ciphers
-│       ├── primes.rs     # Prime factorization and primality test
-│       ├── shared.rs     # Shared crypto utilities
-│       └── strtools.rs   # String tools (reverse, ord, chr)
+│       ├── autodecode.rs        # Auto-detect and decode common encodings
+│       ├── bitrot.rs            # Bit rotation operations
+│       ├── chain.rs             # Chain multiple operations (CyberChef-style)
+│       ├── entropy.rs           # Shannon entropy analysis
+│       ├── frequency.rs         # Character frequency analysis
+│       ├── hexdump.rs           # Hex dump display
+│       ├── mathtools.rs         # Number theory (GCD, modinv, modpow, Montgomery)
+│       ├── numbersys.rs         # Number base conversion (2-36)
+│       ├── padding.rs           # Padding scheme utilities
+│       ├── polybius_utils.rs    # Helper for Polybius square-based ciphers
+│       ├── primes.rs            # Prime factorization and primality test
+│       ├── shared.rs            # Shared crypto utilities
+│       └── strtools.rs          # String tools (reverse, ord, chr)
 │
-├── tests/                # Integration tests
-│   ├── a1z26_test.rs # Integration tests
-│   ├── adfgvx_test.rs # Integration tests
-│   ├── aes_cipher_test.rs # Integration tests
-│   ├── affine_test.rs # Integration tests
-│   ├── atbash_test.rs # Integration tests
-│   ├── autodecode_test.rs # Integration tests
-│   ├── baconian_test.rs # Integration tests
-│   ├── base32_test.rs # Integration tests
-│   ├── base58_test.rs # Integration tests
-│   ├── base62_test.rs # Integration tests
-│   ├── base64_test.rs # Integration tests
-│   ├── base85_test.rs # Integration tests
-│   ├── base91_test.rs # Integration tests
-│   ├── baudot_test.rs # Integration tests
-│   ├── beaufort_test.rs # Integration tests
-│   ├── bifid_test.rs # Integration tests
-│   ├── binary_test.rs # Integration tests
-│   ├── bitrot_test.rs # Integration tests
-│   ├── braille_test.rs # Integration tests
-│   ├── chain_test.rs # Integration tests
-│   ├── columnar_test.rs # Integration tests
-│   ├── crc32_forge_test.rs # Integration tests
-│   ├── crc32_test.rs # Integration tests
-│   ├── des_cipher_test.rs # Integration tests
-│   ├── dh_dos.rs     # Regression test for DH DoS
-│   ├── dh_test.rs    # Integration tests
-│   ├── ec_dos.rs     # Regression test for EC DoS
-│   ├── ec_security_test.rs # Security tests for Elliptic Curve
-│   ├── ec_test.rs    # Integration tests
-│   ├── entropy_test.rs # Integration tests
-│   ├── foursquare_test.rs # Integration tests
-│   ├── frequency_chi_ioc_test.rs # Integration tests
-│   ├── frequency_test.rs # Integration tests
-│   ├── gronsfeld_test.rs # Integration tests
-│   ├── hash_ext_test.rs # Integration tests
-│   ├── hash_test.rs  # Integration tests
-│   ├── hashid_test.rs # Integration tests
-│   ├── hex_test.rs   # Integration tests
-│   ├── hexdump_test.rs # Integration tests
-│   ├── hill_test.rs  # Integration tests
-│   ├── hmac_test.rs  # Integration tests
-│   ├── jwt_test.rs   # Integration tests
-│   ├── mathtools_security_test.rs # Math security tests
-│   ├── mathtools_test.rs # Integration tests
-│   ├── morse_test.rs # Integration tests
-│   ├── nato_test.rs  # Integration tests
-│   ├── numbersys_test.rs # Integration tests
-│   ├── otp_test.rs   # Integration tests
-│   ├── padding_test.rs # Integration tests
-│   ├── phone_test.rs # Integration tests
-│   ├── playfair_test.rs # Integration tests
-│   ├── polybius_test.rs # Integration tests
-│   ├── primes_dos.rs # Regression test for Pollard's Rho DoS
-│   ├── primes_test.rs # Integration tests
-│   ├── railfence_dos.rs # Regression test for Rail Fence DoS
-│   ├── railfence_test.rs # Integration tests
-│   ├── rc4_test.rs   # Integration tests
-│   ├── rot_test.rs   # Integration tests
-│   ├── rsa_attacks_test.rs # RSA attacks tests
-│   ├── rsa_dos.rs    # Regression test for RSA DoS
-│   ├── rsa_test.rs   # Integration tests
-│   ├── rsa_zero_mod_fix.rs # Regression test for RSA zero modulus
-│   ├── semaphore_test.rs # Integration tests
-│   ├── strtools_test.rs # Integration tests
-│   ├── substitution_test.rs # Integration tests
-│   ├── tapcode_test.rs # Integration tests
-│   ├── url_test.rs   # Integration tests
-│   ├── vigenere_crack_test.rs # Integration tests
-│   ├── vigenere_test.rs # Integration tests
-│   ├── xor_keylength_test.rs # Integration tests
-│   └── xor_test.rs   # Integration tests
+├── tests/                   # Integration tests
+│   ├── a1z26_test.rs                # Integration tests
+│   ├── adfgvx_test.rs               # Integration tests
+│   ├── aes_cipher_test.rs           # Integration tests
+│   ├── affine_test.rs               # Integration tests
+│   ├── atbash_test.rs               # Integration tests
+│   ├── autodecode_test.rs           # Integration tests
+│   ├── baconian_test.rs             # Integration tests
+│   ├── base32_test.rs               # Integration tests
+│   ├── base58_test.rs               # Integration tests
+│   ├── base62_test.rs               # Integration tests
+│   ├── base64_test.rs               # Integration tests
+│   ├── base85_test.rs               # Integration tests
+│   ├── base91_test.rs               # Integration tests
+│   ├── baudot_test.rs               # Integration tests
+│   ├── beaufort_test.rs             # Integration tests
+│   ├── bifid_test.rs                # Integration tests
+│   ├── binary_test.rs               # Integration tests
+│   ├── bitrot_test.rs               # Integration tests
+│   ├── braille_test.rs              # Integration tests
+│   ├── chain_test.rs                # Integration tests
+│   ├── columnar_test.rs             # Integration tests
+│   ├── crc32_forge_test.rs          # Integration tests
+│   ├── crc32_test.rs                # Integration tests
+│   ├── des_cipher_test.rs           # Integration tests
+│   ├── dh_dos.rs                    # Regression test for DH DoS
+│   ├── dh_test.rs                   # Integration tests
+│   ├── ec_dos.rs                    # Regression test for EC DoS
+│   ├── ec_security_test.rs          # Security tests for Elliptic Curve
+│   ├── ec_test.rs                   # Integration tests
+│   ├── entropy_test.rs              # Integration tests
+│   ├── foursquare_test.rs           # Integration tests
+│   ├── frequency_chi_ioc_test.rs    # Integration tests
+│   ├── frequency_test.rs            # Integration tests
+│   ├── gronsfeld_test.rs            # Integration tests
+│   ├── hash_ext_test.rs             # Integration tests
+│   ├── hash_test.rs                 # Integration tests
+│   ├── hashid_test.rs               # Integration tests
+│   ├── hex_test.rs                  # Integration tests
+│   ├── hexdump_test.rs              # Integration tests
+│   ├── hill_test.rs                 # Integration tests
+│   ├── hmac_test.rs                 # Integration tests
+│   ├── jwt_test.rs                  # Integration tests
+│   ├── mathtools_security_test.rs   # Math security tests
+│   ├── mathtools_test.rs            # Integration tests
+│   ├── morse_test.rs                # Integration tests
+│   ├── nato_test.rs                 # Integration tests
+│   ├── numbersys_test.rs            # Integration tests
+│   ├── otp_test.rs                  # Integration tests
+│   ├── padding_test.rs              # Integration tests
+│   ├── phone_test.rs                # Integration tests
+│   ├── playfair_test.rs             # Integration tests
+│   ├── polybius_test.rs             # Integration tests
+│   ├── primes_dos.rs                # Regression test for Pollard's Rho DoS
+│   ├── primes_test.rs               # Integration tests
+│   ├── railfence_dos.rs             # Regression test for Rail Fence DoS
+│   ├── railfence_test.rs            # Integration tests
+│   ├── rc4_test.rs                  # Integration tests
+│   ├── rot_test.rs                  # Integration tests
+│   ├── rsa_attacks_test.rs          # RSA attacks tests
+│   ├── rsa_dos.rs                   # Regression test for RSA DoS
+│   ├── rsa_test.rs                  # Integration tests
+│   ├── rsa_zero_mod_fix.rs          # Regression test for RSA zero modulus
+│   ├── semaphore_test.rs            # Integration tests
+│   ├── strtools_test.rs             # Integration tests
+│   ├── substitution_test.rs         # Integration tests
+│   ├── tapcode_test.rs              # Integration tests
+│   ├── url_test.rs                  # Integration tests
+│   ├── vigenere_crack_test.rs       # Integration tests
+│   ├── vigenere_test.rs             # Integration tests
+│   ├── xor_keylength_test.rs        # Integration tests
+│   └── xor_test.rs                  # Integration tests
 │
-├── Cargo.toml            # Project manifest (Rust 2024 edition)
-├── Cargo.lock            # Dependency lock file
+├── Cargo.toml               # Project manifest (Rust 2024 edition)
+├── Cargo.lock               # Dependency lock file
 └── .github/workflows/
-    └── static-check.yml  # CI pipeline
+    └── static-check.yml     # CI pipeline
 ```
 
 ## Development Commands
