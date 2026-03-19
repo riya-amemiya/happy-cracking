@@ -1,7 +1,5 @@
 use anyhow::{Context, Result};
 use clap::Subcommand;
-use std::collections::HashMap;
-use std::sync::LazyLock;
 
 #[derive(Subcommand)]
 pub enum BaudotAction {
@@ -78,22 +76,28 @@ const ITA2_BIN_TABLE: &[&str; 32] = &[
 ];
 
 // Maps a character to (code, is_figure) for O(1) encode lookups
-static CHAR_TO_CODE: LazyLock<HashMap<char, (u8, bool)>> = LazyLock::new(|| {
-    let mut map = HashMap::new();
-    for (i, &(letter, figure)) in ITA2_TABLE.iter().enumerate() {
+const CHAR_TO_CODE_ARRAY: [Option<(u8, bool)>; 128] = {
+    let mut arr = [None; 128];
+    let mut i = 0;
+    while i < ITA2_TABLE.len() {
+        let (letter, figure) = ITA2_TABLE[i];
         let code = i as u8;
-        if code == FIGS_SHIFT || code == LTRS_SHIFT {
-            continue;
+        if code != FIGS_SHIFT && code != LTRS_SHIFT {
+            if letter != '\0' {
+                if (letter as usize) < 128 && arr[letter as usize].is_none() {
+                    arr[letter as usize] = Some((code, false));
+                }
+            }
+            if figure != '\0' && figure != letter {
+                if (figure as usize) < 128 && arr[figure as usize].is_none() {
+                    arr[figure as usize] = Some((code, true));
+                }
+            }
         }
-        if letter != '\0' && !map.contains_key(&letter) {
-            map.insert(letter, (code, false));
-        }
-        if figure != '\0' && figure != letter && !map.contains_key(&figure) {
-            map.insert(figure, (code, true));
-        }
+        i += 1;
     }
-    map
-});
+    arr
+};
 
 pub fn encode(input: &str) -> Result<String> {
     if input.is_empty() {
@@ -105,24 +109,26 @@ pub fn encode(input: &str) -> Result<String> {
     let mut in_figures = false;
 
     for c in upper.chars() {
-        if let Some(&(code, is_figure)) = CHAR_TO_CODE.get(&c) {
-            if is_figure && !in_figures {
+        if (c as usize) < 128 {
+            if let Some((code, is_figure)) = CHAR_TO_CODE_ARRAY[c as usize] {
+                if is_figure && !in_figures {
+                    if !out.is_empty() {
+                        out.push(' ');
+                    }
+                    out.push_str(ITA2_BIN_TABLE[FIGS_SHIFT as usize]);
+                    in_figures = true;
+                } else if !is_figure && in_figures && c != ' ' {
+                    if !out.is_empty() {
+                        out.push(' ');
+                    }
+                    out.push_str(ITA2_BIN_TABLE[LTRS_SHIFT as usize]);
+                    in_figures = false;
+                }
                 if !out.is_empty() {
                     out.push(' ');
                 }
-                out.push_str(ITA2_BIN_TABLE[FIGS_SHIFT as usize]);
-                in_figures = true;
-            } else if !is_figure && in_figures && c != ' ' {
-                if !out.is_empty() {
-                    out.push(' ');
-                }
-                out.push_str(ITA2_BIN_TABLE[LTRS_SHIFT as usize]);
-                in_figures = false;
+                out.push_str(ITA2_BIN_TABLE[code as usize]);
             }
-            if !out.is_empty() {
-                out.push(' ');
-            }
-            out.push_str(ITA2_BIN_TABLE[code as usize]);
         }
     }
 

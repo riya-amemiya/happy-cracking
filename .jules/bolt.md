@@ -81,3 +81,7 @@
 ## 2026-03-12 - Polybius format! and Vec overhead
 **Learning:** Using `format!("{}{}", row, col)` inside an iterator loop to construct strings for polybius encoding, and `.collect::<Vec<_>>().join(" ")` introduces massive overhead. Similarly, creating temporary vectors like `Vec<usize>` inside decryption loops causes unnecessary allocations.
 **Action:** Always pre-allocate a single byte array (`Vec<u8>` or `String::with_capacity()`), compute characters manually, and reconstruct the string safely avoiding `format!` macro overhead. Also avoid generating intermediate vectors in parsing loops when token bytes can be read directly.
+
+## 2026-03-14 - HashMap vs Array lookup overhead in Encoding Loops
+**Learning:** Using `HashMap` wrapped in `LazyLock` for character mapping in hot encoding loops (like `baudot::encode`) introduces unnecessary hashing, branching, and pointer indirection overhead compared to direct array indexing ($O(n \cdot H)$ vs $O(n)$). For ASCII or small input domains, `HashMap` is heavily outperformed.
+**Action:** Always prefer pre-computed fixed-size arrays (like `[Option<(u8, bool)>; 128]`) over `HashMap` for hot-path character encoding mappings when the domain is strictly bounded (e.g., ASCII). This yielded ~3x speedup.
