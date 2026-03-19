@@ -33,7 +33,19 @@ pub fn run(action: ColumnarAction) -> Result<()> {
     Ok(())
 }
 
+// Safety limit to prevent massive memory allocation (DoS).
+// If a user provides a tiny input but a massive key (e.g. 100 million chars),
+// the padding logic would allocate 100 million 'X's.
+const MAX_KEY_LEN: usize = 1_000_000;
+
 pub fn encrypt(input: &str, key: &str) -> Result<String> {
+    if key.len() > MAX_KEY_LEN {
+        anyhow::bail!(
+            "Key exceeds maximum length of {} to prevent Denial of Service",
+            MAX_KEY_LEN
+        );
+    }
+
     if key.is_empty() || !key.chars().all(|c| c.is_ascii_alphabetic()) {
         anyhow::bail!("Key must be non-empty and contain only alphabetic characters");
     }
@@ -69,6 +81,13 @@ pub fn encrypt(input: &str, key: &str) -> Result<String> {
 }
 
 pub fn decrypt(input: &str, key: &str) -> Result<String> {
+    if key.len() > MAX_KEY_LEN {
+        anyhow::bail!(
+            "Key exceeds maximum length of {} to prevent Denial of Service",
+            MAX_KEY_LEN
+        );
+    }
+
     if key.is_empty() || !key.chars().all(|c| c.is_ascii_alphabetic()) {
         anyhow::bail!("Key must be non-empty and contain only alphabetic characters");
     }
