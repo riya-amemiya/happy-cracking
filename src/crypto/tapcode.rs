@@ -1,4 +1,4 @@
-use anyhow::{Context, Result};
+use anyhow::Result;
 use clap::Subcommand;
 
 #[derive(Subcommand)]
@@ -33,30 +33,50 @@ const GRID: [char; 25] = [
     'U', 'V', 'W', 'X', 'Y', 'Z',
 ];
 
-fn char_to_taps(c: char) -> Option<(usize, usize)> {
-    let c = if c == 'K' { 'C' } else { c };
-    GRID.iter()
-        .position(|&g| g == c)
-        .map(|idx| (idx / 5 + 1, idx % 5 + 1))
-}
-
-fn taps_to_dots(row: usize, col: usize) -> String {
-    format!("{} {}", ".".repeat(row), ".".repeat(col))
-}
+const DOTS: [&str; 6] = ["", ".", "..", "...", "....", "....."];
 
 pub fn encode(input: &str) -> String {
-    input
-        .to_uppercase()
-        .split_whitespace()
-        .map(|word| {
-            word.chars()
-                .filter(|c| c.is_ascii_alphabetic())
-                .filter_map(|c| char_to_taps(c).map(|(row, col)| taps_to_dots(row, col)))
-                .collect::<Vec<_>>()
-                .join("   ")
-        })
-        .collect::<Vec<_>>()
-        .join(" / ")
+    let mut out = String::with_capacity(input.len() * 10);
+    let mut first_word = true;
+
+    for word in input.split_whitespace() {
+        if !first_word {
+            out.push_str(" / ");
+        }
+        first_word = false;
+
+        let mut first_char = true;
+        for c in word.bytes() {
+            if !c.is_ascii_alphabetic() {
+                continue;
+            }
+            let mut b = c.to_ascii_uppercase();
+            if b == b'K' {
+                b = b'C';
+            }
+
+            let idx = b - b'A';
+            let (row, col) = match b {
+                b'A'..=b'I' => (idx / 5 + 1, idx % 5 + 1),
+                b'K'..=b'Z' => {
+                    let shifted = idx - 1;
+                    (shifted / 5 + 1, shifted % 5 + 1)
+                }
+                b'J' => (2, 5),
+                _ => continue,
+            };
+
+            if !first_char {
+                out.push_str("   ");
+            }
+            first_char = false;
+
+            out.push_str(DOTS[row as usize]);
+            out.push(' ');
+            out.push_str(DOTS[col as usize]);
+        }
+    }
+    out
 }
 
 pub fn decode(input: &str) -> Result<String> {
@@ -64,30 +84,42 @@ pub fn decode(input: &str) -> Result<String> {
         return Ok(String::new());
     }
 
-    input
-        .split(" / ")
-        .map(|word| {
-            word.split("   ")
-                .filter(|s| !s.is_empty())
-                .map(|pair| {
-                    let parts: Vec<&str> = pair.split(' ').filter(|s| !s.is_empty()).collect();
-                    if parts.len() != 2 {
-                        anyhow::bail!("Invalid tap code pair: {}", pair);
-                    }
-                    let row = parts[0].len();
-                    let col = parts[1].len();
-                    if !(1..=5).contains(&row) || !(1..=5).contains(&col) {
-                        anyhow::bail!("Tap code values out of range (1-5): {}", pair);
-                    }
-                    if !parts[0].chars().all(|c| c == '.') || !parts[1].chars().all(|c| c == '.') {
-                        anyhow::bail!("Invalid tap code characters: {}", pair);
-                    }
-                    let idx = (row - 1) * 5 + (col - 1);
-                    Ok(GRID[idx])
-                })
-                .collect::<Result<String>>()
-        })
-        .collect::<Result<Vec<_>>>()
-        .map(|words| words.join(" "))
-        .context("Failed to decode tap code")
+    let mut result = String::with_capacity(input.len() / 3);
+    let mut first_word = true;
+
+    for word in input.split(" / ") {
+        if !first_word {
+            result.push(' ');
+        }
+        first_word = false;
+
+        for pair in word.split("   ").filter(|s| !s.is_empty()) {
+            let mut parts = pair.split(' ').filter(|s| !s.is_empty());
+            let row_str = parts
+                .next()
+                .ok_or_else(|| anyhow::anyhow!("Invalid tap code pair: {}", pair))?;
+            let col_str = parts
+                .next()
+                .ok_or_else(|| anyhow::anyhow!("Invalid tap code pair: {}", pair))?;
+
+            if parts.next().is_some() {
+                anyhow::bail!("Invalid tap code pair: {}", pair);
+            }
+
+            let row = row_str.len();
+            let col = col_str.len();
+
+            if !(1..=5).contains(&row) || !(1..=5).contains(&col) {
+                anyhow::bail!("Tap code values out of range (1-5): {}", pair);
+            }
+            if !row_str.chars().all(|c| c == '.') || !col_str.chars().all(|c| c == '.') {
+                anyhow::bail!("Invalid tap code characters: {}", pair);
+            }
+
+            let idx = (row - 1) * 5 + (col - 1);
+            result.push(GRID[idx]);
+        }
+    }
+
+    Ok(result)
 }
