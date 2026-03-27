@@ -21,7 +21,7 @@ pub enum Base91Action {
 pub fn run(action: Base91Action) -> Result<()> {
     match action {
         Base91Action::Encode { input } => {
-            println!("{}", encode(&input));
+            println!("{}", encode(&input)?);
         }
         Base91Action::Decode { input } => {
             println!("{}", decode(&input)?);
@@ -30,10 +30,10 @@ pub fn run(action: Base91Action) -> Result<()> {
     Ok(())
 }
 
-pub fn encode(input: &str) -> String {
+pub fn encode(input: &str) -> Result<String> {
     let data = input.as_bytes();
     if data.is_empty() {
-        return String::new();
+        return Ok(String::new());
     }
 
     let mut result = Vec::new();
@@ -66,7 +66,7 @@ pub fn encode(input: &str) -> String {
         }
     }
 
-    String::from_utf8(result).unwrap()
+    String::from_utf8(result).context("Encoded data is not valid UTF-8")
 }
 
 pub fn decode(input: &str) -> Result<String> {
