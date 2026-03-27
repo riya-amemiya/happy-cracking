@@ -63,29 +63,58 @@ static KEY_TO_CHAR: LazyLock<HashMap<(char, usize), char>> = LazyLock::new(|| {
     map
 });
 
-fn char_to_presses(c: char) -> Option<String> {
-    CHAR_TO_KEY
-        .get(&c)
-        .map(|&(digit, pos)| digit.to_string().repeat(pos + 1))
-}
-
 fn key_for_char(c: char) -> Option<char> {
     CHAR_TO_KEY.get(&c).map(|&(digit, _)| digit)
 }
 
+// Pre-computed lookup table mapping each uppercase letter (A-Z) to its phone
+// keypad multi-tap string. This eliminates runtime string allocation from
+// `digit.to_string().repeat(pos + 1)` which previously created intermediate
+// String objects on every call.
+const PHONE_PRESS_TABLE: [&str; 26] = [
+    "2",    // A
+    "22",   // B
+    "222",  // C
+    "3",    // D
+    "33",   // E
+    "333",  // F
+    "4",    // G
+    "44",   // H
+    "444",  // I
+    "5",    // J
+    "55",   // K
+    "555",  // L
+    "6",    // M
+    "66",   // N
+    "666",  // O
+    "7",    // P
+    "77",   // Q
+    "777",  // R
+    "7777", // S
+    "8",    // T
+    "88",   // U
+    "888",  // V
+    "9",    // W
+    "99",   // X
+    "999",  // Y
+    "9999", // Z
+];
+
 pub fn encode(input: &str) -> String {
     let upper = input.to_uppercase();
-    let mut groups: Vec<String> = Vec::new();
+    // Pre-allocate output assuming ~3 chars per input char (press digits + separators)
+    let mut result = String::with_capacity(upper.len() * 4);
     let mut prev_key: Option<char> = None;
-    let mut current_group: Vec<String> = Vec::new();
+    let mut group_has_content = false;
 
     for c in upper.chars() {
         if c == ' ' {
-            if !current_group.is_empty() {
-                groups.push(current_group.join("-"));
-                current_group.clear();
+            if group_has_content {
+                result.push(' ');
             }
-            groups.push("0".to_string());
+            result.push('0');
+            // Mark that we have content so the next letter group gets a space separator
+            group_has_content = true;
             prev_key = None;
             continue;
         }
@@ -94,26 +123,26 @@ pub fn encode(input: &str) -> String {
             continue;
         }
 
+        let idx = (c as u8 - b'A') as usize;
+        let presses = PHONE_PRESS_TABLE[idx];
         let cur_key = key_for_char(c);
-        if let Some(presses) = char_to_presses(c) {
-            if prev_key.is_some() && prev_key == cur_key {
-                current_group.push(presses);
-            } else {
-                if !current_group.is_empty() {
-                    groups.push(current_group.join("-"));
-                    current_group.clear();
-                }
-                current_group.push(presses);
+
+        if prev_key.is_some() && prev_key == cur_key {
+            // Same key group, separate with dash
+            result.push('-');
+        } else {
+            // Different key group, separate with space
+            if group_has_content {
+                result.push(' ');
             }
-            prev_key = cur_key;
+            group_has_content = true;
         }
+
+        result.push_str(presses);
+        prev_key = cur_key;
     }
 
-    if !current_group.is_empty() {
-        groups.push(current_group.join("-"));
-    }
-
-    groups.join(" ")
+    result
 }
 
 fn presses_to_char(s: &str) -> Result<char> {
