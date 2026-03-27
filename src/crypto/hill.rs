@@ -85,11 +85,14 @@ fn inverse_matrix_2x2(m: &[i64]) -> Result<Vec<i64>> {
 }
 
 fn cofactor_3x3(m: &[i64], row: usize, col: usize) -> i64 {
-    let mut sub = Vec::with_capacity(4);
+    // Use fixed-size array to avoid heap allocation
+    let mut sub = [0i64; 4];
+    let mut idx = 0;
     for r in 0..3 {
         for c in 0..3 {
             if r != row && c != col {
-                sub.push(m[r * 3 + c]);
+                sub[idx] = m[r * 3 + c];
+                idx += 1;
             }
         }
     }
