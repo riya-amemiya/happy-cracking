@@ -66,6 +66,7 @@ pub fn encode(input: &str) -> Result<String> {
         }
     }
 
+    // Use proper error handling instead of unwrap to prevent panics
     String::from_utf8(result).context("Encoded data is not valid UTF-8")
 }
 
