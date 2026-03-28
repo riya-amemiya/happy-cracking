@@ -66,7 +66,9 @@ pub fn encode(input: &str) -> String {
         }
     }
 
-    String::from_utf8(result).unwrap()
+    // Safety: ALPHABET contains only ASCII bytes, so output is always valid UTF-8.
+    // Using expect() instead of unwrap() for clearer panic message if invariant is violated.
+    String::from_utf8(result).expect("Base91 ALPHABET produces valid UTF-8")
 }
 
 pub fn decode(input: &str) -> Result<String> {
