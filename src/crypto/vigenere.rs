@@ -234,11 +234,15 @@ pub fn estimate_key_length(input: &str, max_length: usize) -> Vec<(usize, f64)> 
         let b_diff = (b.1 - ENGLISH_IOC).abs();
         let a_kasiski = *kasiski.get(&a.0).unwrap_or(&0) as f64;
         let b_kasiski = *kasiski.get(&b.0).unwrap_or(&0) as f64;
-        // Primary sort by IoC closeness to English, secondary by Kasiski support
+        // Use unwrap_or to prevent panic on NaN values
         a_diff
             .partial_cmp(&b_diff)
-            .unwrap()
-            .then(b_kasiski.partial_cmp(&a_kasiski).unwrap())
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then(
+                b_kasiski
+                    .partial_cmp(&a_kasiski)
+                    .unwrap_or(std::cmp::Ordering::Equal),
+            )
     });
 
     results.truncate(10);
