@@ -36,7 +36,8 @@ pub fn encode(input: &str) -> Result<String> {
         return Ok(String::new());
     }
 
-    let mut result = Vec::new();
+    // Pre-allocate output buffer: Base91 expands input by ~23% on average
+    let mut result = Vec::with_capacity((data.len() * 5).div_ceil(4));
     let mut b: u32 = 0;
     let mut n: u32 = 0;
 
@@ -81,7 +82,8 @@ pub fn decode(input: &str) -> Result<String> {
         decode_table[c as usize] = i as u8;
     }
 
-    let mut result = Vec::new();
+    // Pre-allocate decode buffer: Base91 contracts output by ~19% on average
+    let mut result = Vec::with_capacity(input.len());
     let mut b: u32 = 0;
     let mut n: u32 = 0;
     let mut v: i32 = -1;

@@ -33,7 +33,8 @@ pub fn encode(input: &str) -> String {
         return String::new();
     }
 
-    let mut result = String::new();
+    // Pre-allocate output buffer: Base85 expands ~4 bytes to ~5 chars
+    let mut result = String::with_capacity((bytes.len() * 5).div_ceil(4));
     let chunks = bytes.chunks(4);
 
     for chunk in chunks {
@@ -80,8 +81,9 @@ pub fn decode(input: &str) -> Result<String> {
         return Ok(String::new());
     }
 
-    let mut bytes = Vec::new();
+    // Pre-allocate decode buffer: Base85 contracts ~5 chars to ~4 bytes
     let chars: Vec<u8> = input.bytes().collect();
+    let mut bytes = Vec::with_capacity((chars.len() * 4).div_ceil(5));
     let mut i = 0;
 
     while i < chars.len() {
