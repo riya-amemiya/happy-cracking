@@ -91,12 +91,13 @@ fn bacon_index_to_char(idx: u8) -> Option<char> {
     }
 }
 
-fn index_to_pattern(idx: u8) -> String {
-    (0..5)
-        .rev()
-        .map(|bit| if (idx >> bit) & 1 == 0 { 'A' } else { 'B' })
-        .collect()
-}
+// Pre-computed Baconian patterns for indices 0-23.
+// Avoids allocating a new String per character via iterator .collect().
+const BACON_PATTERNS: [&str; 24] = [
+    "AAAAA", "AAAAB", "AAABA", "AAABB", "AABAA", "AABAB", "AABBA", "AABBB",
+    "ABAAA", "ABAAB", "ABABA", "ABABB", "ABBAA", "ABBAB", "ABBBA", "ABBBB",
+    "BAAAA", "BAAAB", "BAABA", "BAABB", "BABAA", "BABAB", "BABBA", "BABBB",
+];
 
 fn pattern_to_index(pattern: &str) -> Option<u8> {
     if pattern.len() != 5 {
@@ -118,16 +119,30 @@ fn pattern_to_index(pattern: &str) -> Option<u8> {
 }
 
 pub fn encode(input: &str) -> Result<String> {
-    let patterns: Vec<String> = input
-        .chars()
-        .filter_map(|c| char_to_bacon_index(c).map(index_to_pattern))
-        .collect();
-
-    if patterns.is_empty() && input.chars().any(|c| c.is_ascii_alphabetic()) {
-        anyhow::bail!("Failed to encode input");
+    let alpha_count = input.chars().filter(|c| c.is_ascii_alphabetic()).count();
+    if alpha_count == 0 {
+        if input.chars().any(|c| c.is_ascii_alphabetic()) {
+            anyhow::bail!("Failed to encode input");
+        }
+        return Ok(String::new());
     }
 
-    Ok(patterns.join(" "))
+    // Pre-allocate: each letter becomes 5 chars + 1 space separator (except last)
+    let mut result = String::with_capacity(alpha_count * 6);
+    let mut first = true;
+
+    for c in input.chars() {
+        if let Some(idx) = char_to_bacon_index(c) {
+            if !first {
+                result.push(' ');
+            }
+            // Use pre-computed lookup table instead of allocating a String per character
+            result.push_str(BACON_PATTERNS[idx as usize]);
+            first = false;
+        }
+    }
+
+    Ok(result)
 }
 
 pub fn decode(input: &str) -> Result<String> {
