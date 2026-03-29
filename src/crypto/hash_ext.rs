@@ -43,6 +43,19 @@ pub fn sha256_extend(
     original_len: u64,
     append: &[u8],
 ) -> Result<ExtensionResult> {
+    // Security: Reject original_len values that would cause integer overflow
+    // in bit-length calculations (original_len * 8 must fit in u64).
+    // SHA-256 itself is defined for messages up to 2^64 - 1 bits, so the
+    // byte-length limit is (2^64 - 1) / 8 = 2305843009213693951.
+    const MAX_MESSAGE_BYTES: u64 = u64::MAX / 8;
+    if original_len > MAX_MESSAGE_BYTES {
+        anyhow::bail!(
+            "original_len ({}) is too large and would cause integer overflow in bit-length calculation (max {})",
+            original_len,
+            MAX_MESSAGE_BYTES
+        );
+    }
+
     let hash_bytes =
         hex::decode(original_hash_hex.trim()).context("Invalid hex in original hash")?;
     if hash_bytes.len() != 32 {
@@ -66,12 +79,22 @@ pub fn sha256_extend(
     // Compute the padding that would have been applied to the original message
     let glue_padding = sha256_padding(original_len);
 
-    // The total length processed so far (must be a multiple of 64)
-    let total_processed = original_len + glue_padding.len() as u64;
+    // Security: Check for overflow before addition.
+    let total_processed = original_len
+        .checked_add(glue_padding.len() as u64)
+        .ok_or_else(|| anyhow::anyhow!("Integer overflow computing total processed length"))?;
 
     // Build the message blocks for the appended data and process them
     let mut buffer = append.to_vec();
-    let final_bit_len = (total_processed + append.len() as u64) * 8;
+    // Security: Use checked arithmetic to prevent silent overflow in bit-length.
+    let total_with_append = total_processed
+        .checked_add(append.len() as u64)
+        .ok_or_else(|| {
+            anyhow::anyhow!("Integer overflow computing total length with appended data")
+        })?;
+    let final_bit_len = total_with_append
+        .checked_mul(8)
+        .ok_or_else(|| anyhow::anyhow!("Integer overflow computing final bit length"))?;
     let append_padding = sha256_finish_padding(append.len() as u64, final_bit_len);
     buffer.extend_from_slice(&append_padding);
 
