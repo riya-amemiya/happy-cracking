@@ -85,3 +85,7 @@
 ## 2026-03-13 - String Formatting and Repetition Overhead
 **Learning:** Using `format!("{} {}", ".".repeat(row), ".".repeat(col))` inside an iterator loop to construct strings for tapcode encoding, and joining them with `.collect::<Vec<_>>().join(...)` introduces significant overhead due to string formatting macros (`format!`), repeated temporary strings via `.repeat()`, and multiple intermediate `Vec` and `String` allocations.
 **Action:** When constructing strings from simple repeated structures (like 1 to 5 dots in tapcode), pre-compute them in a small static array (e.g. `const DOTS: [&str; 6] = ["", ".", "..", "...", "....", "....."];`), pre-allocate the output buffer `String::with_capacity(...)`, and directly append slices to it using `push_str`. This avoids all formatting and repeated allocation overhead entirely.
+
+## 2026-03-30 - Linear Scan in Base62 Decode
+**Learning:** `ALPHABET.iter().position(|&a| a == c)` performs an $O(62)$ linear scan per input byte during Base62 decoding, with iterator overhead, closure calls, and branch mispredictions adding to the cost.
+**Action:** Replace with a `LazyLock<[u8; 256]>` reverse lookup table that maps each byte value directly to its alphabet index (or `0xFF` for invalid). This reduces per-character lookup from $O(62)$ to $O(1)$ with a one-time 256-byte initialization cost.
