@@ -2,6 +2,7 @@ use anyhow::{Context, Result};
 use clap::Subcommand;
 use num_bigint::BigUint;
 use num_traits::Zero;
+use std::sync::LazyLock;
 
 #[derive(Subcommand)]
 pub enum Base62Action {
@@ -31,6 +32,16 @@ pub fn run(action: Base62Action) -> Result<()> {
 
 const ALPHABET: &[u8] = b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
 const BASE: u32 = 62;
+
+// Reverse lookup table: maps byte value -> alphabet index (0..61), or 0xFF for invalid.
+// This replaces O(62) linear scan per character with O(1) array indexing.
+static DECODE_TABLE: LazyLock<[u8; 256]> = LazyLock::new(|| {
+    let mut table = [0xFFu8; 256];
+    for (i, &c) in ALPHABET.iter().enumerate() {
+        table[c as usize] = i as u8;
+    }
+    table
+});
 
 pub fn encode(input: &str) -> String {
     let bytes = input.as_bytes();
@@ -70,10 +81,10 @@ pub fn decode(input: &str) -> Result<String> {
     let mut num = BigUint::zero();
 
     for c in input.bytes() {
-        let digit = ALPHABET
-            .iter()
-            .position(|&a| a == c)
-            .context(format!("Invalid Base62 character: {}", c as char))?;
+        let digit = DECODE_TABLE[c as usize];
+        if digit == 0xFF {
+            anyhow::bail!("Invalid Base62 character: {}", c as char);
+        }
         num = num * &base + BigUint::from(digit as u32);
     }
 

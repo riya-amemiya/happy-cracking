@@ -69,8 +69,10 @@ pub fn encrypt(input: &str, a: i32, b: i32) -> Result<String> {
             *byte = encrypted as u8 + base;
         }
     }
-    // Safety: we only modify ASCII alphabetic characters to other ASCII alphabetic characters.
-    Ok(unsafe { String::from_utf8_unchecked(bytes) })
+    // All modifications stay within ASCII alphabetic range, so UTF-8 validity is preserved.
+    // Use safe conversion to avoid undefined behavior if invariant is ever broken.
+    String::from_utf8(bytes)
+        .map_err(|_| anyhow::anyhow!("Internal error: produced invalid UTF-8 during encryption"))
 }
 
 pub fn decrypt(input: &str, a: i32, b: i32) -> Result<String> {
@@ -91,8 +93,10 @@ pub fn decrypt(input: &str, a: i32, b: i32) -> Result<String> {
             *byte = decrypted as u8 + base;
         }
     }
-    // Safety: we only modify ASCII alphabetic characters to other ASCII alphabetic characters.
-    Ok(unsafe { String::from_utf8_unchecked(bytes) })
+    // All modifications stay within ASCII alphabetic range, so UTF-8 validity is preserved.
+    // Use safe conversion to avoid undefined behavior if invariant is ever broken.
+    String::from_utf8(bytes)
+        .map_err(|_| anyhow::anyhow!("Internal error: produced invalid UTF-8 during decryption"))
 }
 
 pub fn bruteforce(input: &str) {
