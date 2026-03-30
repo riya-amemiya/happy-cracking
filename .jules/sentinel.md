@@ -77,3 +77,8 @@
 **Vulnerability:** The `Montgomery64::new` constructor used a `debug_assert!` to check for an odd modulus. While this might avoid panics in release builds, it would cause wrong mathematical results, and any future switch to explicit panics or running in debug profiles could trigger a DoS via division-by-zero or related mathematical errors when supplied with an even modulus.
 **Learning:** `debug_assert!` is not a security boundary or input validation mechanism. It should not be used to enforce mathematical invariants on user-controlled data.
 **Prevention:** Constructor functions for mathematical primitives (like Montgomery arithmetic) should always validate inputs and return a `Result` (e.g., `Result<Self>`) when an invalid parameter (like an even modulus) is provided.
+
+## 2026-03-30 - Unnecessary unsafe in Affine Cipher
+**Vulnerability:** The Affine cipher's `encrypt` and `decrypt` functions used `unsafe { String::from_utf8_unchecked(bytes) }` to convert a mutated byte vector back to a `String`. While the current logic only modifies ASCII alphabetic bytes (preserving UTF-8 validity), a future refactoring mistake could break this invariant, leading to undefined behavior (invalid UTF-8 strings can cause memory safety violations in Rust).
+**Learning:** `unsafe` blocks should never be used for performance micro-optimizations in security-sensitive code when a safe alternative (`String::from_utf8`) exists. The `unsafe` contract is fragile and can be silently violated by future changes to the surrounding code.
+**Prevention:** Always prefer safe Rust APIs over `unsafe` equivalents unless the performance difference is critical and measured. Use `String::from_utf8()` with proper error handling instead of `String::from_utf8_unchecked()`.
