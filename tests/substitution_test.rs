@@ -71,3 +71,16 @@ fn test_flag_format() {
     let decoded = substitution::decode(&encoded, alphabet).unwrap();
     assert_eq!(decoded, "flag{substitution_cipher}");
 }
+
+/// Regression test: substitution encode/decode must produce valid UTF-8 even
+/// when the input contains multi-byte UTF-8 characters (which are passed through
+/// unchanged). Previously, unsafe String::from_utf8_unchecked was used, which
+/// could cause undefined behavior if the ASCII-only invariant was ever broken.
+#[test]
+fn test_utf8_safety_with_multibyte_input() {
+    let alphabet = "ZYXWVUTSRQPONMLKJIHGFEDCBA";
+    let input = "Hello \u{00e9}\u{00e8} World \u{1f600}!";
+    let encoded = substitution::encode(input, alphabet).unwrap();
+    let decoded = substitution::decode(&encoded, alphabet).unwrap();
+    assert_eq!(decoded, input);
+}
