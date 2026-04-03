@@ -45,7 +45,7 @@ pub fn run(action: PaddingAction) -> Result<()> {
         }
         PaddingAction::ZeroPad { input, block_size } => {
             let data = hex::decode(input.trim()).context("Failed to decode input hex")?;
-            let padded = zero_pad(&data, block_size);
+            let padded = zero_pad(&data, block_size)?;
             println!("{}", hex::encode(&padded));
         }
         PaddingAction::ZeroUnpad { input } => {
@@ -94,18 +94,31 @@ pub fn pkcs7_unpad(data: &[u8], block_size: usize) -> Result<Vec<u8>> {
     Ok(data[..data.len() - pad_len].to_vec())
 }
 
-pub fn zero_pad(data: &[u8], block_size: usize) -> Vec<u8> {
+// Safety limit for zero-pad block size to prevent Denial of Service.
+// Without a limit, a user could pass e.g. block_size=4294967295 with a tiny
+// input, causing allocation of ~4 GB of zero bytes (OOM / memory exhaustion).
+// 16 MB is generous for any realistic block-cipher block size.
+const MAX_ZERO_PAD_BLOCK_SIZE: usize = 16 * 1024 * 1024;
+
+pub fn zero_pad(data: &[u8], block_size: usize) -> Result<Vec<u8>> {
     if block_size == 0 || data.is_empty() {
-        return data.to_vec();
+        return Ok(data.to_vec());
+    }
+    if block_size > MAX_ZERO_PAD_BLOCK_SIZE {
+        anyhow::bail!(
+            "Block size {} exceeds maximum of {} to prevent excessive memory allocation",
+            block_size,
+            MAX_ZERO_PAD_BLOCK_SIZE
+        );
     }
     let remainder = data.len() % block_size;
     if remainder == 0 {
-        return data.to_vec();
+        return Ok(data.to_vec());
     }
     let pad_len = block_size - remainder;
     let mut result = data.to_vec();
     result.extend(std::iter::repeat_n(0u8, pad_len));
-    result
+    Ok(result)
 }
 
 pub fn zero_unpad(data: &[u8]) -> Vec<u8> {
