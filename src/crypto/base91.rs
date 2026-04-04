@@ -1,8 +1,20 @@
 use anyhow::{Context, Result};
 use clap::Subcommand;
+use std::sync::LazyLock;
 
 const ALPHABET: &[u8] =
     b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!#$%&()*+,./:;<=>?@[]^_`{|}~\"";
+
+// Optimization: Precompute the reverse lookup table once using LazyLock instead of
+// rebuilding it on every decode() call. This avoids O(91) initialization overhead
+// per invocation and gives O(1) byte-to-index lookup with a one-time 256-byte cost.
+static DECODE_TABLE: LazyLock<[u8; 256]> = LazyLock::new(|| {
+    let mut table = [255u8; 256];
+    for (i, &c) in ALPHABET.iter().enumerate() {
+        table[c as usize] = i as u8;
+    }
+    table
+});
 
 #[derive(Subcommand)]
 pub enum Base91Action {
@@ -76,18 +88,13 @@ pub fn decode(input: &str) -> Result<String> {
         return Ok(String::new());
     }
 
-    let mut decode_table = [255u8; 256];
-    for (i, &c) in ALPHABET.iter().enumerate() {
-        decode_table[c as usize] = i as u8;
-    }
-
     let mut result = Vec::new();
     let mut b: u32 = 0;
     let mut n: u32 = 0;
     let mut v: i32 = -1;
 
     for &byte in input.as_bytes() {
-        let d = decode_table[byte as usize];
+        let d = DECODE_TABLE[byte as usize];
         if d == 255 {
             anyhow::bail!("Invalid Base91 character: {}", byte as char);
         }
