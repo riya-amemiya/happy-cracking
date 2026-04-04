@@ -5,9 +5,9 @@ use std::sync::LazyLock;
 const ALPHABET: &[u8] =
     b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!#$%&()*+,./:;<=>?@[]^_`{|}~\"";
 
-// Optimization: Precompute the reverse lookup table once using LazyLock instead of
-// rebuilding it on every decode() call. This avoids O(91) initialization overhead
-// per invocation and gives O(1) byte-to-index lookup with a one-time 256-byte cost.
+// Optimization: Pre-compute the reverse lookup table once using LazyLock instead
+// of rebuilding a [u8; 256] decode table on every call to decode(). This avoids
+// redundant O(91) initialization work per invocation and makes decoding pure O(n).
 static DECODE_TABLE: LazyLock<[u8; 256]> = LazyLock::new(|| {
     let mut table = [255u8; 256];
     for (i, &c) in ALPHABET.iter().enumerate() {
