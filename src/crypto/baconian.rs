@@ -91,12 +91,35 @@ fn bacon_index_to_char(idx: u8) -> Option<char> {
     }
 }
 
-fn index_to_pattern(idx: u8) -> String {
-    (0..5)
-        .rev()
-        .map(|bit| if (idx >> bit) & 1 == 0 { 'A' } else { 'B' })
-        .collect()
-}
+// Pre-computed lookup table mapping Bacon index (0-23) to its 5-char A/B pattern.
+// Eliminates per-character String allocation from the iterator-based `index_to_pattern`
+// which previously created a new String on every call via `.collect()`.
+const BACON_PATTERNS: [&str; 24] = [
+    "AAAAA", // 0  = A
+    "AAAAB", // 1  = B
+    "AAABA", // 2  = C
+    "AAABB", // 3  = D
+    "AABAA", // 4  = E
+    "AABAB", // 5  = F
+    "AABBA", // 6  = G
+    "AABBB", // 7  = H
+    "ABAAA", // 8  = I/J
+    "ABAAB", // 9  = K
+    "ABABA", // 10 = L
+    "ABABB", // 11 = M
+    "ABBAA", // 12 = N
+    "ABBAB", // 13 = O
+    "ABBBA", // 14 = P
+    "ABBBB", // 15 = Q
+    "BAAAA", // 16 = R
+    "BAAAB", // 17 = S
+    "BAABA", // 18 = T
+    "BAABB", // 19 = U/V
+    "BABAA", // 20 = W
+    "BABAB", // 21 = X
+    "BABBA", // 22 = Y
+    "BABBB", // 23 = Z
+];
 
 fn pattern_to_index(pattern: &str) -> Option<u8> {
     if pattern.len() != 5 {
@@ -118,16 +141,27 @@ fn pattern_to_index(pattern: &str) -> Option<u8> {
 }
 
 pub fn encode(input: &str) -> Result<String> {
-    let patterns: Vec<String> = input
-        .chars()
-        .filter_map(|c| char_to_bacon_index(c).map(index_to_pattern))
-        .collect();
+    // Optimization: Build output directly instead of collecting into Vec<String>
+    // and joining. This avoids N+1 String allocations (one per pattern + the join result).
+    // Each pattern is 5 chars plus a space separator.
+    let mut out = String::with_capacity(input.len() * 6);
+    let mut has_content = false;
 
-    if patterns.is_empty() && input.chars().any(|c| c.is_ascii_alphabetic()) {
+    for c in input.chars() {
+        if let Some(idx) = char_to_bacon_index(c) {
+            if has_content {
+                out.push(' ');
+            }
+            out.push_str(BACON_PATTERNS[idx as usize]);
+            has_content = true;
+        }
+    }
+
+    if !has_content && input.chars().any(|c| c.is_ascii_alphabetic()) {
         anyhow::bail!("Failed to encode input");
     }
 
-    Ok(patterns.join(" "))
+    Ok(out)
 }
 
 pub fn decode(input: &str) -> Result<String> {
