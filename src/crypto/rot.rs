@@ -12,10 +12,9 @@ pub fn rot47(input: &str) -> String {
         }
     }
 
-    // Safety: we only modify printable ASCII characters (33..=126)
-    // to other printable ASCII characters within the same range.
-    // Therefore, any valid UTF-8 sequences are preserved correctly.
-    unsafe { String::from_utf8_unchecked(bytes) }
+    // Security: use safe conversion to prevent undefined behavior if
+    // future changes accidentally break the ASCII-only invariant.
+    String::from_utf8(bytes).expect("rot47: internal error: produced invalid UTF-8")
 }
 
 pub fn rotate(input: &str, shift: u8) -> String {
@@ -28,8 +27,7 @@ pub fn rotate(input: &str, shift: u8) -> String {
         }
     }
 
-    // Safety: we only modify ASCII alphabetic characters (which are valid 1-byte UTF-8)
-    // to other ASCII alphabetic characters.
-    // Therefore, the byte sequence remains valid UTF-8.
-    unsafe { String::from_utf8_unchecked(bytes) }
+    // Security: use safe conversion to prevent undefined behavior if
+    // future changes accidentally break the ASCII-only invariant.
+    String::from_utf8(bytes).expect("rotate: internal error: produced invalid UTF-8")
 }
