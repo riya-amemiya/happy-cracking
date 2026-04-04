@@ -90,8 +90,9 @@ pub fn encode(input: &str, alphabet: &str) -> Result<String> {
             *b = mapping[(*b - b'a') as usize] - b'A' + b'a';
         }
     }
-    // Safety: we only modify ASCII alphabetic characters to other ASCII alphabetic characters.
-    Ok(unsafe { String::from_utf8_unchecked(bytes) })
+    // Security: use safe String::from_utf8 instead of unsafe from_utf8_unchecked to prevent
+    // undefined behavior if a future refactor introduces non-ASCII byte mutations.
+    Ok(String::from_utf8(bytes).expect("substitution of ASCII alphabetic bytes preserves UTF-8"))
 }
 
 pub fn decode(input: &str, alphabet: &str) -> Result<String> {
@@ -108,8 +109,9 @@ pub fn decode(input: &str, alphabet: &str) -> Result<String> {
             *b = reverse[(*b - b'a') as usize] - b'A' + b'a';
         }
     }
-    // Safety: we only modify ASCII alphabetic characters to other ASCII alphabetic characters.
-    Ok(unsafe { String::from_utf8_unchecked(bytes) })
+    // Security: use safe String::from_utf8 instead of unsafe from_utf8_unchecked to prevent
+    // undefined behavior if a future refactor introduces non-ASCII byte mutations.
+    Ok(String::from_utf8(bytes).expect("substitution of ASCII alphabetic bytes preserves UTF-8"))
 }
 
 // English letter frequencies (A-Z) used for scoring
@@ -199,8 +201,9 @@ fn apply_key(input: &str, key: &[u8; 26]) -> String {
             *b = key[(*b - b'a') as usize] - b'A' + b'a';
         }
     }
-    // Safety: we only modify ASCII alphabetic characters to other ASCII alphabetic characters.
-    unsafe { String::from_utf8_unchecked(bytes) }
+    // Security: use safe String::from_utf8 instead of unsafe from_utf8_unchecked to prevent
+    // undefined behavior if a future refactor introduces non-ASCII byte mutations.
+    String::from_utf8(bytes).expect("substitution of ASCII alphabetic bytes preserves UTF-8")
 }
 
 fn frequency_based_initial_key(input: &str) -> [u8; 26] {
