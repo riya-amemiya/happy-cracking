@@ -41,40 +41,39 @@ fn validate_key(key: &str) -> Result<Vec<u8>> {
     Ok(key.bytes().map(|b| b - b'0').collect())
 }
 
+// Direct byte mutation avoids UTF-8 char boundary decoding and per-character
+// allocation overhead from chars().map().collect(). Safe because Gronsfeld only
+// transforms ASCII alphabetic bytes to other ASCII alphabetic bytes.
 pub fn encrypt(input: &str, key: &str) -> Result<String> {
     let shifts = validate_key(key)?;
+    let mut bytes = input.as_bytes().to_vec();
     let mut key_index = 0;
 
-    Ok(input
-        .chars()
-        .map(|c| {
-            if c.is_ascii_alphabetic() {
-                let base = if c.is_ascii_uppercase() { b'A' } else { b'a' };
-                let shift = shifts[key_index % shifts.len()];
-                key_index += 1;
-                ((c as u8 - base + shift) % 26 + base) as char
-            } else {
-                c
-            }
-        })
-        .collect())
+    for b in &mut bytes {
+        if b.is_ascii_alphabetic() {
+            let base = if b.is_ascii_uppercase() { b'A' } else { b'a' };
+            let shift = shifts[key_index % shifts.len()];
+            key_index += 1;
+            *b = (*b - base + shift) % 26 + base;
+        }
+    }
+
+    Ok(unsafe { String::from_utf8_unchecked(bytes) })
 }
 
 pub fn decrypt(input: &str, key: &str) -> Result<String> {
     let shifts = validate_key(key)?;
+    let mut bytes = input.as_bytes().to_vec();
     let mut key_index = 0;
 
-    Ok(input
-        .chars()
-        .map(|c| {
-            if c.is_ascii_alphabetic() {
-                let base = if c.is_ascii_uppercase() { b'A' } else { b'a' };
-                let shift = shifts[key_index % shifts.len()];
-                key_index += 1;
-                ((c as u8 - base + 26 - shift) % 26 + base) as char
-            } else {
-                c
-            }
-        })
-        .collect())
+    for b in &mut bytes {
+        if b.is_ascii_alphabetic() {
+            let base = if b.is_ascii_uppercase() { b'A' } else { b'a' };
+            let shift = shifts[key_index % shifts.len()];
+            key_index += 1;
+            *b = (*b - base + 26 - shift) % 26 + base;
+        }
+    }
+
+    Ok(unsafe { String::from_utf8_unchecked(bytes) })
 }
