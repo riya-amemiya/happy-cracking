@@ -137,7 +137,7 @@ pub fn analyze(input: &str, alpha_only: bool) -> FrequencyResult {
     }
 
     // Sort by count descending
-    frequencies.sort_by(|a, b| b.1.cmp(&a.1));
+    frequencies.sort_by_key(|b| std::cmp::Reverse(b.1));
 
     FrequencyResult {
         frequencies,
