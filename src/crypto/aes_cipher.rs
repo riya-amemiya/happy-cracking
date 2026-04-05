@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use anyhow::{Context, Result};
 use clap::Subcommand;
 
@@ -186,14 +188,11 @@ pub fn ecb_detect(hex_input: &str) -> Result<(bool, usize)> {
         return Ok((false, 0));
     }
 
+    // Perf: Use HashSet for O(n) duplicate detection instead of clone + sort + dedup (O(n log n)),
+    // also avoiding the unnecessary vector clone and its extra allocation.
     let blocks: Vec<&[u8]> = bytes.chunks(16).collect();
-    let unique_count = {
-        let mut unique: Vec<&[u8]> = blocks.clone();
-        unique.sort();
-        unique.dedup();
-        unique.len()
-    };
+    let unique: HashSet<&[u8]> = blocks.iter().copied().collect();
 
-    let duplicates = blocks.len() - unique_count;
+    let duplicates = blocks.len() - unique.len();
     Ok((duplicates > 0, duplicates))
 }
