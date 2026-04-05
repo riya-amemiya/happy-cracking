@@ -65,21 +65,21 @@ fn test_pkcs7_pad_empty_input() {
 #[test]
 fn test_zero_pad_basic() {
     let data = vec![0x01, 0x02, 0x03];
-    let padded = padding::zero_pad(&data, 4);
+    let padded = padding::zero_pad(&data, 4).unwrap();
     assert_eq!(padded, vec![0x01, 0x02, 0x03, 0x00]);
 }
 
 #[test]
 fn test_zero_pad_aligned() {
     let data = vec![0x01, 0x02, 0x03, 0x04];
-    let padded = padding::zero_pad(&data, 4);
+    let padded = padding::zero_pad(&data, 4).unwrap();
     assert_eq!(padded, data);
 }
 
 #[test]
 fn test_zero_pad_16() {
     let data = b"Hello".to_vec();
-    let padded = padding::zero_pad(&data, 16);
+    let padded = padding::zero_pad(&data, 16).unwrap();
     assert_eq!(padded.len(), 16);
     assert!(padded[5..].iter().all(|&b| b == 0));
 }
@@ -108,15 +108,22 @@ fn test_zero_unpad_all_zeros() {
 #[test]
 fn test_zero_roundtrip() {
     let data = vec![0xCA, 0xFE, 0xBA, 0xBE, 0x01];
-    let padded = padding::zero_pad(&data, 8);
+    let padded = padding::zero_pad(&data, 8).unwrap();
     let unpadded = padding::zero_unpad(&padded);
     assert_eq!(unpadded, data);
 }
 
 #[test]
 fn test_zero_pad_empty() {
-    let padded = padding::zero_pad(&[], 16);
+    let padded = padding::zero_pad(&[], 16).unwrap();
     assert!(padded.is_empty());
+}
+
+#[test]
+fn test_zero_pad_excessive_block_size_rejected() {
+    // Security: block_size that would allocate excessive memory must be rejected
+    let data = vec![0x01];
+    assert!(padding::zero_pad(&data, 256 * 1024 * 1024).is_err());
 }
 
 #[test]
