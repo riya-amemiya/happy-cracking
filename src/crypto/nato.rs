@@ -3,6 +3,20 @@ use clap::Subcommand;
 use std::collections::HashMap;
 use std::sync::LazyLock;
 
+// Performance: direct ASCII-indexed lookup table avoids HashMap hashing overhead
+// for the encode hot path. O(1) array index vs O(1) amortized but with hash
+// computation, cache-unfriendly bucket chasing, and key comparison.
+static ENCODE_LUT: LazyLock<[Option<&'static str>; 128]> = LazyLock::new(|| {
+    let mut table: [Option<&'static str>; 128] = [None; 128];
+    for &(ch, word) in NATO_TABLE {
+        let idx = ch as usize;
+        if idx < 128 {
+            table[idx] = Some(word);
+        }
+    }
+    table
+});
+
 #[derive(Subcommand)]
 pub enum NatoAction {
     #[command(about = "Encode text to NATO phonetic alphabet")]
@@ -68,19 +82,28 @@ const NATO_TABLE: &[(char, &str)] = &[
     ('9', "NINE"),
 ];
 
-static CHAR_TO_NATO: LazyLock<HashMap<char, &'static str>> =
-    LazyLock::new(|| NATO_TABLE.iter().copied().collect());
-
 static NATO_TO_CHAR: LazyLock<HashMap<&'static str, char>> =
     LazyLock::new(|| NATO_TABLE.iter().map(|&(c, word)| (word, c)).collect());
 
 pub fn encode(input: &str) -> String {
-    input
-        .to_uppercase()
-        .chars()
-        .filter_map(|c| CHAR_TO_NATO.get(&c).copied())
-        .collect::<Vec<_>>()
-        .join(" ")
+    let lut = &*ENCODE_LUT;
+    // Pre-allocate: average NATO word is ~5 chars + 1 space separator
+    let mut result = String::with_capacity(input.len() * 6);
+    let mut first = true;
+
+    for c in input.chars() {
+        let upper = c.to_ascii_uppercase();
+        let idx = upper as usize;
+        if let Some(word) = if idx < 128 { lut[idx] } else { None } {
+            if !first {
+                result.push(' ');
+            }
+            first = false;
+            result.push_str(word);
+        }
+    }
+
+    result
 }
 
 pub fn decode(input: &str) -> Result<String> {
