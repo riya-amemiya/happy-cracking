@@ -58,7 +58,11 @@ pub fn encrypt(input: &str, key: &str) -> Result<String> {
         }
     }
 
-    Ok(unsafe { String::from_utf8_unchecked(bytes) })
+    // Security: use safe String::from_utf8 instead of unsafe from_utf8_unchecked.
+    // While current logic only mutates ASCII alphabetic bytes, a future refactoring
+    // mistake could break the UTF-8 invariant, causing undefined behavior.
+    // The safe version returns a clear error instead of silently producing invalid strings.
+    String::from_utf8(bytes).map_err(|e| anyhow::anyhow!("Invalid UTF-8 after encryption: {}", e))
 }
 
 pub fn decrypt(input: &str, key: &str) -> Result<String> {
@@ -75,5 +79,9 @@ pub fn decrypt(input: &str, key: &str) -> Result<String> {
         }
     }
 
-    Ok(unsafe { String::from_utf8_unchecked(bytes) })
+    // Security: use safe String::from_utf8 instead of unsafe from_utf8_unchecked.
+    // Defense in depth: even though the current byte manipulation preserves UTF-8
+    // validity, using the safe API prevents undefined behavior if the logic is
+    // ever modified to handle non-ASCII bytes incorrectly.
+    String::from_utf8(bytes).map_err(|e| anyhow::anyhow!("Invalid UTF-8 after decryption: {}", e))
 }
