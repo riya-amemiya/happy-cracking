@@ -171,6 +171,8 @@ pub fn detect_key_length(data: &[u8], max_len: usize) -> Vec<(usize, f64)> {
         })
         .collect();
 
-    results.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+    // SECURITY: Use unwrap_or(Equal) instead of unwrap() to prevent panic on NaN values.
+    // partial_cmp returns None for NaN comparisons; treating them as equal avoids a DoS vector.
+    results.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
     results
 }
