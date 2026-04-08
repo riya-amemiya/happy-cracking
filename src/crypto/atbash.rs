@@ -28,7 +28,9 @@ pub fn transform(input: &str) -> String {
             *b = b'z' - (*b - b'a');
         }
     }
-    // Safety: we only modify ASCII alphabetic characters to other ASCII alphabetic characters.
-    // Therefore, any valid UTF-8 sequences are preserved correctly.
-    unsafe { String::from_utf8_unchecked(bytes) }
+    // Security: use safe String::from_utf8 instead of unsafe from_utf8_unchecked.
+    // The transform only swaps ASCII alphabetic bytes so the result is always valid
+    // UTF-8, but using unsafe here is unnecessary and risks undefined behavior if
+    // the byte-manipulation logic is ever changed incorrectly in the future.
+    String::from_utf8(bytes).expect("atbash transform preserves UTF-8 validity")
 }

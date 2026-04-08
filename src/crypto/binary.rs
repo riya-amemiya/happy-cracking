@@ -46,8 +46,11 @@ pub fn encode(input: &str) -> String {
         for j in 0..8 {
             bits[7 - j] = b'0' + ((b >> j) & 1);
         }
-        // SAFETY: bits only contains b'0' and b'1' which are valid ASCII/UTF-8
-        out.push_str(unsafe { std::str::from_utf8_unchecked(&bits) });
+        // Security: use safe std::str::from_utf8 instead of unsafe from_utf8_unchecked.
+        // While the current logic only produces b'0' and b'1' (valid ASCII/UTF-8),
+        // using unsafe here is unnecessary and risks undefined behavior if a future
+        // refactor breaks this invariant.
+        out.push_str(std::str::from_utf8(&bits).expect("bits are ASCII digits"));
     }
     out
 }
@@ -69,8 +72,9 @@ pub fn decode(input: &str) -> Result<String> {
     let bytes: Result<Vec<u8>, _> = cleaned_bytes
         .chunks(8)
         .map(|chunk| {
-            // SAFETY: We only pushed b'0' and b'1' into cleaned_bytes, which are valid ASCII/UTF-8
-            let s = unsafe { std::str::from_utf8_unchecked(chunk) };
+            // Security: use safe std::str::from_utf8 instead of unsafe from_utf8_unchecked
+            // to prevent undefined behavior if the invariant is ever broken by refactoring.
+            let s = std::str::from_utf8(chunk).expect("cleaned_bytes are ASCII digits");
             u8::from_str_radix(s, 2)
         })
         .collect();
