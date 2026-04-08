@@ -1,7 +1,5 @@
 use anyhow::{Context, Result};
 use clap::Subcommand;
-use std::collections::HashMap;
-use std::sync::LazyLock;
 
 #[derive(Subcommand)]
 pub enum BrailleAction {
@@ -62,47 +60,87 @@ const LETTER_TABLE: &[(char, char)] = &[
 const NUMBER_PREFIX: char = '\u{283C}';
 const BRAILLE_SPACE: char = '\u{2800}';
 
-static CHAR_TO_BRAILLE: LazyLock<HashMap<char, char>> =
-    LazyLock::new(|| LETTER_TABLE.iter().copied().collect());
+// Performance: [char; 26] array indexed by (letter - 'A') replaces HashMap<char, char>
+// for encoding. Eliminates hashing overhead, bucket chasing, and key comparison —
+// a direct O(1) array index vs amortized O(1) HashMap lookup with allocation.
+const ENCODE_LUT: [char; 26] = {
+    let mut table = ['\0'; 26];
+    let mut i = 0;
+    while i < LETTER_TABLE.len() {
+        let (ch, br) = LETTER_TABLE[i];
+        table[ch as usize - 'A' as usize] = br;
+        i += 1;
+    }
+    table
+};
 
-static BRAILLE_TO_CHAR: LazyLock<HashMap<char, char>> =
-    LazyLock::new(|| LETTER_TABLE.iter().map(|&(c, b)| (b, c)).collect());
+// Performance: [char; 10] array indexed by digit position replaces the linear scan
+// in braille_to_digit that iterated LETTER_TABLE with .enumerate().find().
+// Digits 1-9,0 map to Braille patterns of letters A-J respectively.
+const DIGIT_BRAILLE_LUT: [char; 10] = {
+    let mut table = ['\0'; 10];
+    // '1' maps to A (index 0), ..., '9' maps to I (index 8), '0' maps to J (index 9)
+    let mut i = 0;
+    while i < 10 {
+        table[i] = LETTER_TABLE[i].1;
+        i += 1;
+    }
+    table
+};
+
+// Performance: reverse lookup from Braille codepoint to letter using a compact array
+// indexed by (braille_char - 0x2800). Braille block is U+2800..U+283F (64 codepoints),
+// so a [Option<char>; 64] array replaces HashMap<char, char> for decoding.
+// Eliminates hashing overhead and heap allocation from LazyLock<HashMap>.
+const DECODE_LUT: [Option<char>; 64] = {
+    let mut table: [Option<char>; 64] = [None; 64];
+    let mut i = 0;
+    while i < LETTER_TABLE.len() {
+        let (ch, br) = LETTER_TABLE[i];
+        let idx = br as usize - 0x2800;
+        table[idx] = Some(ch);
+        i += 1;
+    }
+    table
+};
 
 fn digit_to_braille(d: char) -> Option<char> {
     let idx = match d {
-        '1' => 0, // same as A
-        '2' => 1, // same as B
-        '3' => 2, // same as C
-        '4' => 3, // same as D
-        '5' => 4, // same as E
-        '6' => 5, // same as F
-        '7' => 6, // same as G
-        '8' => 7, // same as H
-        '9' => 8, // same as I
-        '0' => 9, // same as J
+        '1'..='9' => (d as u8 - b'1') as usize,
+        '0' => 9,
         _ => return None,
     };
-    Some(LETTER_TABLE[idx].1)
+    Some(DIGIT_BRAILLE_LUT[idx])
 }
 
-// Digit index mapping for braille-to-digit lookup
-const DIGIT_MAP: &[char] = &['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'];
+const DIGIT_MAP: [char; 10] = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'];
 
+// Performance: O(1) array lookup replaces O(N) linear scan through LETTER_TABLE
 fn braille_to_digit(b: char) -> Option<char> {
-    LETTER_TABLE
-        .iter()
-        .enumerate()
-        .find(|(idx, (_, br))| *br == b && *idx < 10)
-        .map(|(idx, _)| DIGIT_MAP[idx])
+    let idx = b as usize;
+    if !(0x2800..0x2840).contains(&idx) {
+        return None;
+    }
+    // Check if this braille char matches one of the first 10 letters (A-J = digits)
+    let offset = idx - 0x2800;
+    DECODE_LUT[offset].and_then(|ch| {
+        let letter_idx = (ch as u8).wrapping_sub(b'A') as usize;
+        if letter_idx < 10 {
+            Some(DIGIT_MAP[letter_idx])
+        } else {
+            None
+        }
+    })
 }
 
 pub fn encode(input: &str) -> String {
-    let mut result = String::new();
-    for c in input.to_uppercase().chars() {
+    // Performance: avoid input.to_uppercase() allocation by converting case inline.
+    // Use ENCODE_LUT array instead of HashMap for O(1) direct-index lookup.
+    let mut result = String::with_capacity(input.len() * 3);
+    for c in input.chars() {
         if c.is_ascii_alphabetic() {
-            if let Some(&braille) = CHAR_TO_BRAILLE.get(&c) {
-                result.push(braille);
-            }
+            let idx = (c.to_ascii_uppercase() as u8 - b'A') as usize;
+            result.push(ENCODE_LUT[idx]);
         } else if c.is_ascii_digit() {
             result.push(NUMBER_PREFIX);
             if let Some(braille) = digit_to_braille(c) {
@@ -120,7 +158,7 @@ pub fn decode(input: &str) -> Result<String> {
         return Ok(String::new());
     }
 
-    let mut result = String::new();
+    let mut result = String::with_capacity(input.len());
     let mut in_number_mode = false;
     for c in input.chars() {
         if c == NUMBER_PREFIX {
@@ -138,10 +176,13 @@ pub fn decode(input: &str) -> Result<String> {
             result.push(digit);
             in_number_mode = false;
         } else {
-            let letter = BRAILLE_TO_CHAR
-                .get(&c)
-                .copied()
-                .context(format!("Unknown Braille character: {:?}", c))?;
+            let idx = c as usize;
+            let letter = if (0x2800..0x2840).contains(&idx) {
+                DECODE_LUT[idx - 0x2800]
+            } else {
+                None
+            };
+            let letter = letter.context(format!("Unknown Braille character: {:?}", c))?;
             result.push(letter);
         }
     }
