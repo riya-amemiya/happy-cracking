@@ -1,7 +1,7 @@
 use anyhow::Result;
 use clap::Subcommand;
 
-use super::polybius_utils::{build_polybius_square, find_in_square};
+use super::polybius_utils::{build_polybius_square, build_reverse_lookup, find_in_square_fast};
 
 #[derive(Subcommand)]
 pub enum BifidAction {
@@ -53,12 +53,14 @@ pub fn encrypt(input: &str, key: &str) -> Result<String> {
     }
 
     let square = build_polybius_square(key);
+    // Performance: precompute reverse lookup for O(1) char-to-index mapping
+    let reverse = build_reverse_lookup(&square);
 
     // Step 1: get row and column coordinates
     let mut rows = Vec::with_capacity(letters.len());
     let mut cols = Vec::with_capacity(letters.len());
     for &c in &letters {
-        let (r, col) = find_in_square(&square, c)
+        let (r, col) = find_in_square_fast(&reverse, c)
             .ok_or_else(|| anyhow::anyhow!("Character {} not in square", c))?;
         rows.push(r);
         cols.push(col);
@@ -89,11 +91,13 @@ pub fn decrypt(input: &str, key: &str) -> Result<String> {
     }
 
     let square = build_polybius_square(key);
+    // Performance: precompute reverse lookup for O(1) char-to-index mapping
+    let reverse = build_reverse_lookup(&square);
 
     // Step 1: convert each ciphertext letter to row/col pair
     let mut coords = Vec::with_capacity(letters.len() * 2);
     for &c in &letters {
-        let (r, col) = find_in_square(&square, c)
+        let (r, col) = find_in_square_fast(&reverse, c)
             .ok_or_else(|| anyhow::anyhow!("Character {} not in square", c))?;
         coords.push(r);
         coords.push(col);
