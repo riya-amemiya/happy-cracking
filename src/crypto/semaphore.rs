@@ -97,8 +97,9 @@ pub fn encode(input: &str) -> Result<String> {
         if has_content {
             result.push(' ');
         }
-        // All 26 letters have semaphore codes, so unwrap is safe here
-        result.push_str(ENCODE_LUT[upper as usize].unwrap());
+        result.push_str(ENCODE_LUT[upper as usize].ok_or_else(|| {
+            anyhow::anyhow!("No semaphore code for character: {}", upper as char)
+        })?);
         has_content = true;
     }
 
