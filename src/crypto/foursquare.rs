@@ -1,7 +1,7 @@
 use anyhow::Result;
 use clap::Subcommand;
 
-use super::polybius_utils::{build_polybius_square, find_in_square};
+use super::polybius_utils::{build_polybius_square, build_reverse_lookup, find_in_square_fast};
 
 #[derive(Subcommand)]
 pub enum FoursquareAction {
@@ -75,12 +75,14 @@ pub fn encrypt(input: &str, key1: &str, key2: &str) -> Result<String> {
 
     let top_right = build_polybius_square(key1);
     let bottom_left = build_polybius_square(key2);
+    // Performance: precompute reverse lookup for O(1) char-to-index mapping
+    let std_reverse = build_reverse_lookup(&STANDARD_SQUARE);
 
     let mut result = String::new();
     for pair in letters.chunks(2) {
-        let (row_a, col_a) = find_in_square(&STANDARD_SQUARE, pair[0])
+        let (row_a, col_a) = find_in_square_fast(&std_reverse, pair[0])
             .ok_or_else(|| anyhow::anyhow!("Character {} not in square", pair[0]))?;
-        let (row_b, col_b) = find_in_square(&STANDARD_SQUARE, pair[1])
+        let (row_b, col_b) = find_in_square_fast(&std_reverse, pair[1])
             .ok_or_else(|| anyhow::anyhow!("Character {} not in square", pair[1]))?;
 
         // Rectangle swap: top-right square at (row_a, col_b), bottom-left square at (row_b, col_a)
@@ -110,13 +112,16 @@ pub fn decrypt(input: &str, key1: &str, key2: &str) -> Result<String> {
 
     let top_right = build_polybius_square(key1);
     let bottom_left = build_polybius_square(key2);
+    // Performance: precompute reverse lookups for O(1) char-to-index mapping
+    let tr_reverse = build_reverse_lookup(&top_right);
+    let bl_reverse = build_reverse_lookup(&bottom_left);
 
     let mut result = String::new();
     for pair in letters.chunks(2) {
         // pair[0] came from top-right, pair[1] from bottom-left
-        let (row_a, col_b) = find_in_square(&top_right, pair[0])
+        let (row_a, col_b) = find_in_square_fast(&tr_reverse, pair[0])
             .ok_or_else(|| anyhow::anyhow!("Character {} not in square", pair[0]))?;
-        let (row_b, col_a) = find_in_square(&bottom_left, pair[1])
+        let (row_b, col_a) = find_in_square_fast(&bl_reverse, pair[1])
             .ok_or_else(|| anyhow::anyhow!("Character {} not in square", pair[1]))?;
 
         // Look up in standard squares
