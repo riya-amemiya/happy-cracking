@@ -144,7 +144,7 @@ pub fn decode(input: &str) -> Result<String> {
         }
 
         let code = u8::from_str_radix(code_str, 2)
-            .context(format!("Failed to parse Baudot code: {}", code_str))?;
+            .with_context(|| format!("Failed to parse Baudot code: {}", code_str))?;
 
         if code == FIGS_SHIFT {
             in_figures = true;

@@ -94,8 +94,7 @@ pub fn run(action: RsaAction) -> Result<()> {
             let p = p.parse::<BigUint>().context("Invalid number for p")?;
             let q = q.parse::<BigUint>().context("Invalid number for q")?;
             let e = e.parse::<BigUint>().context("Invalid number for e")?;
-            let phi = (&p - BigUint::one()) * (&q - BigUint::one());
-            let d = big_modinv(&e, &phi)?;
+            let d = compute_d(&p, &q, &e)?;
             println!("{}", d);
         }
         RsaAction::Decrypt { c, d, n } => {
@@ -196,6 +195,17 @@ pub fn run(action: RsaAction) -> Result<()> {
         }
     }
     Ok(())
+}
+
+// Computes the RSA private exponent d from primes p, q and public exponent e.
+// Rejects p == 0 or q == 0 because BigUint subtraction would panic on the
+// resulting negative intermediate.
+pub fn compute_d(p: &BigUint, q: &BigUint, e: &BigUint) -> Result<BigUint> {
+    if p.is_zero() || q.is_zero() {
+        anyhow::bail!("RSA primes p and q must be non-zero");
+    }
+    let phi = (p - BigUint::one()) * (q - BigUint::one());
+    big_modinv(e, &phi)
 }
 
 // Modular inverse for BigUint using extended Euclidean algorithm.

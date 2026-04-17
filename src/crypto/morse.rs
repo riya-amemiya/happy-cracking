@@ -143,7 +143,7 @@ pub fn decode(input: &str) -> Result<String> {
                     MORSE_TO_CHAR
                         .get(morse)
                         .copied()
-                        .context(format!("Unknown Morse code: {}", morse))
+                        .with_context(|| format!("Unknown Morse code: {}", morse))
                 })
                 .collect::<Result<String>>()
         })

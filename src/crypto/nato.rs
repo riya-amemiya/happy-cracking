@@ -118,7 +118,7 @@ pub fn decode(input: &str) -> Result<String> {
             NATO_TO_CHAR
                 .get(upper.as_str())
                 .copied()
-                .context(format!("Unknown NATO word: {}", word))
+                .with_context(|| format!("Unknown NATO word: {}", word))
         })
         .collect::<Result<String>>()
 }

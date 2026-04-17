@@ -172,7 +172,7 @@ pub fn decode(input: &str) -> Result<String> {
         }
         if in_number_mode {
             let digit = braille_to_digit(c)
-                .context(format!("Invalid Braille number character: {:?}", c))?;
+                .with_context(|| format!("Invalid Braille number character: {:?}", c))?;
             result.push(digit);
             in_number_mode = false;
         } else {
@@ -182,7 +182,7 @@ pub fn decode(input: &str) -> Result<String> {
             } else {
                 None
             };
-            let letter = letter.context(format!("Unknown Braille character: {:?}", c))?;
+            let letter = letter.with_context(|| format!("Unknown Braille character: {:?}", c))?;
             result.push(letter);
         }
     }

@@ -118,7 +118,7 @@ pub fn decode(input: &str) -> Result<String> {
             SEMAPHORE_TO_CHAR
                 .get(code)
                 .copied()
-                .context(format!("Unknown semaphore code: {}", code))
+                .with_context(|| format!("Unknown semaphore code: {}", code))
         })
         .collect()
 }
