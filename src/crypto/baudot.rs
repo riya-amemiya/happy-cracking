@@ -143,8 +143,6 @@ pub fn decode(input: &str) -> Result<String> {
             anyhow::bail!("Invalid Baudot code: {}", code_str);
         }
 
-        // Performance: defer format! allocation to the error path; the
-        // success path is the hot one during decode of long streams.
         let code = u8::from_str_radix(code_str, 2)
             .with_context(|| format!("Failed to parse Baudot code: {}", code_str))?;
 
