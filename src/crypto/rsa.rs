@@ -94,8 +94,7 @@ pub fn run(action: RsaAction) -> Result<()> {
             let p = p.parse::<BigUint>().context("Invalid number for p")?;
             let q = q.parse::<BigUint>().context("Invalid number for q")?;
             let e = e.parse::<BigUint>().context("Invalid number for e")?;
-            let phi = (&p - BigUint::one()) * (&q - BigUint::one());
-            let d = big_modinv(&e, &phi)?;
+            let d = compute_d(&p, &q, &e)?;
             println!("{}", d);
         }
         RsaAction::Decrypt { c, d, n } => {
@@ -196,6 +195,21 @@ pub fn run(action: RsaAction) -> Result<()> {
         }
     }
     Ok(())
+}
+
+// Computes the RSA private exponent d from primes p, q and public exponent e.
+//
+// Security: BigUint subtraction panics when the result would be negative
+// (it is unsigned). Rejecting p == 0 or q == 0 here converts a
+// user-triggerable panic/DoS into a clean error for nonsensical RSA
+// parameters. p == 1 or q == 1 are allowed to fall through because the
+// downstream modinv call returns a proper error (phi becomes zero).
+pub fn compute_d(p: &BigUint, q: &BigUint, e: &BigUint) -> Result<BigUint> {
+    if p.is_zero() || q.is_zero() {
+        anyhow::bail!("RSA primes p and q must be non-zero");
+    }
+    let phi = (p - BigUint::one()) * (q - BigUint::one());
+    big_modinv(e, &phi)
 }
 
 // Modular inverse for BigUint using extended Euclidean algorithm.
@@ -411,7 +425,7 @@ pub fn hastad_broadcast(ciphertexts: &[BigUint], moduli: &[BigUint], e: u32) -> 
         anyhow::bail!("All moduli must be non-zero");
     }
 
-    // CRT: find x such that x ≡ c_i (mod n_i) for all i
+    // CRT: find x such that x \u2261 c_i (mod n_i) for all i
     let big_n: BigUint = ns.iter().product();
     let mut x = BigUint::zero();
 
@@ -532,7 +546,7 @@ fn mod_pow_bigint(base: &BigInt, exp: &BigInt, modulus: &BigInt) -> Result<BigIn
 pub const MAX_POLLARD_P1_BOUND: u64 = 10_000_000;
 
 // Pollard's p-1 factorization.
-// Finds a factor of n when p-1 is B-smooth (all prime factors ≤ B).
+// Finds a factor of n when p-1 is B-smooth (all prime factors \u2264 B).
 pub fn pollard_p1(n: &BigUint, b: u64) -> Result<(BigUint, BigUint)> {
     if b > MAX_POLLARD_P1_BOUND {
         anyhow::bail!(
