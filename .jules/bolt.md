@@ -89,3 +89,7 @@
 ## 2026-03-30 - Linear Scan in Base62 Decode
 **Learning:** `ALPHABET.iter().position(|&a| a == c)` performs an $O(62)$ linear scan per input byte during Base62 decoding, with iterator overhead, closure calls, and branch mispredictions adding to the cost.
 **Action:** Replace with a `LazyLock<[u8; 256]>` reverse lookup table that maps each byte value directly to its alphabet index (or `0xFF` for invalid). This reduces per-character lookup from $O(62)$ to $O(1)$ with a one-time 256-byte initialization cost.
+
+## 2026-04-16 - Eager format! in anyhow context()
+**Learning:** `Option::context(format!(...))` evaluates the `format!` argument every single call, even on the success path. In hot decode loops (Morse / NATO / semaphore / Baudot / Braille), that allocates a throwaway error-message `String` per symbol when everything is fine \u2014 pure waste for any valid input.
+**Action:** Use `with_context(|| format!(...))` so the closure only runs on the error path. `anyhow`'s API is explicitly built for this; prefer the closure form whenever the context message needs formatting arguments.
