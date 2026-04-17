@@ -61,7 +61,7 @@ const SEMAPHORE_MAP: &[(char, &str)] = &[
 
 // Performance: [Option<&str>; 26] array indexed by (letter - 'A') replaces
 // HashMap<char, &str> for encoding. Eliminates hashing overhead, bucket chasing,
-// and key comparison \u2014 a direct O(1) array index vs amortized O(1) HashMap lookup.
+// and key comparison — a direct O(1) array index vs amortized O(1) HashMap lookup.
 const ENCODE_LUT: [Option<&str>; 26] = {
     let mut table: [Option<&str>; 26] = [None; 26];
     let mut i = 0;
@@ -115,9 +115,6 @@ pub fn decode(input: &str) -> Result<String> {
     input
         .split_whitespace()
         .map(|code| {
-            // Performance: defer format! to the error path; eager
-            // context(format!(...)) would allocate a String per successful
-            // code in the hot decode loop.
             SEMAPHORE_TO_CHAR
                 .get(code)
                 .copied()

@@ -140,10 +140,6 @@ pub fn decode(input: &str) -> Result<String> {
         .map(|word| {
             word.split_whitespace()
                 .map(|morse| {
-                    // Performance: use with_context so format! only runs on
-                    // lookup failure. context(format!(...)) eagerly allocates
-                    // a String for every successful symbol in the hot decode
-                    // loop, which dominates the work on long inputs.
                     MORSE_TO_CHAR
                         .get(morse)
                         .copied()

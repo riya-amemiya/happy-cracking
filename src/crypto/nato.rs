@@ -115,8 +115,6 @@ pub fn decode(input: &str) -> Result<String> {
         .split_whitespace()
         .map(|word| {
             let upper = word.to_uppercase();
-            // Performance: defer format! to the error path to avoid
-            // allocating a String for every successful word during decode.
             NATO_TO_CHAR
                 .get(upper.as_str())
                 .copied()
