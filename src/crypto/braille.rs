@@ -61,7 +61,7 @@ const NUMBER_PREFIX: char = '\u{283C}';
 const BRAILLE_SPACE: char = '\u{2800}';
 
 // Performance: [char; 26] array indexed by (letter - 'A') replaces HashMap<char, char>
-// for encoding. Eliminates hashing overhead, bucket chasing, and key comparison —
+// for encoding. Eliminates hashing overhead, bucket chasing, and key comparison \u2014
 // a direct O(1) array index vs amortized O(1) HashMap lookup with allocation.
 const ENCODE_LUT: [char; 26] = {
     let mut table = ['\0'; 26];
@@ -171,8 +171,10 @@ pub fn decode(input: &str) -> Result<String> {
             continue;
         }
         if in_number_mode {
+            // Performance: defer format! to the error path so successful
+            // digits don't allocate a throwaway String per iteration.
             let digit = braille_to_digit(c)
-                .context(format!("Invalid Braille number character: {:?}", c))?;
+                .with_context(|| format!("Invalid Braille number character: {:?}", c))?;
             result.push(digit);
             in_number_mode = false;
         } else {
@@ -182,7 +184,8 @@ pub fn decode(input: &str) -> Result<String> {
             } else {
                 None
             };
-            let letter = letter.context(format!("Unknown Braille character: {:?}", c))?;
+            let letter =
+                letter.with_context(|| format!("Unknown Braille character: {:?}", c))?;
             result.push(letter);
         }
     }
