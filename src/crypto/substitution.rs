@@ -1,6 +1,5 @@
 use anyhow::Result;
 use clap::Subcommand;
-use std::collections::HashMap;
 use std::sync::LazyLock;
 
 #[derive(Subcommand)]
@@ -120,8 +119,12 @@ const ENGLISH_FREQ: [f64; 26] = [
     6.3, 9.1, 2.8, 1.0, 2.4, 0.15, 2.0, 0.07,
 ];
 
-// English bigram log-frequencies for scoring
-static BIGRAM_SCORES: LazyLock<HashMap<(u8, u8), f64>> = LazyLock::new(|| {
+// English bigram log-frequencies for scoring. Stored as a dense [[f64; 26]; 26]
+// table keyed by (first_letter - b'A', second_letter - b'A') so the hot path in
+// `solve` can look up scores with two integer indexes instead of hashing a
+// (u8, u8) tuple. Missing bigrams stay 0.0 which matches the old HashMap
+// "no entry = no score contribution" behavior.
+static BIGRAM_TABLE: LazyLock<[[f64; 26]; 26]> = LazyLock::new(|| {
     let common_bigrams = [
         ("TH", 3.56),
         ("HE", 3.07),
@@ -166,30 +169,43 @@ static BIGRAM_SCORES: LazyLock<HashMap<(u8, u8), f64>> = LazyLock::new(|| {
         ("RA", 0.62),
         ("CE", 0.65),
     ];
-    let mut map = HashMap::new();
+    let mut table = [[0.0f64; 26]; 26];
     for (bg, score) in common_bigrams {
         let bytes = bg.as_bytes();
-        map.insert((bytes[0], bytes[1]), score);
+        let a = (bytes[0] - b'A') as usize;
+        let b = (bytes[1] - b'A') as usize;
+        table[a][b] = score;
     }
-    map
+    table
 });
 
-fn score_text(text: &str) -> f64 {
-    let upper: Vec<u8> = text
+// Compact representation of `input`: one u8 per alphabetic character in the
+// range 0..=25 (uppercased). Non-alphabetic characters are dropped. This is
+// computed once per `solve` call and reused across every iteration of the
+// hill climb.
+fn extract_alpha_indices(input: &str) -> Vec<u8> {
+    input
         .chars()
         .filter(|c| c.is_ascii_alphabetic())
-        .map(|c| c.to_ascii_uppercase() as u8)
-        .collect();
-    if upper.len() < 2 {
+        .map(|c| c.to_ascii_uppercase() as u8 - b'A')
+        .collect()
+}
+
+// Average bigram score of `input` after the `key` permutation is applied,
+// computed directly from the precomputed `indices` without materializing the
+// decrypted plaintext. `key[i]` is an uppercase ASCII byte in b'A'..=b'Z',
+// so `key[i] - b'A'` maps cleanly to a BIGRAM_TABLE row/column index.
+fn score_with_key(indices: &[u8], key: &[u8; 26], table: &[[f64; 26]; 26]) -> f64 {
+    if indices.len() < 2 {
         return 0.0;
     }
     let mut score = 0.0;
-    for window in upper.windows(2) {
-        if let Some(&s) = BIGRAM_SCORES.get(&(window[0], window[1])) {
-            score += s;
-        }
+    for window in indices.windows(2) {
+        let a = (key[window[0] as usize] - b'A') as usize;
+        let b = (key[window[1] as usize] - b'A') as usize;
+        score += table[a][b];
     }
-    score / (upper.len() - 1) as f64
+    score / (indices.len() - 1) as f64
 }
 
 fn apply_key(input: &str, key: &[u8; 26]) -> String {
@@ -250,9 +266,14 @@ impl SimpleRng {
 }
 
 pub fn solve(input: &str, iterations: usize) -> (String, String, f64) {
+    // Performance: preprocess the input once into compact 0..=25 indices and
+    // cache a reference to the bigram table so the hot loop below is a pure
+    // numeric scan with no allocations or hashing.
+    let indices = extract_alpha_indices(input);
+    let table = &*BIGRAM_TABLE;
+
     let mut key = frequency_based_initial_key(input);
-    let mut best_text = apply_key(input, &key);
-    let mut best_score = score_text(&best_text);
+    let mut best_score = score_with_key(&indices, &key, table);
     let mut best_key = key;
 
     let mut rng = SimpleRng::new(42);
@@ -265,18 +286,19 @@ pub fn solve(input: &str, iterations: usize) -> (String, String, f64) {
         }
 
         key.swap(a, b);
-        let candidate = apply_key(input, &key);
-        let candidate_score = score_text(&candidate);
+        let candidate_score = score_with_key(&indices, &key, table);
 
         if candidate_score > best_score {
             best_score = candidate_score;
-            best_text = candidate;
             best_key = key;
         } else {
             key.swap(a, b);
         }
     }
 
+    // Rebuild the decrypted plaintext once, outside the hot loop. The old
+    // implementation did this on every improving iteration.
+    let best_text = apply_key(input, &best_key);
     let key_str: String = best_key.iter().map(|&b| b as char).collect();
     (key_str, best_text, best_score)
 }
