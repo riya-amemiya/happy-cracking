@@ -62,18 +62,21 @@ pub fn encrypt(input: &str, key: &str) -> Result<String> {
     while !padded.len().is_multiple_of(key_len) {
         padded.push('X');
     }
+    let num_rows = padded.len() / key_len;
 
-    // Build grid row by row
-    let grid: Vec<Vec<char>> = padded.chunks(key_len).map(|row| row.to_vec()).collect();
+    // Invert `order` into rank -> original column index.
+    let mut col_at_rank = vec![0usize; key_len];
+    for (col, &rank) in order.iter().enumerate() {
+        col_at_rank[rank] = col;
+    }
 
-    // Read columns in key order
-    let mut sorted_cols: Vec<usize> = (0..key_len).collect();
-    sorted_cols.sort_by_key(|&col| order[col]);
-
-    let mut result = String::new();
-    for &col in &sorted_cols {
-        for row in &grid {
-            result.push(row[col]);
+    // Read columns in key order by indexing directly into the padded buffer.
+    // Skipping the Vec<Vec<char>> grid removes `total_len` char copies and
+    // `key_len + 1` heap allocations per encrypt call.
+    let mut result = String::with_capacity(padded.len());
+    for &col in &col_at_rank {
+        for row in 0..num_rows {
+            result.push(padded[row * key_len + col]);
         }
     }
 
@@ -107,23 +110,14 @@ pub fn decrypt(input: &str, key: &str) -> Result<String> {
     let num_rows = total_len / key_len;
     let order = column_order(key);
 
-    // Determine the order in which columns appear in ciphertext
-    let mut sorted_cols: Vec<usize> = (0..key_len).collect();
-    sorted_cols.sort_by_key(|&col| order[col]);
-
-    // Fill columns in key order
-    let mut columns: Vec<Vec<char>> = vec![Vec::new(); key_len];
-    let mut pos = 0;
-    for &col in &sorted_cols {
-        columns[col] = chars[pos..pos + num_rows].to_vec();
-        pos += num_rows;
-    }
-
-    // Read row by row
-    let mut result = String::new();
+    // `order[col]` is the rank at which column `col` appears in the ciphertext,
+    // so its data occupies `chars[order[col] * num_rows .. (order[col]+1) * num_rows]`.
+    // Indexing straight into `chars` avoids the `Vec<Vec<char>>` column buffer
+    // and saves `total_len` char copies plus `key_len + 1` allocations.
+    let mut result = String::with_capacity(total_len);
     for row in 0..num_rows {
-        for column in &columns {
-            result.push(column[row]);
+        for col in 0..key_len {
+            result.push(chars[order[col] * num_rows + row]);
         }
     }
 
