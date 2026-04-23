@@ -80,12 +80,6 @@ fn test_hmac_long_key() {
     );
 }
 
-// ===========================================================================
-// Verify helpers — these should return true only when the supplied tag
-// matches the freshly recomputed MAC. The comparison happens in constant
-// time internally; these tests only cover correctness, not timing.
-// ===========================================================================
-
 #[test]
 fn test_verify_md5_accepts_matching_tag() {
     let key = b"Jefe";
@@ -99,7 +93,6 @@ fn test_verify_md5_rejects_flipped_bit() {
     let key = b"Jefe";
     let msg = b"what do ya want for nothing?";
     let mut tag = hmac::hmac_md5(key, msg);
-    // Flip the first hex nibble so the tag differs in exactly one bit.
     tag.replace_range(0..1, if tag.starts_with('0') { "1" } else { "0" });
     assert!(!hmac::verify_md5(key, msg, &tag));
 }
@@ -148,13 +141,11 @@ fn test_verify_sha512_accepts_matching_tag() {
 
 #[test]
 fn test_verify_rejects_malformed_hex_tag() {
-    // Odd length and non-hex characters must both fail closed instead of panicking.
     assert!(!hmac::verify_sha256(b"k", b"m", "zz"));
     assert!(!hmac::verify_sha256(b"k", b"m", "abc"));
 }
 
 #[test]
 fn test_verify_rejects_wrong_length_tag() {
-    // A valid hex string of wrong length must not accidentally match.
     assert!(!hmac::verify_sha256(b"k", b"m", "deadbeef"));
 }
