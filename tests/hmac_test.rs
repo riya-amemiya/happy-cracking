@@ -149,3 +149,33 @@ fn test_verify_rejects_malformed_hex_tag() {
 fn test_verify_rejects_wrong_length_tag() {
     assert!(!hmac::verify_sha256(b"k", b"m", "deadbeef"));
 }
+
+#[test]
+fn test_verify_accepts_empty_message() {
+    let key = b"key";
+    let tag = hmac::hmac_sha256(key, b"");
+    assert!(hmac::verify_sha256(key, b"", &tag));
+}
+
+#[test]
+fn test_verify_accepts_empty_key() {
+    let msg = b"Hi There";
+    let tag = hmac::hmac_sha256(b"", msg);
+    assert!(hmac::verify_sha256(b"", msg, &tag));
+}
+
+#[test]
+fn test_verify_accepts_empty_key_and_message() {
+    let tag = hmac::hmac_sha256(b"", b"");
+    assert!(hmac::verify_sha256(b"", b"", &tag));
+}
+
+#[test]
+fn test_verify_rejects_empty_tag_string() {
+    assert!(!hmac::verify_sha256(b"key", b"msg", ""));
+}
+
+#[test]
+fn test_verify_with_empty_inputs_rejects_wrong_tag() {
+    assert!(!hmac::verify_sha256(b"", b"", &"00".repeat(32)));
+}

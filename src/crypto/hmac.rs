@@ -103,8 +103,7 @@ pub fn run(action: HmacAction) -> Result<()> {
 }
 
 fn print_verify(is_match: bool) {
-    // Distinct exit words keep shell scripts robust while avoiding length
-    // differences that would leak through user-visible timing.
+    // Distinct exit words keep shell scripts robust.
     if is_match {
         println!("ok");
     } else {
