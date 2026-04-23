@@ -79,3 +79,103 @@ fn test_hmac_long_key() {
         "60e431591ee0b67f0d8a26aacbf5b77f8e0bc6213728c5140546040f0ee37f54"
     );
 }
+
+#[test]
+fn test_verify_md5_accepts_matching_tag() {
+    let key = b"Jefe";
+    let msg = b"what do ya want for nothing?";
+    let tag = hmac::hmac_md5(key, msg);
+    assert!(hmac::verify_md5(key, msg, &tag));
+}
+
+#[test]
+fn test_verify_md5_rejects_flipped_bit() {
+    let key = b"Jefe";
+    let msg = b"what do ya want for nothing?";
+    let mut tag = hmac::hmac_md5(key, msg);
+    tag.replace_range(0..1, if tag.starts_with('0') { "1" } else { "0" });
+    assert!(!hmac::verify_md5(key, msg, &tag));
+}
+
+#[test]
+fn test_verify_sha1_accepts_matching_tag() {
+    let key = vec![0x0b; 20];
+    let msg = b"Hi There";
+    let tag = hmac::hmac_sha1(&key, msg);
+    assert!(hmac::verify_sha1(&key, msg, &tag));
+}
+
+#[test]
+fn test_verify_sha256_accepts_matching_tag() {
+    let key = b"Jefe";
+    let msg = b"what do ya want for nothing?";
+    let tag = hmac::hmac_sha256(key, msg);
+    assert!(hmac::verify_sha256(key, msg, &tag));
+}
+
+#[test]
+fn test_verify_sha256_rejects_last_byte_flip() {
+    let key = b"Jefe";
+    let msg = b"what do ya want for nothing?";
+    let mut tag = hmac::hmac_sha256(key, msg);
+    let last = tag.pop().expect("non-empty tag");
+    let replacement = if last == 'f' { '0' } else { 'f' };
+    tag.push(replacement);
+    assert!(!hmac::verify_sha256(key, msg, &tag));
+}
+
+#[test]
+fn test_verify_sha256_rejects_wrong_key() {
+    let msg = b"Hi There";
+    let tag = hmac::hmac_sha256(b"correct-key", msg);
+    assert!(!hmac::verify_sha256(b"wrong-key!!", msg, &tag));
+}
+
+#[test]
+fn test_verify_sha512_accepts_matching_tag() {
+    let key = vec![0x0b; 20];
+    let msg = b"Hi There";
+    let tag = hmac::hmac_sha512(&key, msg);
+    assert!(hmac::verify_sha512(&key, msg, &tag));
+}
+
+#[test]
+fn test_verify_rejects_malformed_hex_tag() {
+    assert!(!hmac::verify_sha256(b"k", b"m", "zz"));
+    assert!(!hmac::verify_sha256(b"k", b"m", "abc"));
+}
+
+#[test]
+fn test_verify_rejects_wrong_length_tag() {
+    assert!(!hmac::verify_sha256(b"k", b"m", "deadbeef"));
+}
+
+#[test]
+fn test_verify_accepts_empty_message() {
+    let key = b"key";
+    let tag = hmac::hmac_sha256(key, b"");
+    assert!(hmac::verify_sha256(key, b"", &tag));
+}
+
+#[test]
+fn test_verify_accepts_empty_key() {
+    let msg = b"Hi There";
+    let tag = hmac::hmac_sha256(b"", msg);
+    assert!(hmac::verify_sha256(b"", msg, &tag));
+}
+
+#[test]
+fn test_verify_accepts_empty_key_and_message() {
+    let tag = hmac::hmac_sha256(b"", b"");
+    assert!(hmac::verify_sha256(b"", b"", &tag));
+}
+
+#[test]
+fn test_verify_rejects_empty_tag_string() {
+    assert!(!hmac::verify_sha256(b"key", b"msg", ""));
+}
+
+#[test]
+fn test_verify_with_empty_inputs_rejects_wrong_tag() {
+    assert!(!hmac::verify_sha256(b"", b"", &"00".repeat(32)));
+}
