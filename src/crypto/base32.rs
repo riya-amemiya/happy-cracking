@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use clap::Subcommand;
-use data_encoding::BASE32;
+use umt_rust::crypto::{umt_decode_base32, umt_encode_base32};
 
 #[derive(Subcommand)]
 pub enum Base32Action {
@@ -29,12 +29,10 @@ pub fn run(action: Base32Action) -> Result<()> {
 }
 
 pub fn encode(input: &str) -> String {
-    BASE32.encode(input.as_bytes())
+    umt_encode_base32(input.as_bytes())
 }
 
 pub fn decode(input: &str) -> Result<String> {
-    let decoded = BASE32
-        .decode(input.trim().as_bytes())
-        .context("Failed to decode Base32")?;
+    let decoded = umt_decode_base32(input.trim()).context("Failed to decode Base32")?;
     String::from_utf8(decoded).context("Decoded data is not valid UTF-8")
 }

@@ -1,5 +1,6 @@
 use anyhow::{Context, Result};
 use clap::Subcommand;
+use umt_rust::crypto::{umt_decode_base58, umt_encode_base58};
 
 #[derive(Subcommand)]
 pub enum Base58Action {
@@ -28,12 +29,10 @@ pub fn run(action: Base58Action) -> Result<()> {
 }
 
 pub fn encode(input: &str) -> String {
-    bs58::encode(input.as_bytes()).into_string()
+    umt_encode_base58(input.as_bytes())
 }
 
 pub fn decode(input: &str) -> Result<String> {
-    let decoded = bs58::decode(input.trim())
-        .into_vec()
-        .context("Failed to decode Base58")?;
+    let decoded = umt_decode_base58(input.trim()).context("Failed to decode Base58")?;
     String::from_utf8(decoded).context("Decoded data is not valid UTF-8")
 }

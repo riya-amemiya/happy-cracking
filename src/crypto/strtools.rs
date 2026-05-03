@@ -1,5 +1,6 @@
 use anyhow::Result;
 use clap::Subcommand;
+use umt_rust::string::umt_reverse_string;
 
 #[derive(Subcommand)]
 pub enum StrToolsAction {
@@ -37,7 +38,7 @@ pub fn run(action: StrToolsAction) -> Result<()> {
 
 // Reverse a string by Unicode grapheme.
 pub fn reverse(input: &str) -> String {
-    input.chars().rev().collect()
+    umt_reverse_string(input)
 }
 
 // Return each character with its code point in "A=65 B=66" format.
