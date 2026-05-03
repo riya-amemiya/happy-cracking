@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
-use base64::{Engine, engine::general_purpose::STANDARD};
 use clap::Subcommand;
+use umt_rust::string::{umt_from_base64, umt_to_base64};
 
 #[derive(Subcommand)]
 pub enum Base64Action {
@@ -29,12 +29,11 @@ pub fn run(action: Base64Action) -> Result<()> {
 }
 
 pub fn encode(input: &str) -> String {
-    STANDARD.encode(input.as_bytes())
+    umt_to_base64(input)
 }
 
 pub fn decode(input: &str) -> Result<String> {
-    let decoded = STANDARD
-        .decode(input.trim())
-        .context("Failed to decode Base64")?;
-    String::from_utf8(decoded).context("Decoded data is not valid UTF-8")
+    umt_from_base64(input.trim())
+        .map_err(|e| anyhow::anyhow!(e))
+        .context("Failed to decode Base64")
 }
