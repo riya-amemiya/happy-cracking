@@ -41,3 +41,24 @@ fn test_empty_key_error() {
 fn test_invalid_key_error() {
     assert!(vigenere::encrypt("HELLO", "KEY123").is_err());
 }
+
+// Regression: non-ASCII characters (multi-byte UTF-8) must pass through
+// unchanged after the byte-iteration optimization. Key index must only
+// advance for ASCII alphabetic input bytes, matching the original char-based
+// implementation exactly.
+#[test]
+fn test_encrypt_preserves_non_ascii() {
+    assert_eq!(
+        vigenere::encrypt("HELLO, 世界!", "KEY").unwrap(),
+        "RIJVS, 世界!"
+    );
+}
+
+#[test]
+fn test_roundtrip_non_ascii() {
+    let original = "Привет, world!";
+    let key = "KEY";
+    let encrypted = vigenere::encrypt(original, key).unwrap();
+    let decrypted = vigenere::decrypt(&encrypted, key).unwrap();
+    assert_eq!(decrypted, original);
+}
