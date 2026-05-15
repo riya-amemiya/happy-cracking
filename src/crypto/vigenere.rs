@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use clap::Subcommand;
 use std::collections::HashMap;
 
@@ -109,7 +109,7 @@ pub fn encrypt(input: &str, key: &str) -> Result<String> {
 
     // Security: avoid unsafe – use safe conversion to prevent undefined behavior
     // if a future refactor accidentally produces invalid UTF-8 bytes.
-    Ok(String::from_utf8(bytes).expect("vigenere encrypt: only ASCII bytes were modified"))
+    String::from_utf8(bytes).context("vigenere encrypt: produced invalid UTF-8")
 }
 
 pub fn decrypt(input: &str, key: &str) -> Result<String> {
@@ -133,7 +133,7 @@ pub fn decrypt(input: &str, key: &str) -> Result<String> {
 
     // Security: avoid unsafe – use safe conversion to prevent undefined behavior
     // if a future refactor accidentally produces invalid UTF-8 bytes.
-    Ok(String::from_utf8(bytes).expect("vigenere decrypt: only ASCII bytes were modified"))
+    String::from_utf8(bytes).context("vigenere decrypt: produced invalid UTF-8")
 }
 
 // English letter frequencies (A-Z) as proportions
