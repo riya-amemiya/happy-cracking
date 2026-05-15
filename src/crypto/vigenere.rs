@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use clap::Subcommand;
 use std::collections::HashMap;
 
@@ -81,50 +81,59 @@ pub fn run(action: VigenereAction) -> Result<()> {
     Ok(())
 }
 
+// Performance: iterate bytes (not chars) and mutate in place to avoid
+// UTF-8 decode + char->String re-encode + intermediate Vec<u8> for the key.
+// Non-ASCII UTF-8 continuation bytes have the high bit set, so
+// `is_ascii_alphabetic()` returns false for them and they pass through
+// unchanged — preserving the original char-based semantics exactly.
+// Key bytes are validated as ASCII alphabetic; `| 0x20` lowercases an
+// ASCII letter without allocating a separate uppercase Vec.
 pub fn encrypt(input: &str, key: &str) -> Result<String> {
-    if key.is_empty() || !key.chars().all(|c| c.is_ascii_alphabetic()) {
+    let key_bytes = key.as_bytes();
+    if key_bytes.is_empty() || !key_bytes.iter().all(u8::is_ascii_alphabetic) {
         anyhow::bail!("Key must be non-empty and contain only alphabetic characters");
     }
 
-    let key_upper: Vec<u8> = key.to_uppercase().bytes().collect();
-    let mut key_index = 0;
+    let mut bytes = input.as_bytes().to_vec();
+    let key_len = key_bytes.len();
+    let mut key_index = 0usize;
 
-    Ok(input
-        .chars()
-        .map(|c| {
-            if c.is_ascii_alphabetic() {
-                let base = if c.is_ascii_uppercase() { b'A' } else { b'a' };
-                let shift = key_upper[key_index % key_upper.len()] - b'A';
-                key_index += 1;
-                (((c as u8 - base) + shift) % 26 + base) as char
-            } else {
-                c
-            }
-        })
-        .collect())
+    for b in &mut bytes {
+        if b.is_ascii_alphabetic() {
+            let base = if b.is_ascii_uppercase() { b'A' } else { b'a' };
+            let shift = (key_bytes[key_index % key_len] | 0x20) - b'a';
+            *b = (*b - base + shift) % 26 + base;
+            key_index += 1;
+        }
+    }
+
+    // Security: avoid unsafe – use safe conversion to prevent undefined behavior
+    // if a future refactor accidentally produces invalid UTF-8 bytes.
+    String::from_utf8(bytes).context("vigenere encrypt: produced invalid UTF-8")
 }
 
 pub fn decrypt(input: &str, key: &str) -> Result<String> {
-    if key.is_empty() || !key.chars().all(|c| c.is_ascii_alphabetic()) {
+    let key_bytes = key.as_bytes();
+    if key_bytes.is_empty() || !key_bytes.iter().all(u8::is_ascii_alphabetic) {
         anyhow::bail!("Key must be non-empty and contain only alphabetic characters");
     }
 
-    let key_upper: Vec<u8> = key.to_uppercase().bytes().collect();
-    let mut key_index = 0;
+    let mut bytes = input.as_bytes().to_vec();
+    let key_len = key_bytes.len();
+    let mut key_index = 0usize;
 
-    Ok(input
-        .chars()
-        .map(|c| {
-            if c.is_ascii_alphabetic() {
-                let base = if c.is_ascii_uppercase() { b'A' } else { b'a' };
-                let shift = key_upper[key_index % key_upper.len()] - b'A';
-                key_index += 1;
-                (((c as u8 - base) + 26 - shift) % 26 + base) as char
-            } else {
-                c
-            }
-        })
-        .collect())
+    for b in &mut bytes {
+        if b.is_ascii_alphabetic() {
+            let base = if b.is_ascii_uppercase() { b'A' } else { b'a' };
+            let shift = (key_bytes[key_index % key_len] | 0x20) - b'a';
+            *b = (*b - base + 26 - shift) % 26 + base;
+            key_index += 1;
+        }
+    }
+
+    // Security: avoid unsafe – use safe conversion to prevent undefined behavior
+    // if a future refactor accidentally produces invalid UTF-8 bytes.
+    String::from_utf8(bytes).context("vigenere decrypt: produced invalid UTF-8")
 }
 
 // English letter frequencies (A-Z) as proportions
