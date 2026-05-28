@@ -93,3 +93,7 @@
 ## 2026-04-16 - Eager format! in anyhow context()
 **Learning:** `Option::context(format!(...))` evaluates the `format!` argument every single call, even on the success path. In hot decode loops (Morse / NATO / semaphore / Baudot / Braille), that allocates a throwaway error-message `String` per symbol when everything is fine \u2014 pure waste for any valid input.
 **Action:** Use `with_context(|| format!(...))` so the closure only runs on the error path. `anyhow`'s API is explicitly built for this; prefer the closure form whenever the context message needs formatting arguments.
+
+## 2026-05-28 - Column Vec allocation in Vigenere cryptanalysis
+**Learning:** `estimate_key_length` and `recover_key` both rebuilt a fresh `Vec<u8>` for every candidate column via `letters.iter().skip(col).step_by(key_len).copied().collect()`, then immediately re-iterated that Vec to build a `[usize; 26]` count table. For `max_length=20` that is up to ~210 throwaway heap allocations per `estimate_key_length` call, plus another `key_length` allocations per `recover_key` call, all paid purely so a private helper could re-count what we already had.
+**Action:** Stride directly through the existing `letters: Vec<u8>` and accumulate into a stack-resident `[usize; 26]`, fusing the column build with the count and passing the counts/length pair to a refactored `find_best_shift`. No heap allocation per column, and we only touch each letter once instead of twice. When you see a Vec built just to be folded into a fixed-size summary, push the summary into the source loop.
