@@ -153,19 +153,6 @@ fn extract_alpha(input: &str) -> Vec<u8> {
         .collect()
 }
 
-fn index_of_coincidence(data: &[u8]) -> f64 {
-    if data.len() < 2 {
-        return 0.0;
-    }
-    let mut counts = [0usize; 26];
-    for &b in data {
-        counts[b as usize] += 1;
-    }
-    let n = data.len() as f64;
-    let sum: f64 = counts.iter().map(|&c| c as f64 * (c as f64 - 1.0)).sum();
-    sum / (n * (n - 1.0))
-}
-
 fn kasiski_examination(input: &str, max_key_len: usize) -> HashMap<usize, usize> {
     let letters = extract_alpha(input);
     let mut distances: Vec<usize> = Vec::new();
@@ -218,13 +205,27 @@ pub fn estimate_key_length(input: &str, max_length: usize) -> Vec<(usize, f64)> 
     let mut results: Vec<(usize, f64)> = Vec::new();
 
     for key_len in 1..=max_length.min(letters.len() / 2) {
-        // Split into columns and compute average IoC
+        // Split into columns and compute average IoC.
+        // Performance: stride through `letters` in place instead of allocating a
+        // fresh Vec<u8> for every column. The previous code allocated `key_len`
+        // Vecs per candidate (up to ~210 Vecs total for max_length=20). Counting
+        // directly into a stack-resident [usize; 26] also fuses the column build
+        // with the IoC tally so we only touch each letter once.
         let mut total_ioc = 0.0;
         let mut count = 0;
         for col in 0..key_len {
-            let column: Vec<u8> = letters.iter().skip(col).step_by(key_len).copied().collect();
-            if column.len() >= 2 {
-                total_ioc += index_of_coincidence(&column);
+            let mut counts = [0usize; 26];
+            let mut n: usize = 0;
+            let mut idx = col;
+            while idx < letters.len() {
+                counts[letters[idx] as usize] += 1;
+                n += 1;
+                idx += key_len;
+            }
+            if n >= 2 {
+                let n_f = n as f64;
+                let sum: f64 = counts.iter().map(|&c| c as f64 * (c as f64 - 1.0)).sum();
+                total_ioc += sum / (n_f * (n_f - 1.0));
                 count += 1;
             }
         }
@@ -262,30 +263,32 @@ pub fn recover_key(input: &str, key_length: usize) -> String {
     let letters = extract_alpha(input);
     let mut key = String::with_capacity(key_length);
 
+    // Performance: count each column's letters directly into a stack-allocated
+    // [usize; 26] via stride iteration. The previous version allocated a
+    // Vec<u8> per column purely to be re-counted inside find_best_shift, doing
+    // two passes over the same data and leaking the heap allocation.
     for col in 0..key_length {
-        let column: Vec<u8> = letters
-            .iter()
-            .skip(col)
-            .step_by(key_length)
-            .copied()
-            .collect();
-        let best_shift = find_best_shift(&column);
+        let mut counts = [0usize; 26];
+        let mut n: usize = 0;
+        let mut idx = col;
+        while idx < letters.len() {
+            counts[letters[idx] as usize] += 1;
+            n += 1;
+            idx += key_length;
+        }
+        let best_shift = find_best_shift(&counts, n);
         key.push((b'A' + best_shift) as char);
     }
 
     key
 }
 
-fn find_best_shift(column: &[u8]) -> u8 {
-    if column.is_empty() {
+fn find_best_shift(counts: &[usize; 26], n: usize) -> u8 {
+    if n == 0 {
         return 0;
     }
 
-    let mut counts = [0usize; 26];
-    for &b in column {
-        counts[b as usize] += 1;
-    }
-    let n = column.len() as f64;
+    let n_f = n as f64;
 
     // Use chi-squared statistic to find the best shift
     let mut best_shift = 0u8;
@@ -295,7 +298,7 @@ fn find_best_shift(column: &[u8]) -> u8 {
         let mut chi2 = 0.0;
         for i in 0..26 {
             let observed = counts[(i + shift as usize) % 26] as f64;
-            let expected = ENGLISH_FREQ[i] * n;
+            let expected = ENGLISH_FREQ[i] * n_f;
             if expected > 0.0 {
                 chi2 += (observed - expected).powi(2) / expected;
             }
