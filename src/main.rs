@@ -98,6 +98,21 @@ enum Commands {
         #[command(subcommand)]
         action: crypto::tapcode::TapcodeAction,
     },
+    #[command(about = "Base45 (RFC 9285) encode/decode")]
+    Base45 {
+        #[command(subcommand)]
+        action: crypto::base45::Base45Action,
+    },
+    #[command(about = "uuencode/uudecode")]
+    Uuencode {
+        #[command(subcommand)]
+        action: crypto::uuencode::UuencodeAction,
+    },
+    #[command(about = "Quoted-Printable (RFC 2045) encode/decode")]
+    Qp {
+        #[command(subcommand)]
+        action: crypto::quotedprintable::QpAction,
+    },
 
     // === Classic Ciphers ===
     #[command(about = "ROT13 cipher")]
@@ -258,6 +273,17 @@ enum Commands {
         action: crypto::jwt::JwtAction,
     },
 
+    #[command(about = "Crack hashes (dictionary, brute-force, table lookup)")]
+    Hashcrack {
+        #[command(subcommand)]
+        action: crypto::hashcrack::HashcrackAction,
+    },
+    #[command(about = "Crack password-protected zip archives (dict/brute/info)")]
+    Zipcrack {
+        #[command(subcommand)]
+        action: crypto::zipcrack::ZipcrackAction,
+    },
+
     // === Advanced Crypto ===
     #[command(about = "Elliptic curve operations over finite fields")]
     Ec {
@@ -285,6 +311,11 @@ enum Commands {
     Entropy {
         #[command(subcommand)]
         action: crypto::entropy::EntropyAction,
+    },
+    #[command(about = "Heuristically identify encoding/cipher of a text")]
+    Cipherid {
+        #[command(subcommand)]
+        action: crypto::cipherid::CipheridAction,
     },
     #[command(about = "Number theory tools (GCD, modular inverse, etc.)")]
     Math {
@@ -326,6 +357,16 @@ enum Commands {
         #[command(subcommand)]
         action: crypto::padding::PaddingAction,
     },
+    #[command(about = "Identify file type from magic bytes")]
+    Filetype {
+        #[command(subcommand)]
+        action: crypto::filetype::FiletypeAction,
+    },
+    #[command(about = "Extract printable strings from binary data")]
+    Strings {
+        #[command(subcommand)]
+        action: crypto::strings::StringsAction,
+    },
 }
 
 fn main() -> Result<()> {
@@ -350,6 +391,9 @@ fn main() -> Result<()> {
         Commands::Phone { action } => crypto::phone::run(action)?,
         Commands::Semaphore { action } => crypto::semaphore::run(action)?,
         Commands::Tapcode { action } => crypto::tapcode::run(action)?,
+        Commands::Base45 { action } => crypto::base45::run(action)?,
+        Commands::Uuencode { action } => crypto::uuencode::run(action)?,
+        Commands::Qp { action } => crypto::quotedprintable::run(action)?,
 
         // Classic Ciphers
         Commands::Rot13 { input } => {
@@ -390,6 +434,9 @@ fn main() -> Result<()> {
         Commands::HashExt { action } => crypto::hash_ext::run(action)?,
         Commands::Jwt { action } => crypto::jwt::run(action)?,
 
+        Commands::Hashcrack { action } => crypto::hashcrack::run(action)?,
+        Commands::Zipcrack { action } => crypto::zipcrack::run(action)?,
+
         // Advanced Crypto
         Commands::Ec { action } => crypto::ec::run(action)?,
         Commands::Dh { action } => crypto::dh::run(action)?,
@@ -398,6 +445,7 @@ fn main() -> Result<()> {
         Commands::Frequency { action } => crypto::frequency::run(action)?,
         Commands::Auto { action } => crypto::autodecode::run(action)?,
         Commands::Entropy { action } => crypto::entropy::run(action)?,
+        Commands::Cipherid { action } => crypto::cipherid::run(action)?,
         Commands::Math { action } => crypto::mathtools::run(action)?,
         Commands::Primes { action } => crypto::primes::run(action)?,
         Commands::Str { action } => crypto::strtools::run(action)?,
@@ -406,6 +454,8 @@ fn main() -> Result<()> {
         Commands::Hexdump { action } => crypto::hexdump::run(action)?,
         Commands::Bitrot { action } => crypto::bitrot::run(action)?,
         Commands::Padding { action } => crypto::padding::run(action)?,
+        Commands::Filetype { action } => crypto::filetype::run(action)?,
+        Commands::Strings { action } => crypto::strings::run(action)?,
     }
 
     Ok(())
