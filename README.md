@@ -1,6 +1,6 @@
 # happy-cracking
 
-A fast, comprehensive CTF (Capture The Flag) toolkit written in Rust. Provides 30+ command-line utilities for cryptographic encoding/decoding, classic ciphers, hash operations, and analysis tools commonly used in security competitions.
+A fast, comprehensive CTF (Capture The Flag) toolkit written in Rust. Provides 50+ command-line utilities for cryptographic encoding/decoding, classic ciphers, hash operations, password cracking, forensics, and analysis tools commonly used in security competitions.
 
 ## Installation
 
@@ -14,7 +14,7 @@ The binary will be available at `target/release/happy-cracking`.
 
 ## Features
 
-### Encoding (11 tools)
+### Encoding (14 tools)
 
 | Command | Description |
 | ------- | ----------- |
@@ -23,10 +23,13 @@ The binary will be available at `target/release/happy-cracking`.
 | `base58` | Base58 encode/decode (Bitcoin-style) |
 | `base85` | Base85 (ASCII85) encode/decode |
 | `base91` | Base91 encode/decode |
+| `base45` | Base45 (RFC 9285) encode/decode |
 | `hex` | Hexadecimal encode/decode |
 | `url` | URL percent-encoding encode/decode |
 | `binary` | Binary (8-bit) encode/decode |
 | `morse` | Morse code encode/decode |
+| `uuencode` | uuencode/uudecode |
+| `qp` | Quoted-Printable (RFC 2045) encode/decode |
 | `a1z26` | A=1, B=2, ..., Z=26 number-letter conversion |
 | `numconv` | Number base conversion (bases 2-36) |
 
@@ -55,14 +58,24 @@ The binary will be available at `target/release/happy-cracking`.
 | `hash` | Generate MD5, SHA1, SHA256, SHA512 hashes |
 | `hashid` | Identify hash type from a hash string |
 
-### Utilities (7 tools)
+### Cracking (2 tools)
+
+| Command | Description |
+| ------- | ----------- |
+| `hashcrack` | Recover hashes via dictionary, brute-force, or table lookup (MD5/SHA1/SHA256/SHA512/MD4/NTLM, optional salt, rayon-parallel) |
+| `zipcrack` | Crack password-protected ZIP archives (ZipCrypto and WinZip AES) via dictionary or brute-force, plus archive info |
+
+### Utilities (10 tools)
 
 | Command | Description |
 | ------- | ----------- |
 | `auto` | Auto-detect and decode common encodings |
 | `chain` | Chain multiple operations together (CyberChef-style) |
+| `cipherid` | Heuristically identify the encoding/cipher of a text |
 | `entropy` | Shannon entropy analysis |
 | `frequency` | Character frequency analysis |
+| `filetype` | Identify file type from magic bytes |
+| `strings` | Extract printable strings (ASCII and UTF-16LE) from binary data |
 | `math` | Number theory tools (GCD, LCM, modular inverse, modular exponentiation) |
 | `primes` | Prime factorization and primality test |
 | `str` | String tools (reverse, ord, chr) |
@@ -87,6 +100,18 @@ happy-cracking a1z26 decode "8-5-12-12-15"  # HELLO
 # Number base conversion
 happy-cracking numconv convert 255 --from 10 --to 16   # ff
 happy-cracking numconv convert ff --from 16 --to 2      # 11111111
+
+# Base45 (RFC 9285)
+happy-cracking base45 encode "AB"        # BB8
+happy-cracking base45 decode "BB8"       # AB
+
+# uuencode / uudecode
+happy-cracking uuencode encode "flag{uu}"
+happy-cracking uuencode decode "$(happy-cracking uuencode encode 'flag{uu}')"
+
+# Quoted-Printable (RFC 2045)
+happy-cracking qp encode "café="        # caf=C3=A9=3D
+happy-cracking qp decode "caf=C3=A9=3D"
 ```
 
 ### Classic Ciphers
@@ -117,11 +142,40 @@ happy-cracking hash sha256 "password"
 happy-cracking hashid identify "5d41402abc4b2a76b9719d911017c592"
 ```
 
+### Cracking
+
+```bash
+# Hash cracking with a wordlist (algorithm auto-detected from length)
+happy-cracking hashcrack dict "5d41402abc4b2a76b9719d911017c592" --wordlist words.txt
+happy-cracking hashcrack dict "<hash>" --wordlist words.txt --algo ntlm --salt "s4lt" --salt-position prefix
+
+# Incremental brute-force over a charset (bounded search space)
+happy-cracking hashcrack brute "<hash>" --algo md5 --preset alnum --min-len 1 --max-len 4
+
+# Reverse lookup against a precomputed "hash:plaintext" table
+happy-cracking hashcrack lookup "5d41402abc4b2a76b9719d911017c592" --table rainbow.txt
+
+# Crack a password-protected zip (ZipCrypto or WinZip AES)
+happy-cracking zipcrack dict --file secret.zip --wordlist words.txt
+happy-cracking zipcrack brute --file secret.zip --charset "0123456789" --min-len 1 --max-len 6
+happy-cracking zipcrack info --file secret.zip
+```
+
 ### Utilities
 
 ```bash
 # Shannon entropy analysis
 happy-cracking entropy analyze "Hello World"
+
+# Identify the likely encoding/cipher of a text
+happy-cracking cipherid analyze "SGVsbG8gV29ybGQ="
+
+# Identify a file type from magic bytes (hex input or --file)
+happy-cracking filetype identify "89504e470d0a1a0a"
+happy-cracking filetype identify --file suspicious.bin
+
+# Extract printable strings (hex input or --file)
+happy-cracking strings extract --file firmware.bin --min-len 6 --encoding both
 
 # Number theory
 happy-cracking math gcd 12345 67890
@@ -149,7 +203,7 @@ The `chain` command supports the following operations: `base64-encode`, `base64-
 
 ```bash
 cargo build            # Build
-cargo test             # Run all tests (265 tests)
+cargo test             # Run all tests (847 tests)
 cargo fmt              # Format code
 cargo clippy -- -D warnings  # Lint
 ```
