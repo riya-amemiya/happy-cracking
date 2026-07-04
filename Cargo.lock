@@ -475,7 +475,7 @@ dependencies = [
 
 [[package]]
 name = "happy-cracking"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "aes",
  "anyhow",
@@ -888,9 +888,9 @@ dependencies = [
 
 [[package]]
 name = "serde_json"
-version = "1.0.149"
+version = "1.0.150"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "83fc039473c5595ace860d8c4fafa220ff474b3fc6bfdb4293327f1a37e94d86"
+checksum = "e8014e44b4736ed0538adeecded0fce2a272f22dc9578a7eb6b2d9993c74cfb9"
 dependencies = [
  "itoa",
  "memchr",
@@ -1005,9 +1005,9 @@ checksum = "562d481066bde0658276a35467c4af00bdc6ee726305698a55b86e61d7ad82bb"
 
 [[package]]
 name = "umt_rust"
-version = "0.5.0"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "81036d39809ca28d98daa42cadcbf6e361e09c13c19966ad5f3603abf55ffe17"
+checksum = "67cd55dc23b0aad9707ba6c36ea4fd6a9a0fccee5ce4bf0017eddecfcbb119be"
 dependencies = [
  "base64",
  "chrono",
