@@ -86,6 +86,28 @@ pub enum RsaAction {
         #[arg(long, help = "Modulus n")]
         n: String,
     },
+    #[command(
+        about = "Automatically try common RSA CTF attacks (small-e, Fermat, Wiener, Pollard p-1/rho)"
+    )]
+    Auto {
+        #[arg(long, help = "Modulus n")]
+        n: String,
+        #[arg(long, help = "Public exponent e", default_value = "65537")]
+        e: String,
+        #[arg(
+            long,
+            help = "Ciphertext c (optional; decrypts when factors or d recovered)"
+        )]
+        c: Option<String>,
+        #[arg(
+            long,
+            help = "Pollard p-1 smoothness bound B",
+            default_value = "100000"
+        )]
+        b: String,
+        #[arg(long, help = "Fermat max iterations", default_value = "1000000")]
+        fermat_iters: u64,
+    },
 }
 
 pub fn run(action: RsaAction) -> Result<()> {
@@ -193,8 +215,141 @@ pub fn run(action: RsaAction) -> Result<()> {
             println!("p = {}", p);
             println!("q = {}", q);
         }
+        RsaAction::Auto {
+            n,
+            e,
+            c,
+            b,
+            fermat_iters,
+        } => {
+            let n = n.parse::<BigUint>().context("Invalid number for n")?;
+            let e = e.parse::<BigUint>().context("Invalid number for e")?;
+            let c = c
+                .map(|s| s.parse::<BigUint>().context("Invalid number for c"))
+                .transpose()?;
+            let b: u64 = b.parse().context("Invalid number for b")?;
+            let result = auto_attack(&n, &e, c.as_ref(), b, fermat_iters)?;
+            print_auto_result(&result);
+        }
     }
     Ok(())
+}
+
+#[derive(Debug, Clone)]
+pub struct RsaAutoResult {
+    pub method: String,
+    pub p: Option<BigUint>,
+    pub q: Option<BigUint>,
+    pub d: Option<BigUint>,
+    pub m: Option<BigUint>,
+}
+
+fn print_auto_result(r: &RsaAutoResult) {
+    println!("Method: {}", r.method);
+    if let Some(p) = &r.p {
+        println!("p = {}", p);
+    }
+    if let Some(q) = &r.q {
+        println!("q = {}", q);
+    }
+    if let Some(d) = &r.d {
+        println!("d = {}", d);
+    }
+    if let Some(m) = &r.m {
+        println!("m (decimal) = {}", m);
+        let ascii = bigint_to_ascii(m);
+        if !ascii.is_empty() {
+            println!("m (ascii) = {}", ascii);
+        }
+        println!("m (hex) = {}", hex::encode(m.to_bytes_be()));
+    }
+}
+
+/// Try common RSA CTF attacks in order. Returns the first success.
+pub fn auto_attack(
+    n: &BigUint,
+    e: &BigUint,
+    c: Option<&BigUint>,
+    pollard_b: u64,
+    fermat_iters: u64,
+) -> Result<RsaAutoResult> {
+    if n.is_zero() {
+        anyhow::bail!("Modulus must be non-zero");
+    }
+    if e.is_zero() {
+        anyhow::bail!("Exponent e must be non-zero");
+    }
+
+    // 1. Small-e: m^e == c with no modular reduction (c given, small e)
+    if let Some(ct) = c
+        && let Ok(eu) = e.to_string().parse::<u32>()
+        && (2..=32).contains(&eu)
+    {
+        let root = integer_nth_root(ct, eu);
+        if root.pow(eu) == *ct {
+            return Ok(RsaAutoResult {
+                method: format!("small-e (e={})", eu),
+                p: None,
+                q: None,
+                d: None,
+                m: Some(root),
+            });
+        }
+    }
+
+    // 2. Wiener
+    if let Ok(d) = wiener_attack(e, n) {
+        let m = match c {
+            Some(ct) => Some(big_modpow(ct, &d, n)?),
+            None => None,
+        };
+        return Ok(RsaAutoResult {
+            method: "wiener".to_string(),
+            p: None,
+            q: None,
+            d: Some(d),
+            m,
+        });
+    }
+
+    // 3. Fermat (close primes)
+    if let Ok((p, q)) = fermat_factor(n, fermat_iters) {
+        return finish_with_factors("fermat", n, e, c, p, q);
+    }
+
+    // 4. Pollard p-1
+    if let Ok((p, q)) = pollard_p1(n, pollard_b.min(MAX_POLLARD_P1_BOUND)) {
+        return finish_with_factors("pollard-p1", n, e, c, p, q);
+    }
+
+    // 5. Pollard rho
+    if let Ok((p, q)) = crate::crypto::primes::pollard_rho_biguint(n) {
+        return finish_with_factors("pollard-rho", n, e, c, p, q);
+    }
+
+    anyhow::bail!("All automatic RSA attacks failed")
+}
+
+fn finish_with_factors(
+    method: &str,
+    n: &BigUint,
+    e: &BigUint,
+    c: Option<&BigUint>,
+    p: BigUint,
+    q: BigUint,
+) -> Result<RsaAutoResult> {
+    let d = compute_d(&p, &q, e).ok();
+    let m = match (c, &d) {
+        (Some(ct), Some(dval)) => Some(big_modpow(ct, dval, n)?),
+        _ => None,
+    };
+    Ok(RsaAutoResult {
+        method: method.to_string(),
+        p: Some(p),
+        q: Some(q),
+        d,
+        m,
+    })
 }
 
 // Computes the RSA private exponent d from primes p, q and public exponent e.

@@ -283,6 +283,16 @@ enum Commands {
         #[command(subcommand)]
         action: crypto::zipcrack::ZipcrackAction,
     },
+    #[command(about = "Aggressive auto-solve: encodings + classic cipher attacks")]
+    Solve {
+        #[command(subcommand)]
+        action: crypto::solve::SolveAction,
+    },
+    #[command(about = "Parse nmap output or scan hosts for common open ports")]
+    Portscan {
+        #[command(subcommand)]
+        action: crypto::portscan::PortscanAction,
+    },
 
     // === Advanced Crypto ===
     #[command(about = "Elliptic curve operations over finite fields")]
@@ -436,6 +446,8 @@ fn main() -> Result<()> {
 
         Commands::Hashcrack { action } => crypto::hashcrack::run(action)?,
         Commands::Zipcrack { action } => crypto::zipcrack::run(action)?,
+        Commands::Solve { action } => crypto::solve::run(action)?,
+        Commands::Portscan { action } => crypto::portscan::run(action)?,
 
         // Advanced Crypto
         Commands::Ec { action } => crypto::ec::run(action)?,
