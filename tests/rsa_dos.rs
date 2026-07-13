@@ -77,3 +77,12 @@ fn test_pollard_p1_dos_large_bound() {
     let err_msg = res.unwrap_err().to_string();
     assert!(err_msg.contains("exceeds the maximum allowed limit"));
 }
+
+#[test]
+fn test_fermat_factor_dos_large_iters() {
+    let n = BigUint::from(3233u32);
+    let res = rsa::fermat_factor(&n, rsa::MAX_FERMAT_ITERS + 1);
+    assert!(res.is_err());
+    let err_msg = res.unwrap_err().to_string();
+    assert!(err_msg.contains("prevent DoS") || err_msg.contains("maximum allowed"));
+}

@@ -313,7 +313,7 @@ pub fn auto_attack(
     }
 
     // 3. Fermat (close primes)
-    if let Ok((p, q)) = fermat_factor(n, fermat_iters) {
+    if let Ok((p, q)) = fermat_factor(n, fermat_iters.min(MAX_FERMAT_ITERS)) {
         return finish_with_factors("fermat", n, e, c, p, q);
     }
 
@@ -413,8 +413,18 @@ pub fn integer_nth_root(n: &BigUint, k: u32) -> BigUint {
     n.nth_root(k)
 }
 
+/// Maximum Fermat iterations allowed (DoS guard, same order as Pollard p-1).
+pub const MAX_FERMAT_ITERS: u64 = 10_000_000;
+
 // Fermat's factorization method for N with close prime factors.
 pub fn fermat_factor(n: &BigUint, max_iter: u64) -> Result<(BigUint, BigUint)> {
+    if max_iter > MAX_FERMAT_ITERS {
+        anyhow::bail!(
+            "Fermat iteration limit exceeds the maximum allowed of {} to prevent DoS",
+            MAX_FERMAT_ITERS
+        );
+    }
+
     if n <= &BigUint::one() {
         anyhow::bail!("Cannot factorize n <= 1");
     }

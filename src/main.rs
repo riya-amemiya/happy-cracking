@@ -283,6 +283,8 @@ enum Commands {
         #[command(subcommand)]
         action: crypto::zipcrack::ZipcrackAction,
     },
+
+    // === Attack / Recon ===
     #[command(about = "Aggressive auto-solve: encodings + classic cipher attacks")]
     Solve {
         #[command(subcommand)]
