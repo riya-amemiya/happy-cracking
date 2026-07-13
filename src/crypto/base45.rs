@@ -46,8 +46,8 @@ pub fn run(action: Base45Action) -> Result<()> {
 pub fn encode(data: &[u8]) -> String {
     let mut result = String::with_capacity(data.len().div_ceil(2) * 3);
 
-    let mut chunks = data.chunks_exact(2);
-    for chunk in chunks.by_ref() {
+    let (chunks, rest) = data.as_chunks::<2>();
+    for chunk in chunks {
         let n = (chunk[0] as u16) * 256 + (chunk[1] as u16);
         let c = (n % 45) as usize;
         let d = ((n / 45) % 45) as usize;
@@ -57,7 +57,6 @@ pub fn encode(data: &[u8]) -> String {
         result.push(ALPHABET[e] as char);
     }
 
-    let rest = chunks.remainder();
     if let [b] = rest {
         let n = *b as u16;
         let c = (n % 45) as usize;
@@ -88,8 +87,8 @@ pub fn decode(s: &str) -> Result<Vec<u8>> {
     }
 
     let mut result = Vec::with_capacity(values.len() / 3 * 2);
-    let mut chunks = values.chunks_exact(3);
-    for chunk in chunks.by_ref() {
+    let (chunks, rest) = values.as_chunks::<3>();
+    for chunk in chunks {
         let n = chunk[0] + chunk[1] * 45 + chunk[2] * 45 * 45;
         if n > 0xFFFF {
             anyhow::bail!("Invalid Base45 group: value {n} exceeds 0xFFFF");
@@ -98,7 +97,6 @@ pub fn decode(s: &str) -> Result<Vec<u8>> {
         result.push((n % 256) as u8);
     }
 
-    let rest = chunks.remainder();
     match rest.len() {
         0 => {}
         2 => {
