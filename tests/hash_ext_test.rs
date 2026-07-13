@@ -9,7 +9,7 @@ fn verify_extension(secret: &[u8], message: &[u8], append: &[u8]) {
     let mut hasher = Sha256::new();
     hasher.update(secret);
     hasher.update(message);
-    let original_hash = format!("{:x}", hasher.finalize());
+    let original_hash = hex::encode(hasher.finalize());
 
     let original_len = (secret.len() + message.len()) as u64;
 
@@ -25,7 +25,7 @@ fn verify_extension(secret: &[u8], message: &[u8], append: &[u8]) {
     // Compute the expected hash directly
     let mut expected_hasher = Sha256::new();
     expected_hasher.update(&full_message);
-    let expected_hash = format!("{:x}", expected_hasher.finalize());
+    let expected_hash = hex::encode(expected_hasher.finalize());
 
     assert_eq!(
         result.new_hash, expected_hash,
