@@ -60,23 +60,23 @@ pub fn run(action: HashAction) -> Result<()> {
 pub fn md5_hash(input: &str) -> String {
     let mut hasher = Md5::new();
     hasher.update(input.as_bytes());
-    format!("{:x}", hasher.finalize())
+    hex::encode(hasher.finalize())
 }
 
 pub fn sha1_hash(input: &str) -> String {
     let mut hasher = Sha1::new();
     hasher.update(input.as_bytes());
-    format!("{:x}", hasher.finalize())
+    hex::encode(hasher.finalize())
 }
 
 pub fn sha256_hash(input: &str) -> String {
     let mut hasher = Sha256::new();
     hasher.update(input.as_bytes());
-    format!("{:x}", hasher.finalize())
+    hex::encode(hasher.finalize())
 }
 
 pub fn sha512_hash(input: &str) -> String {
     let mut hasher = Sha512::new();
     hasher.update(input.as_bytes());
-    format!("{:x}", hasher.finalize())
+    hex::encode(hasher.finalize())
 }

@@ -278,34 +278,34 @@ pub fn compute_hash(algo: HashAlgo, input: &str) -> String {
         HashAlgo::Md5 => {
             let mut hasher = Md5::new();
             hasher.update(input.as_bytes());
-            format!("{:x}", hasher.finalize())
+            hex::encode(hasher.finalize())
         }
         HashAlgo::Sha1 => {
             let mut hasher = Sha1::new();
             hasher.update(input.as_bytes());
-            format!("{:x}", hasher.finalize())
+            hex::encode(hasher.finalize())
         }
         HashAlgo::Sha256 => {
             let mut hasher = Sha256::new();
             hasher.update(input.as_bytes());
-            format!("{:x}", hasher.finalize())
+            hex::encode(hasher.finalize())
         }
         HashAlgo::Sha512 => {
             let mut hasher = Sha512::new();
             hasher.update(input.as_bytes());
-            format!("{:x}", hasher.finalize())
+            hex::encode(hasher.finalize())
         }
         HashAlgo::Md4 => {
             let mut hasher = Md4::new();
             hasher.update(input.as_bytes());
-            format!("{:x}", hasher.finalize())
+            hex::encode(hasher.finalize())
         }
         HashAlgo::Ntlm => {
             let mut hasher = Md4::new();
             for unit in input.encode_utf16() {
                 hasher.update(unit.to_le_bytes());
             }
-            format!("{:x}", hasher.finalize())
+            hex::encode(hasher.finalize())
         }
     }
 }

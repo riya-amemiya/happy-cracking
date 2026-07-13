@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use clap::Subcommand;
 
-use des::cipher::{BlockDecrypt, BlockEncrypt, KeyInit, generic_array::GenericArray};
+use des::cipher::{Array, BlockCipherDecrypt, BlockCipherEncrypt, KeyInit};
 use des::{Des, TdesEde3};
 
 #[derive(Subcommand)]
@@ -77,11 +77,12 @@ pub fn des_encrypt(hex_input: &str, hex_key: &str) -> Result<String> {
         );
     }
     let plaintext = parse_des_blocks(hex_input)?;
-    let cipher = Des::new(GenericArray::from_slice(&key_bytes));
+    let cipher =
+        Des::new(&Array::try_from(key_bytes.as_slice()).context("DES key must be 8 bytes")?);
 
     let mut output = Vec::with_capacity(plaintext.len());
     for block in plaintext.chunks(8) {
-        let mut block_array = *GenericArray::from_slice(block);
+        let mut block_array = Array::try_from(block).context("DES block must be 8 bytes")?;
         cipher.encrypt_block(&mut block_array);
         output.extend_from_slice(&block_array);
     }
@@ -97,11 +98,12 @@ pub fn des_decrypt(hex_input: &str, hex_key: &str) -> Result<String> {
         );
     }
     let ciphertext = parse_des_blocks(hex_input)?;
-    let cipher = Des::new(GenericArray::from_slice(&key_bytes));
+    let cipher =
+        Des::new(&Array::try_from(key_bytes.as_slice()).context("DES key must be 8 bytes")?);
 
     let mut output = Vec::with_capacity(ciphertext.len());
     for block in ciphertext.chunks(8) {
-        let mut block_array = *GenericArray::from_slice(block);
+        let mut block_array = Array::try_from(block).context("DES block must be 8 bytes")?;
         cipher.decrypt_block(&mut block_array);
         output.extend_from_slice(&block_array);
     }
@@ -117,11 +119,13 @@ pub fn tdes_encrypt(hex_input: &str, hex_key: &str) -> Result<String> {
         );
     }
     let plaintext = parse_des_blocks(hex_input)?;
-    let cipher = TdesEde3::new(GenericArray::from_slice(&key_bytes));
+    let cipher = TdesEde3::new(
+        &Array::try_from(key_bytes.as_slice()).context("Triple-DES key must be 24 bytes")?,
+    );
 
     let mut output = Vec::with_capacity(plaintext.len());
     for block in plaintext.chunks(8) {
-        let mut block_array = *GenericArray::from_slice(block);
+        let mut block_array = Array::try_from(block).context("DES block must be 8 bytes")?;
         cipher.encrypt_block(&mut block_array);
         output.extend_from_slice(&block_array);
     }
@@ -137,11 +141,13 @@ pub fn tdes_decrypt(hex_input: &str, hex_key: &str) -> Result<String> {
         );
     }
     let ciphertext = parse_des_blocks(hex_input)?;
-    let cipher = TdesEde3::new(GenericArray::from_slice(&key_bytes));
+    let cipher = TdesEde3::new(
+        &Array::try_from(key_bytes.as_slice()).context("Triple-DES key must be 24 bytes")?,
+    );
 
     let mut output = Vec::with_capacity(ciphertext.len());
     for block in ciphertext.chunks(8) {
-        let mut block_array = *GenericArray::from_slice(block);
+        let mut block_array = Array::try_from(block).context("DES block must be 8 bytes")?;
         cipher.decrypt_block(&mut block_array);
         output.extend_from_slice(&block_array);
     }

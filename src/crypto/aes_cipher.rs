@@ -4,7 +4,7 @@ use anyhow::{Context, Result};
 use clap::Subcommand;
 
 use aes::Aes128;
-use aes::cipher::{BlockDecrypt, BlockEncrypt, KeyInit, KeySizeUser, generic_array::GenericArray};
+use aes::cipher::{Array, BlockCipherDecrypt, BlockCipherEncrypt, KeyInit, KeySizeUser};
 
 #[derive(Subcommand)]
 pub enum AesCipherAction {
@@ -77,15 +77,14 @@ pub fn run(action: AesCipherAction) -> Result<()> {
     Ok(())
 }
 
-fn parse_key(hex_key: &str) -> Result<GenericArray<u8, <Aes128 as KeySizeUser>::KeySize>> {
+fn parse_key(hex_key: &str) -> Result<Array<u8, <Aes128 as KeySizeUser>::KeySize>> {
     let key_bytes = hex::decode(hex_key.trim()).context("Failed to decode hex key")?;
-    if key_bytes.len() != 16 {
-        anyhow::bail!(
+    Array::try_from(key_bytes.as_slice()).map_err(|_| {
+        anyhow::anyhow!(
             "AES-128 key must be exactly 16 bytes (32 hex chars), got {} bytes",
             key_bytes.len()
-        );
-    }
-    Ok(*GenericArray::from_slice(&key_bytes))
+        )
+    })
 }
 
 fn parse_blocks(hex_input: &str) -> Result<Vec<u8>> {
@@ -122,7 +121,7 @@ pub fn ecb_encrypt(hex_input: &str, hex_key: &str) -> Result<String> {
 
     let mut output = Vec::with_capacity(plaintext.len());
     for block in plaintext.chunks(16) {
-        let mut block_array = *GenericArray::from_slice(block);
+        let mut block_array = Array::try_from(block).context("AES block must be 16 bytes")?;
         cipher.encrypt_block(&mut block_array);
         output.extend_from_slice(&block_array);
     }
@@ -136,7 +135,7 @@ pub fn ecb_decrypt(hex_input: &str, hex_key: &str) -> Result<String> {
 
     let mut output = Vec::with_capacity(ciphertext.len());
     for block in ciphertext.chunks(16) {
-        let mut block_array = *GenericArray::from_slice(block);
+        let mut block_array = Array::try_from(block).context("AES block must be 16 bytes")?;
         cipher.decrypt_block(&mut block_array);
         output.extend_from_slice(&block_array);
     }
@@ -155,7 +154,7 @@ pub fn cbc_encrypt(hex_input: &str, hex_key: &str, hex_iv: &str) -> Result<Strin
         for i in 0..16 {
             xored[i] = block[i] ^ prev[i];
         }
-        let mut block_array = *GenericArray::from_slice(&xored);
+        let mut block_array = Array::from(xored);
         cipher.encrypt_block(&mut block_array);
         prev.copy_from_slice(&block_array);
         output.extend_from_slice(&block_array);
@@ -171,7 +170,7 @@ pub fn cbc_decrypt(hex_input: &str, hex_key: &str, hex_iv: &str) -> Result<Strin
 
     let mut output = Vec::with_capacity(ciphertext.len());
     for block in ciphertext.chunks(16) {
-        let mut block_array = *GenericArray::from_slice(block);
+        let mut block_array = Array::try_from(block).context("AES block must be 16 bytes")?;
         cipher.decrypt_block(&mut block_array);
         for i in 0..16 {
             block_array[i] ^= prev[i];
