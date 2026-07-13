@@ -200,7 +200,10 @@ fn parse_greppable_line(line: &str) -> Option<Vec<OpenPort>> {
         if fields.len() < 3 {
             continue;
         }
-        let port: u16 = fields[0].parse().ok()?;
+        let port: u16 = match fields[0].parse() {
+            Ok(p) => p,
+            Err(_) => continue,
+        };
         let state = fields[1].to_ascii_lowercase();
         if state != "open" && !state.starts_with("open") {
             continue;

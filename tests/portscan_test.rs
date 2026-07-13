@@ -42,6 +42,25 @@ fn parse_greppable_nmap_output() {
 }
 
 #[test]
+fn parse_greppable_skips_malformed_entry_keeps_valid() {
+    // Unparseable port in the middle must not discard the whole Ports line.
+    let text =
+        "Host: 10.0.0.1 ()  Ports: 21/open/tcp//ftp///, bad/open/tcp//x///, 22/open/tcp//ssh///\n";
+    let ports = parse_nmap_output(text);
+    assert!(
+        ports.iter().any(|p| p.port == 21),
+        "expected ftp port kept, got {:?}",
+        ports
+    );
+    assert!(
+        ports.iter().any(|p| p.port == 22),
+        "expected ssh port kept, got {:?}",
+        ports
+    );
+    assert!(!ports.iter().any(|p| p.service == "x"));
+}
+
+#[test]
 fn parse_xml_style_line() {
     let text =
         r#"<port protocol="tcp" portid="443"><state state="open"/><service name="https"/></port>"#;
