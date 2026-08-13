@@ -18,19 +18,47 @@ pub(crate) struct Job<'a> {
     pub(crate) emit_lines: bool,
 }
 
+pub(crate) fn may_stop_early(cli: &Cli) -> bool {
+    cli.max_count.is_some() || cli.files_with_matches || cli.files_without_match || cli.quiet
+}
+
+fn limit_of(cli: &Cli) -> u64 {
+    if let Some(n) = cli.max_count {
+        n
+    } else if cli.files_with_matches || cli.files_without_match || cli.quiet {
+        1
+    } else {
+        u64::MAX
+    }
+}
+
+fn push_u64(out: &mut Vec<u8>, mut n: u64) {
+    let mut buf = [0u8; 20];
+    let mut i = 20;
+    loop {
+        i -= 1;
+        buf[i] = b'0' + (n % 10) as u8;
+        n /= 10;
+        if n == 0 {
+            break;
+        }
+    }
+    out.extend_from_slice(&buf[i..]);
+}
+
 fn write_prefix(out: &mut Vec<u8>, job: &Job, name: &[u8], line_no: u64) {
     if job.show_name {
         out.extend_from_slice(name);
         out.push(b':');
     }
     if job.cli.line_number {
-        out.extend_from_slice(line_no.to_string().as_bytes());
+        push_u64(out, line_no);
         out.push(b':');
     }
 }
 
 fn search_forward(buf: &[u8], job: &Job, name: &[u8], base_line: u64, out: &mut Vec<u8>) -> u64 {
-    let limit = job.cli.max_count.unwrap_or(u64::MAX);
+    let limit = limit_of(job.cli);
     if limit == 0 {
         return 0;
     }
@@ -82,7 +110,7 @@ fn search_forward(buf: &[u8], job: &Job, name: &[u8], base_line: u64, out: &mut 
 }
 
 fn search_inverted(buf: &[u8], job: &Job, name: &[u8], base_line: u64, out: &mut Vec<u8>) -> u64 {
-    let limit = job.cli.max_count.unwrap_or(u64::MAX);
+    let limit = limit_of(job.cli);
     if limit == 0 {
         return 0;
     }
@@ -147,6 +175,12 @@ fn search_slice(buf: &[u8], job: &Job, name: &[u8], base_line: u64, out: &mut Ve
 
 fn search_split(buf: &[u8], job: &Job, name: &[u8], out: &mut Vec<u8>) -> u64 {
     let chunks = split_chunks(buf, rayon::current_num_threads() * 4);
+    if !job.emit_lines {
+        return chunks
+            .par_iter()
+            .map(|&(s, e)| search_slice(&buf[s..e], job, name, 0, &mut Vec::new()))
+            .sum();
+    }
     let bases = if job.cli.line_number {
         chunks
             .par_iter()
@@ -179,20 +213,101 @@ fn search_split(buf: &[u8], job: &Job, name: &[u8], out: &mut Vec<u8>) -> u64 {
     })
 }
 
+pub(crate) const EXISTS_HEAD: usize = 1 << 20;
+
+fn split_overlap(len: usize, parts: usize, overlap: usize) -> Vec<(usize, usize)> {
+    let target = len / parts.max(1) + 1;
+    let mut chunks = Vec::with_capacity(parts + 1);
+    let mut start = 0usize;
+    while start < len {
+        let mid = (start + target).min(len);
+        chunks.push((start, (mid + overlap).min(len)));
+        start = mid;
+    }
+    chunks
+}
+
+fn exists_parallel(buf: &[u8], matcher: &Matcher, overlap: usize) -> bool {
+    if buf.len() < PARALLEL_THRESHOLD {
+        return matcher.is_match(buf);
+    }
+    let hit = std::sync::atomic::AtomicBool::new(false);
+    split_overlap(buf.len(), rayon::current_num_threads(), overlap)
+        .into_par_iter()
+        .any(|(s, e)| {
+            if hit.load(std::sync::atomic::Ordering::Relaxed) {
+                return false;
+            }
+            if matcher.is_match(&buf[s..e]) {
+                hit.store(true, std::sync::atomic::Ordering::Relaxed);
+                true
+            } else {
+                false
+            }
+        })
+}
+
+pub(crate) fn search_exists(
+    buf: &[u8],
+    job: &Job,
+    overlap: usize,
+    prefetch_tail: impl FnOnce(),
+) -> u64 {
+    if buf.len() <= EXISTS_HEAD + overlap {
+        return u64::from(job.matcher.is_match(buf));
+    }
+    if job.matcher.is_match(&buf[..EXISTS_HEAD + overlap]) {
+        return 1;
+    }
+    prefetch_tail();
+    u64::from(exists_parallel(&buf[EXISTS_HEAD..], job.matcher, overlap))
+}
+
+fn existence(buf: &[u8], job: &Job) -> u64 {
+    if !job.cli.invert {
+        return u64::from(job.matcher.is_match(buf));
+    }
+    let trailing = buf.last().is_none_or(|&b| b == b'\n');
+    let mut start = 0usize;
+    while start <= buf.len() {
+        let end = memchr(b'\n', &buf[start..]).map_or(buf.len(), |i| start + i);
+        if start == buf.len() && trailing {
+            break;
+        }
+        if !job.matcher.is_match(&buf[start..end]) {
+            return 1;
+        }
+        if end >= buf.len() {
+            break;
+        }
+        start = end + 1;
+    }
+    0
+}
+
 pub(crate) fn search_buf(buf: &[u8], job: &Job, name: &[u8], out: &mut Vec<u8>) -> u64 {
     let before = out.len();
-    let count = if buf.len() >= PARALLEL_THRESHOLD && job.cli.max_count.is_none() {
-        search_split(buf, job, name, out)
-    } else {
-        search_slice(buf, job, name, 0, out)
-    };
-    if count > 0 && !job.cli.text && is_binary(buf) {
-        out.truncate(before);
-        if job.emit_lines {
+    let binary = !job.cli.text && is_binary(buf);
+    if binary && !job.cli.count {
+        let count = existence(buf, job);
+        if count > 0 && job.emit_lines {
+            out.truncate(before);
             out.extend_from_slice(b"Binary file ");
             out.extend_from_slice(name);
             out.extend_from_slice(b" matches\n");
         }
+        return count;
+    }
+    let count = if buf.len() >= PARALLEL_THRESHOLD && limit_of(job.cli) == u64::MAX {
+        search_split(buf, job, name, out)
+    } else {
+        search_slice(buf, job, name, 0, out)
+    };
+    if count > 0 && binary && job.emit_lines {
+        out.truncate(before);
+        out.extend_from_slice(b"Binary file ");
+        out.extend_from_slice(name);
+        out.extend_from_slice(b" matches\n");
     }
     count
 }
@@ -205,9 +320,9 @@ pub(crate) fn selected(cli: &Cli, count: u64) -> bool {
     }
 }
 
-pub(crate) fn report(job: &Job, name: &[u8], count: u64, body: Vec<u8>, out: &mut Vec<u8>) {
+pub(crate) fn report(job: &Job, name: &[u8], count: u64, out: &mut Vec<u8>) {
     let cli = job.cli;
-    if cli.quiet {
+    if cli.quiet || job.emit_lines {
         return;
     }
     if cli.files_with_matches {
@@ -225,9 +340,7 @@ pub(crate) fn report(job: &Job, name: &[u8], count: u64, body: Vec<u8>, out: &mu
             out.extend_from_slice(name);
             out.push(b':');
         }
-        out.extend_from_slice(count.to_string().as_bytes());
+        push_u64(out, count);
         out.push(b'\n');
-    } else {
-        out.extend_from_slice(&body);
     }
 }

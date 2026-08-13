@@ -286,13 +286,16 @@ fn scan_ignored(dir: &Dir, errors: &AtomicBool, quiet: bool) -> (Vec<Dir>, Vec<P
     (sub, leaves)
 }
 
-pub(crate) fn collect_paths(
+pub(crate) fn for_each_path<F>(
     roots: &[OsString],
     recursive: bool,
     gitignore: bool,
     errors: &AtomicBool,
     quiet_errors: bool,
-) -> Vec<PathBuf> {
+    visit: F,
+) where
+    F: Fn(&Path) + Sync,
+{
     let mut files = Vec::new();
     let mut level = Vec::new();
 
@@ -327,6 +330,10 @@ pub(crate) fn collect_paths(
         }
     }
 
+    if !files.is_empty() {
+        files.par_iter().for_each(|path| visit(path));
+    }
+
     while !level.is_empty() {
         let (dirs, found): (Vec<Vec<Dir>>, Vec<Vec<PathBuf>>) = level
             .par_iter()
@@ -338,8 +345,10 @@ pub(crate) fn collect_paths(
                 }
             })
             .unzip();
+        found
+            .into_par_iter()
+            .flatten()
+            .for_each(|path| visit(&path));
         level = dirs.into_iter().flatten().collect();
-        files.extend(found.into_iter().flatten());
     }
-    files
 }
