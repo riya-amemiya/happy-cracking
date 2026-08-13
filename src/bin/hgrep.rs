@@ -135,7 +135,7 @@ fn open_source(path: &Path) -> io::Result<Source> {
 
 enum Matcher {
     Never,
-    Literal(Finder<'static>),
+    Literal(Box<Finder<'static>>),
     Regex(Regex),
     Word(Regex),
 }
@@ -178,7 +178,9 @@ fn build_matcher(cli: &Cli, patterns: &[Vec<u8>]) -> Result<Matcher, String> {
         && !cli.line_regexp
         && (cli.fixed || is_plain_literal(&patterns[0]))
     {
-        return Ok(Matcher::Literal(Finder::new(&patterns[0]).into_owned()));
+        return Ok(Matcher::Literal(Box::new(
+            Finder::new(&patterns[0]).into_owned(),
+        )));
     }
 
     let mut parts = Vec::with_capacity(patterns.len());
