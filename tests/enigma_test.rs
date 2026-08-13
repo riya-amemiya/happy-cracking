@@ -1,4 +1,4 @@
-use happy_cracking::crypto::enigma::{decrypt, encrypt, transform};
+use happy_cracking::crypto::enigma::{crack, decrypt, encrypt, transform};
 
 fn crypt(input: &str) -> String {
     transform(input, "I II III", "B", "AAA", "AAA", "").unwrap()
@@ -159,4 +159,86 @@ fn two_rotor_list_error() {
 fn ring_out_of_range_error() {
     assert!(transform("A", "I II III", "B", "0 1 1", "AAA", "").is_err());
     assert!(transform("A", "I II III", "B", "27 1 1", "AAA", "").is_err());
+}
+
+#[test]
+fn m4_beta_thin_b_at_a_matches_m3_b() {
+    let m3 = transform("HELLOWORLD", "I II III", "B", "AAA", "QWE", "AB CD").unwrap();
+    let m4 = transform(
+        "HELLOWORLD",
+        "BETA I II III",
+        "B-THIN",
+        "AAAA",
+        "AQWE",
+        "AB CD",
+    )
+    .unwrap();
+    assert_eq!(m3, m4);
+}
+
+#[test]
+fn m4_three_letter_settings_pad_greek_a() {
+    let full = transform("SECRET", "BETA II IV I", "B-THIN", "AAAA", "ABCD", "").unwrap();
+    let short = transform("SECRET", "BETA II IV I", "B", "AAA", "BCD", "").unwrap();
+    assert_eq!(full, short);
+}
+
+#[test]
+fn m4_roundtrip_and_gamma() {
+    let c = transform("FLAGCTF", "GAMMA V III I", "C-THIN", "BCDF", "WXYZ", "AT").unwrap();
+    assert_eq!(
+        transform(&c, "GAMMA V III I", "C-THIN", "BCDF", "WXYZ", "AT").unwrap(),
+        "FLAGCTF"
+    );
+}
+
+#[test]
+fn m4_needs_greek() {
+    assert!(transform("A", "I II III IV", "B-THIN", "AAAA", "AAAA", "").is_err());
+}
+
+#[test]
+fn crack_recovers_known_m3_settings() {
+    let hits = crack(
+        "BDZGO", "AAAAA", "I II III", "B", "AAA", "", "", false, false, false, None, 5,
+    )
+    .unwrap();
+    assert!(
+        hits.iter()
+            .any(|h| h.rotors == "I II III" && h.reflector == "B" && h.position == "AAA")
+    );
+}
+
+#[test]
+fn crack_respects_fixed_position() {
+    let hits = crack(
+        "BDZGO", "AAAAA", "I II III", "B", "AAA", "AAA", "", false, false, false, None, 5,
+    )
+    .unwrap();
+    assert_eq!(hits.len(), 1);
+    assert_eq!(hits[0].plaintext, "AAAAA");
+}
+
+#[test]
+fn crack_rejects_wrong_crib() {
+    let hits = crack(
+        "BDZGO", "ZZZZZ", "I II III", "B", "AAA", "AAA", "", false, false, false, None, 5,
+    )
+    .unwrap();
+    assert!(hits.is_empty());
+}
+
+#[test]
+fn u264_m4_decrypts() {
+    let cipher = "NCZWVUSXPNYMINHZXMQXSFWXWLKJAHSHNMCOCCAKUQPMKCSMHKSEINJUSBLKIOSXCKUBHMLLXCSJUSRRDVKOHULXWCCBGVLIYXEOAHXRHKKFVDREWEZLXOBAFGYUJQUKGRTVUKAMEURBVEKSUHHVOYHABCJWMAKLFKLMYFVNRIZRVVRTKOFDANJMOLBGFFLEOPRGTFLVRHOWOPBEKVWMUQFMPWPARMFHAGKXIIBG";
+    let plain = transform(
+        cipher,
+        "BETA II IV I",
+        "B-THIN",
+        "1 1 1 22",
+        "VJNA",
+        "AT BL DF GJ HM NW OP QY RZ VX",
+    )
+    .unwrap();
+    assert!(plain.starts_with("VONVONJLOOKS"), "{plain}");
 }

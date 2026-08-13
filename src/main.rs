@@ -195,7 +195,7 @@ enum Commands {
         #[command(subcommand)]
         action: crypto::columnar::ColumnarAction,
     },
-    #[command(about = "Enigma I/M3 cipher")]
+    #[command(about = "Enigma I/M3/M4 cipher")]
     Enigma {
         #[command(subcommand)]
         action: crypto::enigma::EnigmaAction,
