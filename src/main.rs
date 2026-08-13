@@ -195,6 +195,11 @@ enum Commands {
         #[command(subcommand)]
         action: crypto::columnar::ColumnarAction,
     },
+    #[command(about = "Enigma I/M3 cipher")]
+    Enigma {
+        #[command(subcommand)]
+        action: crypto::enigma::EnigmaAction,
+    },
     #[command(about = "Baconian cipher (5-bit A/B encoding)")]
     Baconian {
         #[command(subcommand)]
@@ -428,6 +433,7 @@ fn main() -> Result<()> {
         Commands::Bifid { action } => crypto::bifid::run(action)?,
         Commands::Adfgvx { action } => crypto::adfgvx::run(action)?,
         Commands::Columnar { action } => crypto::columnar::run(action)?,
+        Commands::Enigma { action } => crypto::enigma::run(action)?,
         Commands::Baconian { action } => crypto::baconian::run(action)?,
         Commands::Polybius { action } => crypto::polybius::run(action)?,
         Commands::Otp { action } => crypto::otp::run(action)?,
