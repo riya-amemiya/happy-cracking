@@ -27,6 +27,7 @@ pub mod crc32_forge;
 pub mod des_cipher;
 pub mod dh;
 pub mod ec;
+pub mod enigma;
 pub mod entropy;
 pub mod filetype;
 pub mod foursquare;
