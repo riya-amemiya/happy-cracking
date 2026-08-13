@@ -3,7 +3,7 @@ use std::io::{self, Read};
 use std::os::fd::AsRawFd;
 use std::path::Path;
 
-const MMAP_THRESHOLD: u64 = 64 * 1024;
+const MMAP_MIN: u64 = 64 * 1024;
 
 struct Mapped {
     ptr: *mut libc::c_void,
@@ -19,48 +19,77 @@ impl Drop for Mapped {
     }
 }
 
-enum Kind {
+enum Kind<'a> {
     Map(Mapped),
-    Owned(Vec<u8>),
+    Mem(&'a [u8]),
 }
 
-pub(crate) struct Source(Kind);
+pub(crate) struct Source<'a>(Kind<'a>);
 
-impl Source {
+impl Source<'_> {
     pub(crate) fn bytes(&self) -> &[u8] {
         match &self.0 {
             Kind::Map(m) => unsafe { std::slice::from_raw_parts(m.ptr as *const u8, m.len) },
-            Kind::Owned(v) => v,
+            Kind::Mem(v) => v,
+        }
+    }
+
+    pub(crate) fn prefetch_from(&self, offset: usize) {
+        if let Kind::Map(m) = &self.0 {
+            let page = 4096usize;
+            let off = offset & !(page - 1);
+            if off < m.len {
+                unsafe {
+                    libc::madvise(
+                        (m.ptr as *mut u8).add(off) as *mut libc::c_void,
+                        m.len - off,
+                        libc::MADV_WILLNEED,
+                    )
+                };
+            }
         }
     }
 }
 
-pub(crate) fn open_source(path: &Path) -> io::Result<Source> {
+fn read_into(file: &File, len: u64, buf: &mut Vec<u8>) -> io::Result<()> {
+    buf.clear();
+    buf.reserve(len as usize);
+    file.take(len).read_to_end(buf)?;
+    Ok(())
+}
+
+pub(crate) fn open_source<'a>(
+    path: &Path,
+    buf: &'a mut Vec<u8>,
+    early: bool,
+) -> io::Result<Source<'a>> {
     let file = File::open(path)?;
     let len = file.metadata()?.len();
-    if len < MMAP_THRESHOLD || len > usize::MAX as u64 {
-        let mut buf = Vec::with_capacity(len as usize);
-        (&file).read_to_end(&mut buf)?;
-        return Ok(Source(Kind::Owned(buf)));
+    if len > usize::MAX as u64 {
+        read_into(&file, len, buf)?;
+        return Ok(Source(Kind::Mem(buf)));
     }
-    let ptr = unsafe {
-        libc::mmap(
-            std::ptr::null_mut(),
-            len as usize,
-            libc::PROT_READ,
-            libc::MAP_PRIVATE,
-            file.as_raw_fd(),
-            0,
-        )
-    };
-    if ptr == libc::MAP_FAILED {
-        let mut buf = Vec::with_capacity(len as usize);
-        (&file).read_to_end(&mut buf)?;
-        return Ok(Source(Kind::Owned(buf)));
+    if len >= MMAP_MIN {
+        let ptr = unsafe {
+            libc::mmap(
+                std::ptr::null_mut(),
+                len as usize,
+                libc::PROT_READ,
+                libc::MAP_PRIVATE,
+                file.as_raw_fd(),
+                0,
+            )
+        };
+        if ptr != libc::MAP_FAILED {
+            if !early {
+                unsafe { libc::madvise(ptr, len as usize, libc::MADV_WILLNEED) };
+            }
+            return Ok(Source(Kind::Map(Mapped {
+                ptr,
+                len: len as usize,
+            })));
+        }
     }
-    unsafe { libc::madvise(ptr, len as usize, libc::MADV_WILLNEED) };
-    Ok(Source(Kind::Map(Mapped {
-        ptr,
-        len: len as usize,
-    })))
+    read_into(&file, len, buf)?;
+    Ok(Source(Kind::Mem(buf)))
 }
