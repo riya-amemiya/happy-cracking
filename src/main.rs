@@ -5,6 +5,9 @@ use happy_cracking::crypto;
 #[derive(Parser)]
 #[command(name = "happy-cracking")]
 #[command(about = "CTF toolkit for cryptography and more", long_about = None)]
+#[command(
+    after_help = "This crate also installs hgrep, a parallel grep-compatible line matcher. Run hgrep --help for usage."
+)]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
