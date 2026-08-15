@@ -3,11 +3,32 @@ edition = "2024"
 name = "happy-cracking"
 version = "0.7.0"
 default-run = "happy-cracking"
+autobins = false
 description = "A fast, comprehensive CTF toolkit for cryptographic encoding/decoding, classic ciphers, hash operations, and analysis tools"
 license = "MIT"
 repository = "https://github.com/riya-amemiya/happy-cracking"
 keywords = ["ctf", "cryptography", "cipher", "encoding", "security"]
 categories = ["command-line-utilities", "cryptography"]
+
+[[bin]]
+name = "happy-cracking"
+path = "src/main.rs"
+
+[[bin]]
+name = "hgrep"
+path = "src/bin/hgrep/main.rs"
+
+[[bin]]
+name = "hg"
+path = "src/bin/hgrep/main.rs"
+
+[[bin]]
+name = "hfind"
+path = "src/bin/hfind/main.rs"
+
+[[bin]]
+name = "hfd"
+path = "src/bin/hfind/main.rs"
 
 [dependencies]
 aes = "0.9.2"

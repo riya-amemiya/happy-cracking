@@ -36,6 +36,23 @@ fn help_lists_hgrep_companion() {
 }
 
 #[test]
+fn help_lists_hfind_companion() {
+    let help = help_stdout();
+    assert!(
+        help.contains("hfind"),
+        "top-level help should mention the hfind companion binary, got {help}"
+    );
+    assert!(
+        help.contains("hfd"),
+        "top-level help should mention the hfd alias, got {help}"
+    );
+    assert!(
+        help.contains("hg"),
+        "top-level help should mention the hg alias, got {help}"
+    );
+}
+
+#[test]
 fn readme_documents_every_cli_command() {
     let help = help_stdout();
     let names = command_names(&help);
@@ -60,4 +77,12 @@ fn readme_documents_every_cli_command() {
 fn readme_documents_hgrep() {
     let readme = include_str!("../README.md");
     assert!(readme.contains("`hgrep`"), "README should document hgrep");
+}
+
+#[test]
+fn readme_documents_hfind() {
+    let readme = include_str!("../README.md");
+    assert!(readme.contains("`hfind`"), "README should document hfind");
+    assert!(readme.contains("`hfd`"), "README should document hfd");
+    assert!(readme.contains("`hg`"), "README should document hg");
 }
