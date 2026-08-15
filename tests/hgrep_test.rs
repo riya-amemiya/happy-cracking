@@ -57,6 +57,39 @@ fn hgrep(args: &[&str], stdin: &str) -> (String, i32) {
 const SAMPLE: &str = "alpha\nBeta\ngamma beta\ndelta\n";
 
 #[test]
+fn hg_alias_behaves_like_hgrep() {
+    let hg = Path::new(env!("CARGO_BIN_EXE_hg"));
+    assert!(hg.exists(), "missing {hg:?}");
+    let home = sandbox();
+    let mut cmd = Command::new(hg);
+    cmd.env("HOME", home)
+        .env("XDG_CONFIG_HOME", home)
+        .env("GIT_CONFIG_GLOBAL", home.join("absent-config"))
+        .env("GIT_CONFIG_SYSTEM", home.join("absent-system"))
+        .env("GIT_CONFIG_NOSYSTEM", "1");
+    let mut child = cmd
+        .args(["beta"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .expect("spawn hg");
+    child
+        .stdin
+        .as_mut()
+        .unwrap()
+        .write_all(SAMPLE.as_bytes())
+        .unwrap();
+    let out = child.wait_with_output().unwrap();
+    assert_eq!(
+        (
+            String::from_utf8_lossy(&out.stdout).into_owned(),
+            out.status.code().unwrap_or(-1)
+        ),
+        hgrep(&["beta"], SAMPLE)
+    );
+}
+
+#[test]
 fn plain_literal_match() {
     assert_eq!(hgrep(&["beta"], SAMPLE), ("gamma beta\n".to_string(), 0));
 }

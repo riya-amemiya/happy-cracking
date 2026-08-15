@@ -6,7 +6,7 @@ use happy_cracking::crypto;
 #[command(name = "happy-cracking")]
 #[command(about = "CTF toolkit for cryptography and more", long_about = None)]
 #[command(
-    after_help = "This crate also installs hgrep, a parallel grep-compatible line matcher. Run hgrep --help for usage."
+    after_help = "This crate also installs hgrep, a parallel grep-compatible line matcher, and hfind, a parallel find-compatible walker. hg is an alias for hgrep. hfd is an alias for hfind. Run hgrep --help or hfind --help for usage."
 )]
 struct Cli {
     #[command(subcommand)]

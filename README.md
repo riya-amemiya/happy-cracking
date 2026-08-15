@@ -10,7 +10,7 @@ cd happy-cracking
 cargo build --release
 ```
 
-This produces `target/release/happy-cracking` and the companion binary `target/release/hgrep`.
+This produces `target/release/happy-cracking` and the companion binaries `target/release/hgrep`, `target/release/hg`, `target/release/hfind`, and `target/release/hfd`.
 
 ## Features
 
@@ -121,13 +121,16 @@ This produces `target/release/happy-cracking` and the companion binary `target/r
 | `bitrot`    | Bit rotation (rotate left / rotate right)                                |
 | `padding`   | PKCS7 and zero padding / unpadding                                       |
 
-### Companion binary
+### Companion binaries
 
 | Command | Description                                      |
 | ------- | ------------------------------------------------ |
 | `hgrep` | Parallel grep-compatible line matcher            |
+| `hg`    | Alias for `hgrep`                                |
+| `hfind` | Parallel find-compatible walker                  |
+| `hfd`   | Alias for `hfind`                                |
 
-`hgrep` is a separate binary installed alongside `happy-cracking`. It is listed at the bottom of `happy-cracking --help`.
+`hgrep` and `hfind` are separate binaries installed alongside `happy-cracking`. They are listed at the bottom of `happy-cracking --help`. `hg` is another argv0 for `hgrep`. `hfd` is another argv0 for `hfind`.
 
 ## Usage
 
@@ -342,6 +345,18 @@ hgrep needle src/
 hgrep -n -i flag firmware.bin
 hgrep -r --gitignore TODO .
 hgrep --help
+hg needle src/
+```
+
+### hfind
+
+```bash
+hfind .
+hfind -L src -name '*.rs'
+hfind . -type f -size -10k
+hfind --gitignore . -name '*.log'
+hfind --help
+hfd . -print0
 ```
 
 ## Development
@@ -353,7 +368,7 @@ cargo fmt              # Format code
 cargo clippy -- -D warnings  # Lint
 ```
 
-`cargo run -- <command>` runs `happy-cracking`. Use `cargo run --bin hgrep -- <args>` for the companion binary.
+`cargo run -- <command>` runs `happy-cracking`. Use `cargo run --bin hgrep -- <args>` or `cargo run --bin hfind -- <args>` for the companion binaries. `hg` is an alias for `hgrep`. `hfd` is an alias for `hfind`.
 
 ## License
 
