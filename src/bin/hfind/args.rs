@@ -99,7 +99,7 @@ Global options:
   -H             Follow symbolic links on the command line only
   -L             Follow symbolic links
   -P             Never follow symbolic links (default)
-  --gitignore    Skip paths excluded by .gitignore
+  --gitignore    Skip .gitignore, .git/info/exclude, and core.excludesFile (honors core.ignorecase; always skips .git)
   --help         Print help
 
 Tests:
