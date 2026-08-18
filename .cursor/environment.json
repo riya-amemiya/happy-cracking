@@ -1,0 +1,4 @@
+{
+  "name": "happy-cracking",
+  "install": "rustup toolchain install stable --profile minimal --component clippy && rustup toolchain install nightly --profile minimal --component rustfmt && rustup default stable && cargo fetch --locked && cargo build"
+}
