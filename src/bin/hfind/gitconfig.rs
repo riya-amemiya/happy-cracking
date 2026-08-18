@@ -36,9 +36,16 @@ fn skip_line(data: &[u8], from: usize) -> usize {
     memchr(b'\n', &data[from..]).map_or(data.len(), |i| from + i + 1)
 }
 
-fn trim_end(text: &[u8]) -> &[u8] {
-    let keep = text.iter().rposition(|b| !b.is_ascii_whitespace());
-    keep.map_or(&[][..], |i| &text[..=i])
+fn join_or_abs(base: &Path, raw: PathBuf) -> PathBuf {
+    if raw.is_absolute() {
+        raw
+    } else {
+        base.join(raw)
+    }
+}
+
+fn config_path(base: &Path, value: &[u8]) -> Option<PathBuf> {
+    Some(join_or_abs(base, expand_tilde(value)?))
 }
 
 fn read_section(data: &[u8], start: usize) -> Option<(Vec<u8>, Vec<u8>, usize)> {
@@ -322,7 +329,11 @@ fn by_branch(cond: &[u8], scope: &Scope) -> bool {
     let Ok(head) = fs::read(gitdir.join("HEAD")) else {
         return false;
     };
-    let line = trim_end(head.split(|&b| b == b'\n').next().unwrap_or(&[]));
+    let line = head
+        .split(|&b| b == b'\n')
+        .next()
+        .unwrap_or(&[])
+        .trim_ascii_end();
     let Some(branch) = line.strip_prefix(b"ref: refs/heads/") else {
         return false;
     };
@@ -375,17 +386,12 @@ fn apply_entry(
         let Some(v) = value else {
             return false;
         };
-        let Some(raw) = expand_tilde(&v) else {
+        let Some(path) = config_path(scope.dir, &v) else {
             return false;
         };
         if scope.depth >= CONFIG_INCLUDE_DEPTH {
             return false;
         }
-        let path = if raw.is_absolute() {
-            raw
-        } else {
-            scope.dir.join(raw)
-        };
         read_config_file(&path, scope.gitdir, scope.depth + 1, cfg);
     }
     true
@@ -508,14 +514,7 @@ fn repo_config(gitdir: Option<&Path>) -> GitConfig {
 fn excludes_path(cfg: &GitConfig, repo: &Path) -> Option<PathBuf> {
     match &cfg.excludes_file {
         Some(v) if v.is_empty() => None,
-        Some(v) => {
-            let raw = expand_tilde(v)?;
-            Some(if raw.is_absolute() {
-                raw
-            } else {
-                repo.join(raw)
-            })
-        }
+        Some(v) => config_path(repo, v),
         None => xdg_config_home().map(|d| d.join("git").join("ignore")),
     }
 }
@@ -527,30 +526,26 @@ fn resolve_gitdir(repo: &Path) -> Option<PathBuf> {
     }
     let data = fs::read(&dot).ok()?;
     let line = data.split(|&b| b == b'\n').next()?;
-    let raw = trim_end(line.strip_prefix(b"gitdir:")?);
-    let target = trim_end(raw.strip_prefix(b" ").unwrap_or(raw));
+    let raw = line.strip_prefix(b"gitdir:")?.trim_ascii_end();
+    let target = raw.strip_prefix(b" ").unwrap_or(raw).trim_ascii_end();
     if target.is_empty() {
         return None;
     }
     let named = PathBuf::from(OsStr::from_bytes(target));
-    let gitdir = if named.is_absolute() {
-        named
-    } else {
-        repo.join(named)
-    };
+    let gitdir = join_or_abs(repo, named);
     let Ok(shared) = fs::read(gitdir.join("commondir")) else {
         return Some(gitdir);
     };
-    let common = trim_end(shared.split(|&b| b == b'\n').next().unwrap_or(&[]));
+    let common = shared
+        .split(|&b| b == b'\n')
+        .next()
+        .unwrap_or(&[])
+        .trim_ascii_end();
     if common.is_empty() {
         return Some(gitdir);
     }
     let named = PathBuf::from(OsStr::from_bytes(common));
-    Some(if named.is_absolute() {
-        named
-    } else {
-        gitdir.join(named)
-    })
+    Some(join_or_abs(&gitdir, named))
 }
 
 pub(crate) fn repo_sources(
@@ -622,9 +617,6 @@ mod tests {
     fn config_parser_numbers_and_paths() {
         assert_eq!(skip_line(b"abc", 0), 3);
         assert_eq!(skip_line(b"a\nb", 0), 2);
-        assert_eq!(trim_end(b""), b"");
-        assert_eq!(trim_end(b"  "), b"");
-        assert_eq!(trim_end(b"a \t"), b"a");
         assert_eq!(config_int(b"-10"), Some(-10));
         assert_eq!(config_int(b"+2"), Some(2));
         assert_eq!(config_int(b"0x10"), Some(16));

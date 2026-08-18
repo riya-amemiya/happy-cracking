@@ -2,7 +2,7 @@ use std::ffi::OsString;
 use std::fs;
 use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::AtomicBool;
 use std::time::SystemTime;
 
 use regex::bytes::{Regex, RegexBuilder};
@@ -38,8 +38,9 @@ pub(crate) enum Expr {
         unit: u64,
     },
     Newer(SystemTime),
-    Print,
-    Print0,
+    Print {
+        nul: bool,
+    },
     Not(Box<Expr>),
     And(Vec<Expr>),
     Or(Vec<Expr>),
@@ -59,7 +60,7 @@ pub(crate) fn parse(
     follow: Follow,
 ) -> Result<(Expr, usize, Option<usize>), String> {
     if tokens.is_empty() {
-        return Ok((Expr::Print, 0, None));
+        return Ok((Expr::Print { nul: false }, 0, None));
     }
     let mut p = Parser {
         tokens,
@@ -76,7 +77,7 @@ pub(crate) fn parse(
     let expr = if p.has_action {
         inner
     } else {
-        Expr::And(vec![inner, Expr::Print])
+        Expr::And(vec![inner, Expr::Print { nul: false }])
     };
     Ok((expr, p.mindepth, p.maxdepth))
 }
@@ -100,20 +101,8 @@ impl Parser<'_> {
         matches!(self.peek(), Some(b"-o" | b"-or"))
     }
 
-    fn at_and_kw(&self) -> bool {
-        matches!(self.peek(), Some(b"-a" | b"-and"))
-    }
-
     fn at_not(&self) -> bool {
         matches!(self.peek(), Some(b"!" | b"-not"))
-    }
-
-    fn at_lparen(&self) -> bool {
-        self.peek() == Some(b"(")
-    }
-
-    fn at_rparen(&self) -> bool {
-        self.peek() == Some(b")")
     }
 
     fn has_term(&self) -> bool {
@@ -139,7 +128,7 @@ impl Parser<'_> {
     fn parse_and(&mut self) -> Result<Expr, String> {
         let mut items = vec![self.parse_not()?];
         while self.has_term() {
-            if self.at_and_kw() {
+            if matches!(self.peek(), Some(b"-a" | b"-and")) {
                 self.i += 1;
             }
             items.push(self.parse_not()?);
@@ -166,13 +155,13 @@ impl Parser<'_> {
     }
 
     fn parse_primary(&mut self) -> Result<Expr, String> {
-        if self.at_lparen() {
+        if self.peek() == Some(b"(") {
             self.i += 1;
-            if self.at_rparen() {
+            if self.peek() == Some(b")") {
                 return Err("empty parentheses".into());
             }
             let inner = self.parse_or()?;
-            if !self.at_rparen() {
+            if self.peek() != Some(b")") {
                 return Err("expected `)'".into());
             }
             self.i += 1;
@@ -192,13 +181,11 @@ impl Parser<'_> {
             b"," => Err("the comma operator is not supported".into()),
             b"-true" => Ok(Expr::True),
             b"-false" => Ok(Expr::False),
-            b"-print" => {
+            b"-print" | b"-print0" => {
                 self.has_action = true;
-                Ok(Expr::Print)
-            }
-            b"-print0" => {
-                self.has_action = true;
-                Ok(Expr::Print0)
+                Ok(Expr::Print {
+                    nul: tok.as_bytes() == b"-print0",
+                })
             }
             b"-empty" => Ok(Expr::Empty),
             b"-name" => self.glob_arg("-name", false, false),
@@ -297,29 +284,32 @@ impl Parser<'_> {
 
     fn nat_arg(&mut self, flag: &str) -> Result<usize, String> {
         let raw = self.take_arg(flag)?;
-        let b = raw.as_bytes();
-        if b.is_empty() || !b.iter().all(|c| c.is_ascii_digit()) {
-            return Err(format!(
-                "invalid argument `{}' to `{flag}'",
-                raw.to_string_lossy()
-            ));
-        }
-        std::str::from_utf8(b)
+        std::str::from_utf8(raw.as_bytes())
             .ok()
+            .filter(|s| !s.is_empty() && s.bytes().all(|c| c.is_ascii_digit()))
             .and_then(|s| s.parse().ok())
             .ok_or_else(|| format!("invalid argument `{}' to `{flag}'", raw.to_string_lossy()))
     }
 }
 
-fn parse_size(raw: &[u8]) -> Result<(Cmp, u64, u64), String> {
-    let shown = String::from_utf8_lossy(raw);
-    let (cmp, rest) = match raw.first() {
+fn split_cmp(raw: &[u8]) -> (Cmp, &[u8]) {
+    match raw.first() {
         Some(b'+') => (Cmp::Gt, &raw[1..]),
         Some(b'-') => (Cmp::Lt, &raw[1..]),
         _ => (Cmp::Eq, raw),
+    }
+}
+
+fn parse_size(raw: &[u8]) -> Result<(Cmp, u64, u64), String> {
+    let err = || {
+        format!(
+            "invalid argument `{}' to `-size'",
+            String::from_utf8_lossy(raw)
+        )
     };
+    let (cmp, rest) = split_cmp(raw);
     if rest.is_empty() {
-        return Err(format!("invalid argument `{shown}' to `-size'"));
+        return Err(err());
     }
     let (digits, unit) = match rest.last() {
         Some(b'c') => (&rest[..rest.len() - 1], 1u64),
@@ -329,24 +319,20 @@ fn parse_size(raw: &[u8]) -> Result<(Cmp, u64, u64), String> {
         Some(b'M') => (&rest[..rest.len() - 1], 1024 * 1024),
         Some(b'G') => (&rest[..rest.len() - 1], 1024 * 1024 * 1024),
         Some(b) if b.is_ascii_digit() => (rest, 512),
-        _ => return Err(format!("invalid argument `{shown}' to `-size'")),
+        _ => return Err(err()),
     };
     if digits.is_empty() || !digits.iter().all(|b| b.is_ascii_digit()) {
-        return Err(format!("invalid argument `{shown}' to `-size'"));
+        return Err(err());
     }
     let n = std::str::from_utf8(digits)
         .ok()
         .and_then(|s| s.parse().ok())
-        .ok_or_else(|| format!("invalid argument `{shown}' to `-size'"))?;
+        .ok_or_else(err)?;
     Ok((cmp, n, unit))
 }
 
 fn parse_signed(raw: &[u8]) -> Option<(Cmp, i64)> {
-    let (cmp, rest) = match raw.first() {
-        Some(b'+') => (Cmp::Gt, &raw[1..]),
-        Some(b'-') => (Cmp::Lt, &raw[1..]),
-        _ => (Cmp::Eq, raw),
-    };
+    let (cmp, rest) = split_cmp(raw);
     if rest.is_empty() || !rest.iter().all(|b| b.is_ascii_digit()) {
         return None;
     }
@@ -377,12 +363,8 @@ pub(crate) fn eval(
     match expr {
         Expr::True => true,
         Expr::False => false,
-        Expr::Print => {
-            emit(item.path.as_os_str().as_bytes(), false);
-            true
-        }
-        Expr::Print0 => {
-            emit(item.path.as_os_str().as_bytes(), true);
+        Expr::Print { nul } => {
+            emit(item.path.as_os_str().as_bytes(), *nul);
             true
         }
         Expr::Not(e) => !eval(e, item, now, errors, emit),
@@ -401,14 +383,13 @@ pub(crate) fn eval(
         Expr::Size { cmp, n, unit } => item
             .meta
             .as_ref()
-            .is_some_and(|m| cmp_u64(*cmp, rounded_units(m.len(), *unit), *n)),
+            .is_some_and(|m| cmp_ord(*cmp, rounded_units(m.len(), *unit), *n)),
         Expr::Empty => match item.kind {
             Kind::File => item.meta.as_ref().is_some_and(|m| m.len() == 0),
             Kind::Dir => match fs::read_dir(&item.path) {
                 Ok(mut rd) => rd.next().is_none(),
                 Err(e) => {
-                    errors.store(true, Ordering::Relaxed);
-                    eprintln!("hfind: {}: {e}", item.path.display());
+                    crate::walk::report(&item.path, e, errors);
                     false
                 }
             },
@@ -418,7 +399,7 @@ pub(crate) fn eval(
             .meta
             .as_ref()
             .and_then(|m| m.modified().ok())
-            .is_some_and(|mtime| cmp_i64(*cmp, age_units(now, mtime, *unit), *n)),
+            .is_some_and(|mtime| cmp_ord(*cmp, age_units(now, mtime, *unit), *n)),
         Expr::Newer(t) => item
             .meta
             .as_ref()
@@ -442,15 +423,7 @@ fn base_name(path: &Path) -> &[u8] {
     }
 }
 
-fn cmp_u64(cmp: Cmp, got: u64, n: u64) -> bool {
-    match cmp {
-        Cmp::Eq => got == n,
-        Cmp::Lt => got < n,
-        Cmp::Gt => got > n,
-    }
-}
-
-fn cmp_i64(cmp: Cmp, got: i64, n: i64) -> bool {
+fn cmp_ord<T: Ord>(cmp: Cmp, got: T, n: T) -> bool {
     match cmp {
         Cmp::Eq => got == n,
         Cmp::Lt => got < n,
@@ -690,7 +663,7 @@ mod tests {
         assert_eq!(match_atom(b"*", b'*', false), None);
         assert!(!class_hit(b"\\", b'a', false));
         assert!(!class_hit(b"a-\\", b'b', false));
-        assert!(cmp_i64(Cmp::Eq, 2, 2));
+        assert!(cmp_ord(Cmp::Eq, 2i64, 2));
         let now = SystemTime::now();
         let future = now + std::time::Duration::from_secs(90);
         assert!(age_units(now, future, 60) < 0);
@@ -769,7 +742,10 @@ mod tests {
 
     #[test]
     fn parse_and_eval_cover_predicates() {
-        assert!(matches!(parse(&[], Follow::Never).unwrap().0, Expr::Print));
+        assert!(matches!(
+            parse(&[], Follow::Never).unwrap().0,
+            Expr::Print { nul: false }
+        ));
         assert!(
             parse(
                 &[OsString::from("-true"), OsString::from(")")],
@@ -898,9 +874,9 @@ mod tests {
         ));
         assert!(parse_size(b"18446744073709551616c").is_err());
         assert!(parse_signed(b"9223372036854775808").is_none());
-        assert!(cmp_u64(Cmp::Eq, 1, 1));
-        assert!(cmp_u64(Cmp::Lt, 0, 1));
-        assert!(cmp_u64(Cmp::Gt, 2, 1));
+        assert!(cmp_ord(Cmp::Eq, 1u64, 1));
+        assert!(cmp_ord(Cmp::Lt, 0u64, 1));
+        assert!(cmp_ord(Cmp::Gt, 2u64, 1));
         assert_eq!(rounded_units(513, 512), 2);
         let dir = std::env::temp_dir().join(format!(
             "hfind_expr_{}_{}",

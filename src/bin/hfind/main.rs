@@ -57,11 +57,9 @@ fn run(parsed: args::Parsed) -> ExitCode {
 }
 
 fn emit(sink: &Mutex<io::BufWriter<io::Stdout>>, bytes: &[u8], nul: bool) {
-    let mut line = Vec::with_capacity(bytes.len() + 1);
-    line.extend_from_slice(bytes);
-    line.push(if nul { 0 } else { b'\n' });
     if let Ok(mut w) = sink.lock() {
-        let _ = w.write_all(&line);
+        let _ = w.write_all(bytes);
+        let _ = w.write_all(&[if nul { 0 } else { b'\n' }]);
     }
 }
 
