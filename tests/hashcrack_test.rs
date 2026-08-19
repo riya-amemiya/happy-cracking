@@ -92,6 +92,19 @@ fn test_dict_not_found_returns_none() {
 }
 
 #[test]
+fn test_dict_invalid_hex_target_returns_none() {
+    // Byte-compare path hex-decodes the target once; garbage hex cannot match.
+    let found = find_in_candidates(
+        "not-a-hex-digest!!!!",
+        HashAlgo::Md5,
+        None,
+        SaltPosition::Suffix,
+        &candidates(),
+    );
+    assert_eq!(found, None);
+}
+
+#[test]
 fn test_ctf_flag_sha256() {
     let flag = "flag{cr4ck3d}";
     let target = compute_hash(HashAlgo::Sha256, flag);
