@@ -115,7 +115,43 @@ pub fn common_service_name(port: u16) -> Option<&'static str> {
         .map(|(_, name)| *name)
 }
 
+/// Max length of a target specifier (hostname, address, CIDR, or short list).
+const MAX_NMAP_TARGET_LEN: usize = 1024;
+
+/// Reject option-like or otherwise unsafe nmap target strings.
+///
+/// `Command` does not invoke a shell, but nmap still parses argv flags.
+/// A target such as `-oN` or `-iL` would be treated as an option rather than
+/// a host, which can redirect output or read unexpected files.
+pub fn validate_nmap_target(target: &str) -> Result<()> {
+    let target = target.trim();
+    if target.is_empty() {
+        anyhow::bail!("nmap target must not be empty");
+    }
+    if target.len() > MAX_NMAP_TARGET_LEN {
+        anyhow::bail!(
+            "nmap target exceeds maximum length of {}",
+            MAX_NMAP_TARGET_LEN
+        );
+    }
+    if target.starts_with('-') {
+        anyhow::bail!("nmap target must not start with '-'");
+    }
+    if target.contains("..") {
+        anyhow::bail!("nmap target must not contain '..'");
+    }
+    let valid = target.chars().all(|c| {
+        c.is_ascii_alphanumeric()
+            || matches!(c, '.' | ':' | '/' | '-' | '_' | ',' | '*' | '[' | ']' | '%')
+    });
+    if !valid {
+        anyhow::bail!("nmap target contains invalid characters");
+    }
+    Ok(())
+}
+
 pub fn run_nmap(target: &str, extra_args: Option<&str>) -> Result<String> {
+    validate_nmap_target(target)?;
     let mut cmd = Command::new("nmap");
     // Default to a fast common-port focused scan; user may override via --args.
     if let Some(extra) = extra_args {
