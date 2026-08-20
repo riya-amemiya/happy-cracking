@@ -18,7 +18,7 @@ mod outbuf;
 static GLOBAL: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
 
 use std::cell::RefCell;
-use std::fs;
+use std::fs::{self, File};
 use std::io::{self, Read, Write};
 use std::os::unix::ffi::{OsStrExt, OsStringExt};
 use std::path::Path;
@@ -31,7 +31,7 @@ use clap::Parser;
 use cli::Cli;
 use matcher::build_matcher;
 use search::{Job, may_stop_early, report, search_buf, search_exists, selected};
-use source::open_source;
+use source::{from_file, open_source};
 use walk::for_each_path;
 
 thread_local! {
@@ -114,7 +114,16 @@ fn main() -> ExitCode {
         cli.gitignore,
         &errors,
         cli.no_messages,
-        |path| process_path(path, &job, &sink, &found, &errors, early),
+        |path, opened| {
+            process_path(
+                OpenedFile { path, file: opened },
+                &job,
+                &sink,
+                &found,
+                &errors,
+                early,
+            )
+        },
     );
 
     outbuf::finish(&sink);
@@ -124,8 +133,13 @@ fn main() -> ExitCode {
     )
 }
 
+struct OpenedFile<'a> {
+    path: &'a Path,
+    file: Option<File>,
+}
+
 fn process_path(
-    path: &Path,
+    opened: OpenedFile<'_>,
     job: &Job<'_>,
     sink: &Mutex<io::BufWriter<io::Stdout>>,
     found: &AtomicBool,
@@ -138,8 +152,20 @@ fn process_path(
     SLOT.with(|slot| {
         let (read_buf, out) = &mut *slot.borrow_mut();
         out.clear();
+        let path = opened.path;
         let name = path.as_os_str().as_bytes();
-        let count = match stream_or_search(path, job, name, read_buf, out, errors, early) {
+        let count = match stream_or_search(
+            OpenedFile {
+                path,
+                file: opened.file,
+            },
+            job,
+            name,
+            read_buf,
+            out,
+            errors,
+            early,
+        ) {
             Some(c) => c,
             None => return,
         };
@@ -153,8 +179,19 @@ fn process_path(
     });
 }
 
+fn source_of<'a>(
+    opened: OpenedFile<'_>,
+    buf: &'a mut Vec<u8>,
+    early: bool,
+) -> io::Result<source::Source<'a>> {
+    match opened.file {
+        Some(file) => from_file(file, buf, early),
+        None => open_source(opened.path, buf, early),
+    }
+}
+
 fn stream_or_search(
-    path: &Path,
+    opened: OpenedFile<'_>,
     job: &Job<'_>,
     name: &[u8],
     read_buf: &mut Vec<u8>,
@@ -167,7 +204,8 @@ fn stream_or_search(
         && !job.cli.count
         && let Some(overlap) = job.matcher.stream_overlap()
     {
-        return match open_source(path, read_buf, true) {
+        let path = opened.path;
+        return match source_of(opened, read_buf, true) {
             Ok(src) => {
                 let count = search_exists(src.bytes(), job, overlap, || src.prefetch_from(0));
                 drop(src);
@@ -182,11 +220,11 @@ fn stream_or_search(
             }
         };
     }
-    open_and_search(path, job, name, read_buf, out, errors, early)
+    open_and_search(opened, job, name, read_buf, out, errors, early)
 }
 
 fn open_and_search(
-    path: &Path,
+    opened: OpenedFile<'_>,
     job: &Job<'_>,
     name: &[u8],
     read_buf: &mut Vec<u8>,
@@ -194,7 +232,8 @@ fn open_and_search(
     errors: &AtomicBool,
     early: bool,
 ) -> Option<u64> {
-    match open_source(path, read_buf, early) {
+    let path = opened.path;
+    match source_of(opened, read_buf, early) {
         Ok(src) => {
             let count = search_buf(src.bytes(), job, name, out);
             drop(src);

@@ -24,11 +24,63 @@ fn open_read(path: &Path) -> io::Result<File> {
     }
 }
 
-fn read_into(file: &mut File, len: u64, buf: &mut Vec<u8>) -> io::Result<()> {
+const CHUNK: usize = 16 * 1024;
+
+fn read_spare(file: &mut File, buf: &mut Vec<u8>) -> io::Result<usize> {
+    let spare = buf.spare_capacity_mut();
+    let len = spare.len();
+    if len == 0 {
+        return Ok(0);
+    }
+    let slice = unsafe { std::slice::from_raw_parts_mut(spare.as_mut_ptr().cast::<u8>(), len) };
+    let n = file.read(slice)?;
+    unsafe { buf.set_len(buf.len() + n) };
+    Ok(n)
+}
+
+pub(crate) fn from_file<'a>(
+    mut file: File,
+    buf: &'a mut Vec<u8>,
+    early: bool,
+) -> io::Result<Source<'a>> {
     buf.clear();
-    buf.resize(len as usize, 0);
-    file.read_exact(buf)?;
-    Ok(())
+    if buf.capacity() < CHUNK {
+        buf.reserve(CHUNK);
+    }
+    let n = read_spare(&mut file, buf)?;
+    if n < CHUNK {
+        return Ok(Source(Kind::Mem(buf)));
+    }
+    if let Ok(meta) = file.metadata() {
+        let len = meta.len();
+        if len >= MMAP_MIN {
+            #[cfg(target_os = "linux")]
+            let map_flags = libc::MAP_PRIVATE | libc::MAP_POPULATE;
+            #[cfg(not(target_os = "linux"))]
+            let map_flags = libc::MAP_PRIVATE;
+            let ptr = unsafe {
+                libc::mmap(
+                    std::ptr::null_mut(),
+                    len as usize,
+                    libc::PROT_READ,
+                    map_flags,
+                    file.as_raw_fd(),
+                    0,
+                )
+            };
+            if ptr != libc::MAP_FAILED {
+                if !early {
+                    unsafe { libc::madvise(ptr, len as usize, libc::MADV_WILLNEED) };
+                }
+                return Ok(Source(Kind::Map(Mapped {
+                    ptr,
+                    len: len as usize,
+                })));
+            }
+        }
+    }
+    file.read_to_end(buf)?;
+    Ok(Source(Kind::Mem(buf)))
 }
 
 struct Mapped {
@@ -82,37 +134,5 @@ pub(crate) fn open_source<'a>(
     buf: &'a mut Vec<u8>,
     early: bool,
 ) -> io::Result<Source<'a>> {
-    let mut file = open_read(path)?;
-    let len = file.metadata()?.len();
-    if len > usize::MAX as u64 {
-        read_into(&mut file, len, buf)?;
-        return Ok(Source(Kind::Mem(buf)));
-    }
-    if len >= MMAP_MIN {
-        #[cfg(target_os = "linux")]
-        let map_flags = libc::MAP_PRIVATE | libc::MAP_POPULATE;
-        #[cfg(not(target_os = "linux"))]
-        let map_flags = libc::MAP_PRIVATE;
-        let ptr = unsafe {
-            libc::mmap(
-                std::ptr::null_mut(),
-                len as usize,
-                libc::PROT_READ,
-                map_flags,
-                file.as_raw_fd(),
-                0,
-            )
-        };
-        if ptr != libc::MAP_FAILED {
-            if !early {
-                unsafe { libc::madvise(ptr, len as usize, libc::MADV_WILLNEED) };
-            }
-            return Ok(Source(Kind::Map(Mapped {
-                ptr,
-                len: len as usize,
-            })));
-        }
-    }
-    read_into(&mut file, len, buf)?;
-    Ok(Source(Kind::Mem(buf)))
+    from_file(open_read(path)?, buf, early)
 }

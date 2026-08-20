@@ -627,8 +627,8 @@ fn scan_plain<F: Fn(&Item<'_>)>(node: &Node, ctx: &Ctx<'_, F>, follow_child: boo
     let depth = node.depth + 1;
     #[cfg(all(target_os = "linux", not(test)))]
     {
-        let ents = match crate::linuxdir::read(&node.path) {
-            Ok(ents) => ents,
+        let (dirfd, ents) = match crate::linuxdir::list(&node.path) {
+            Ok(v) => v,
             Err(e) => {
                 report(&node.path, e, ctx.errors);
                 return next;
@@ -636,13 +636,13 @@ fn scan_plain<F: Fn(&Item<'_>)>(node: &Node, ctx: &Ctx<'_, F>, follow_child: boo
         };
         for ent in ents {
             child.push(&ent.name);
-            let (meta, kind) = classify_dtype(
-                &child,
-                ent.d_type,
-                follow_child,
-                ctx.cfg.need_meta,
-                ctx.errors,
-            );
+            let d_type = if crate::linuxdir::is_dir(ent.d_type).is_none() {
+                crate::linuxdir::dtype_at(&dirfd, &ent.name).unwrap_or(ent.d_type)
+            } else {
+                ent.d_type
+            };
+            let (meta, kind) =
+                classify_dtype(&child, d_type, follow_child, ctx.cfg.need_meta, ctx.errors);
             consider(ctx, &child, kind, meta.as_ref(), depth);
             if kind == Kind::Dir && should_descend(ctx.cfg.maxdepth, depth) {
                 maybe_enqueue(

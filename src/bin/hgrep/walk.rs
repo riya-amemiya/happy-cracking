@@ -1,5 +1,5 @@
 use std::ffi::{OsStr, OsString};
-use std::fs;
+use std::fs::{self, File};
 use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -186,34 +186,38 @@ fn root_ignore(path: &Path, errors: &AtomicBool, quiet: bool) -> Option<Dir> {
     })
 }
 
-#[cfg(all(target_os = "linux", not(test)))]
-fn scan_plain(dir: &Dir, errors: &AtomicBool, quiet: bool) -> (Vec<Dir>, Vec<PathBuf>) {
-    scan_plain_linux(dir, errors, quiet)
-}
-
 #[cfg(not(all(target_os = "linux", not(test))))]
 fn scan_plain(dir: &Dir, errors: &AtomicBool, quiet: bool) -> (Vec<Dir>, Vec<PathBuf>) {
     scan_plain_std(dir, errors, quiet)
 }
 
 #[cfg(all(target_os = "linux", not(test)))]
-fn scan_plain_linux(dir: &Dir, errors: &AtomicBool, quiet: bool) -> (Vec<Dir>, Vec<PathBuf>) {
-    let ents = match crate::linuxdir::read(&dir.path) {
-        Ok(ents) => ents,
+fn scan_plain_linux<F: Fn(&Path, Option<File>)>(
+    dir: &Dir,
+    errors: &AtomicBool,
+    quiet: bool,
+    visit: &F,
+) -> Vec<Dir> {
+    let (dirfd, ents) = match crate::linuxdir::list(&dir.path) {
+        Ok(v) => v,
         Err(e) => {
             errors.store(true, Ordering::Relaxed);
             if !quiet {
                 eprintln!("hgrep: {}: {e}", dir.path.display());
             }
-            return (Vec::new(), Vec::new());
+            return Vec::new();
         }
     };
     let mut sub = Vec::new();
-    let mut leaves = Vec::new();
     let mut child = dir.path.clone();
     for ent in ents {
         child.push(&ent.name);
-        match crate::linuxdir::is_dir(ent.d_type) {
+        let d_type = if crate::linuxdir::is_dir(ent.d_type).is_none() {
+            crate::linuxdir::dtype_at(&dirfd, &ent.name).unwrap_or(ent.d_type)
+        } else {
+            ent.d_type
+        };
+        match crate::linuxdir::is_dir(d_type) {
             Some(true) => sub.push(Dir {
                 path: child.clone(),
                 rel: Vec::new(),
@@ -221,25 +225,15 @@ fn scan_plain_linux(dir: &Dir, errors: &AtomicBool, quiet: bool) -> (Vec<Dir>, V
                 opts: RepoOpts::default(),
                 in_repo: false,
             }),
-            Some(false) if crate::linuxdir::is_file(ent.d_type) == Some(true) => {
-                leaves.push(child.clone());
+            Some(false) if crate::linuxdir::is_file(d_type) == Some(true) => {
+                let opened = crate::linuxdir::open_at(&dirfd, &ent.name).ok();
+                visit(&child, opened);
             }
-            None => match fs::symlink_metadata(&child) {
-                Ok(m) if m.file_type().is_dir() => sub.push(Dir {
-                    path: child.clone(),
-                    rel: Vec::new(),
-                    ignore: None,
-                    opts: RepoOpts::default(),
-                    in_repo: false,
-                }),
-                Ok(m) if m.file_type().is_file() => leaves.push(child.clone()),
-                _ => {}
-            },
             _ => {}
         }
         child.pop();
     }
-    (sub, leaves)
+    sub
 }
 
 #[cfg(not(all(target_os = "linux", not(test))))]
@@ -354,7 +348,7 @@ pub(crate) fn for_each_path<F>(
     quiet_errors: bool,
     visit: F,
 ) where
-    F: Fn(&Path) + Sync,
+    F: Fn(&Path, Option<File>) + Sync,
 {
     let mut files = Vec::new();
     let mut level = Vec::new();
@@ -391,24 +385,40 @@ pub(crate) fn for_each_path<F>(
     }
 
     if !files.is_empty() {
-        files.into_par_iter().for_each(|path| visit(&path));
+        files.into_par_iter().for_each(|path| visit(&path, None));
     }
 
     while !level.is_empty() {
+        #[cfg(all(target_os = "linux", not(test)))]
+        if !gitignore {
+            level = level
+                .into_par_iter()
+                .flat_map_iter(|dir| scan_plain_linux(&dir, errors, quiet_errors, &visit))
+                .collect();
+            continue;
+        }
+
         let (dirs, found): (Vec<Vec<Dir>>, Vec<Vec<PathBuf>>) = level
             .par_iter()
             .map(|dir| {
-                if gitignore {
+                #[cfg(all(target_os = "linux", not(test)))]
+                {
                     scan_ignored(dir, errors, quiet_errors)
-                } else {
-                    scan_plain(dir, errors, quiet_errors)
+                }
+                #[cfg(not(all(target_os = "linux", not(test))))]
+                {
+                    if gitignore {
+                        scan_ignored(dir, errors, quiet_errors)
+                    } else {
+                        scan_plain(dir, errors, quiet_errors)
+                    }
                 }
             })
             .unzip();
         found
             .into_par_iter()
             .flatten()
-            .for_each(|path| visit(&path));
+            .for_each(|path| visit(&path, None));
         level = dirs.into_iter().flatten().collect();
     }
 }
