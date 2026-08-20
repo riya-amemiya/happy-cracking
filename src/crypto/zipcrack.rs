@@ -1,10 +1,17 @@
 use anyhow::{Context, Result};
 use clap::Subcommand;
 use rayon::prelude::*;
-use std::io::{Cursor, Read};
+use std::io::{self, Cursor, Read};
 use std::path::PathBuf;
 
 const MAX_BRUTE_SPACE: u128 = 1_000_000_000;
+
+/// Maximum uncompressed bytes consumed while checking one zip member's password.
+///
+/// SECURITY: Fully buffering decompressed members (`read_to_end`) lets a zip bomb
+/// advertise a tiny compressed size and expand to gigabytes of RAM. Streaming into
+/// `io::sink` with this cap keeps verification memory-bounded.
+const MAX_VERIFY_UNCOMPRESSED: u64 = 16 * 1024 * 1024;
 
 #[derive(Subcommand)]
 pub enum ZipcrackAction {
@@ -93,6 +100,10 @@ pub struct EntryInfo {
 }
 
 pub fn verify_password(zip_bytes: &[u8], password: &str) -> bool {
+    verify_password_with_limit(zip_bytes, password, MAX_VERIFY_UNCOMPRESSED)
+}
+
+fn verify_password_with_limit(zip_bytes: &[u8], password: &str, max_uncompressed: u64) -> bool {
     let mut archive = match zip::ZipArchive::new(Cursor::new(zip_bytes)) {
         Ok(a) => a,
         Err(_) => return false,
@@ -109,15 +120,18 @@ pub fn verify_password(zip_bytes: &[u8], password: &str) -> bool {
         }
         saw_encrypted = true;
 
-        let mut entry = match archive.by_index_decrypt(i, password.as_bytes()) {
+        let entry = match archive.by_index_decrypt(i, password.as_bytes()) {
             Ok(entry) => entry,
-
             Err(_) => return false,
         };
 
-        let mut sink = Vec::new();
-        if entry.read_to_end(&mut sink).is_err() {
-            return false;
+        // Discard decompressed bytes; stop before a zip bomb can exhaust memory.
+        // Reading one extra byte past the cap distinguishes "fully consumed"
+        // (CRC checked on EOF) from "hit the limit mid-stream" (reject).
+        let mut limited = entry.take(max_uncompressed.saturating_add(1));
+        match io::copy(&mut limited, &mut io::sink()) {
+            Ok(n) if n <= max_uncompressed => {}
+            _ => return false,
         }
     }
 
@@ -208,4 +222,47 @@ pub fn list_entries(zip_bytes: &[u8]) -> Result<Vec<EntryInfo>> {
         });
     }
     Ok(entries)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write;
+    use zip::AesMode;
+    use zip::write::{FileOptions, ZipWriter};
+
+    fn make_encrypted_zip(password: &str, content: &[u8]) -> Vec<u8> {
+        let mut buf = Cursor::new(Vec::new());
+        {
+            let mut writer = ZipWriter::new(&mut buf);
+            let options: FileOptions<'_, ()> = FileOptions::default()
+                .compression_method(zip::CompressionMethod::Deflated)
+                .with_aes_encryption(AesMode::Aes256, password);
+            writer.start_file("flag.txt", options).unwrap();
+            writer.write_all(content).unwrap();
+            writer.finish().unwrap();
+        }
+        buf.into_inner()
+    }
+
+    #[test]
+    fn verify_accepts_correct_password_via_streaming_sink() {
+        let bytes = make_encrypted_zip("hunter2", b"flag{zip_cracked}");
+        assert!(verify_password(&bytes, "hunter2"));
+        assert!(!verify_password(&bytes, "wrongpass"));
+    }
+
+    #[test]
+    fn verify_rejects_when_decompressed_member_exceeds_byte_cap() {
+        let content = b"flag{zip_cracked}";
+        let bytes = make_encrypted_zip("hunter2", content);
+        assert!(
+            verify_password_with_limit(&bytes, "hunter2", content.len() as u64),
+            "cap equal to uncompressed size must still accept"
+        );
+        assert!(
+            !verify_password_with_limit(&bytes, "hunter2", 4),
+            "cap below uncompressed size must reject to bound zip-bomb expansion"
+        );
+    }
 }
