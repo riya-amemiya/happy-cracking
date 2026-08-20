@@ -60,3 +60,16 @@ fn hybrid_attack_numeric_suffix() {
 fn mask_rejects_unknown_class() {
     assert!(expand_mask("?z").is_err());
 }
+
+#[test]
+fn mask_attack_invalid_hex_still_validates_mask() {
+    let err = mask_attack("not-hex!!!", HashAlgo::Md5, "?z").unwrap_err();
+    assert!(err.to_string().contains("Unknown mask class"));
+}
+
+#[test]
+fn hybrid_attack_invalid_hex_still_validates_digit_range() {
+    let words = vec!["pass".to_string()];
+    let err = hybrid_attack("not-hex!!!", HashAlgo::Md5, &words, 0, 7, false).unwrap_err();
+    assert!(err.to_string().contains("--max-digits must be <= 6"));
+}

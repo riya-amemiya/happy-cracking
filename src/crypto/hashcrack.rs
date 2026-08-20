@@ -412,9 +412,6 @@ pub fn brute_force(
     salt: Option<&str>,
     pos: SaltPosition,
 ) -> Result<Option<String>> {
-    let Some(target) = decode_target_digest(target) else {
-        return Ok(None);
-    };
     let chars: Vec<char> = charset.chars().collect();
     if chars.is_empty() {
         anyhow::bail!("Charset must not be empty");
@@ -449,6 +446,12 @@ pub fn brute_force(
             );
         }
     }
+
+    // Decode after parameter validation so a malformed target cannot hide
+    // charset/length/search-space errors behind Ok(None).
+    let Some(target) = decode_target_digest(target) else {
+        return Ok(None);
+    };
 
     for len in min_len..=max_len {
         let count = base.pow(len as u32);
@@ -731,9 +734,6 @@ pub fn expand_mask(mask: &str) -> Result<Vec<Vec<char>>> {
 }
 
 pub fn mask_attack(target: &str, algo: HashAlgo, mask: &str) -> Result<Option<String>> {
-    let Some(target) = decode_target_digest(target) else {
-        return Ok(None);
-    };
     let positions = expand_mask(mask)?;
     let mut total: u128 = 1;
     for pos in &positions {
@@ -747,6 +747,12 @@ pub fn mask_attack(target: &str, algo: HashAlgo, mask: &str) -> Result<Option<St
             );
         }
     }
+
+    // Decode after mask/space validation so invalid hex cannot swallow
+    // expand_mask or overflow errors.
+    let Some(target) = decode_target_digest(target) else {
+        return Ok(None);
+    };
 
     let bases: Vec<u128> = positions.iter().map(|p| p.len() as u128).collect();
     let found = (0..total).into_par_iter().find_map_any(|index| {
@@ -784,9 +790,6 @@ pub fn hybrid_attack(
     if min_digits > max_digits {
         anyhow::bail!("--min-digits must be <= --max-digits");
     }
-    let Some(target) = decode_target_digest(target) else {
-        return Ok(None);
-    };
 
     // Estimate space
     let mut total: u128 = 0;
@@ -809,6 +812,11 @@ pub fn hybrid_attack(
             );
         }
     }
+
+    // Decode after digit-range and space checks so invalid hex cannot hide them.
+    let Some(target) = decode_target_digest(target) else {
+        return Ok(None);
+    };
 
     let found = words.par_iter().find_map_any(|word| {
         for digits in min_digits..=max_digits {
