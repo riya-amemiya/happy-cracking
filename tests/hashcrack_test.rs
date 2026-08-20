@@ -92,6 +92,19 @@ fn test_dict_not_found_returns_none() {
 }
 
 #[test]
+fn test_dict_invalid_hex_target_returns_none() {
+    // Byte-compare path hex-decodes the target once; garbage hex cannot match.
+    let found = find_in_candidates(
+        "not-a-hex-digest!!!!",
+        HashAlgo::Md5,
+        None,
+        SaltPosition::Suffix,
+        &candidates(),
+    );
+    assert_eq!(found, None);
+}
+
+#[test]
 fn test_ctf_flag_sha256() {
     let flag = "flag{cr4ck3d}";
     let target = compute_hash(HashAlgo::Sha256, flag);
@@ -176,6 +189,41 @@ fn test_brute_force_empty_charset_errors() {
         "",
         1,
         2,
+        None,
+        SaltPosition::Suffix,
+    );
+    assert!(result.is_err());
+}
+
+#[test]
+fn test_brute_force_invalid_hex_still_validates_charset() {
+    let result = brute_force(
+        "not-hex!!!",
+        HashAlgo::Md5,
+        "",
+        1,
+        3,
+        None,
+        SaltPosition::Suffix,
+    );
+    assert!(
+        result
+            .unwrap_err()
+            .to_string()
+            .contains("Charset must not be empty")
+    );
+}
+
+#[test]
+fn test_brute_force_invalid_hex_still_validates_search_space() {
+    let charset =
+        "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()-_=+[]{};:,.<>?";
+    let result = brute_force(
+        "not-hex!!!",
+        HashAlgo::Sha1,
+        charset,
+        1,
+        6,
         None,
         SaltPosition::Suffix,
     );

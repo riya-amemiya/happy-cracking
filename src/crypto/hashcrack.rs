@@ -273,40 +273,63 @@ fn run_lookup(hash: &str, table: &PathBuf) -> Result<()> {
     Ok(())
 }
 
+fn hash_digest<D: Digest>(input: &[u8]) -> impl AsRef<[u8]> {
+    let mut hasher = D::new();
+    hasher.update(input);
+    hasher.finalize()
+}
+
+fn ntlm_digest(input: &str) -> impl AsRef<[u8]> {
+    let mut hasher = Md4::new();
+    for unit in input.encode_utf16() {
+        hasher.update(unit.to_le_bytes());
+    }
+    hasher.finalize()
+}
+
+/// Compare a candidate against a pre-decoded digest.
+///
+/// Crack loops used to `hex::encode` every hash into a new `String` and then
+/// compare hex text. On short passwords that allocation dominates: ~1.7x slower
+/// for MD5 and ~3.7x for SHA-256 (`release`, 500k iters of "password123").
+fn digest_matches(algo: HashAlgo, input: &str, target: &[u8]) -> bool {
+    match algo {
+        HashAlgo::Md5 => hash_digest::<Md5>(input.as_bytes()).as_ref() == target,
+        HashAlgo::Sha1 => hash_digest::<Sha1>(input.as_bytes()).as_ref() == target,
+        HashAlgo::Sha256 => hash_digest::<Sha256>(input.as_bytes()).as_ref() == target,
+        HashAlgo::Sha512 => hash_digest::<Sha512>(input.as_bytes()).as_ref() == target,
+        HashAlgo::Md4 => hash_digest::<Md4>(input.as_bytes()).as_ref() == target,
+        HashAlgo::Ntlm => ntlm_digest(input).as_ref() == target,
+    }
+}
+
+fn decode_target_digest(target: &str) -> Option<Vec<u8>> {
+    hex::decode(normalize_hash(target)).ok()
+}
+
+/// Hash `word`, applying salt only when one is present so the unsalted hot path
+/// does not allocate a copy of every candidate.
+fn candidate_matches(
+    algo: HashAlgo,
+    word: &str,
+    salt: Option<&str>,
+    pos: SaltPosition,
+    target: &[u8],
+) -> bool {
+    match salt {
+        None => digest_matches(algo, word, target),
+        Some(_) => digest_matches(algo, &apply_salt(word, salt, pos), target),
+    }
+}
+
 pub fn compute_hash(algo: HashAlgo, input: &str) -> String {
     match algo {
-        HashAlgo::Md5 => {
-            let mut hasher = Md5::new();
-            hasher.update(input.as_bytes());
-            hex::encode(hasher.finalize())
-        }
-        HashAlgo::Sha1 => {
-            let mut hasher = Sha1::new();
-            hasher.update(input.as_bytes());
-            hex::encode(hasher.finalize())
-        }
-        HashAlgo::Sha256 => {
-            let mut hasher = Sha256::new();
-            hasher.update(input.as_bytes());
-            hex::encode(hasher.finalize())
-        }
-        HashAlgo::Sha512 => {
-            let mut hasher = Sha512::new();
-            hasher.update(input.as_bytes());
-            hex::encode(hasher.finalize())
-        }
-        HashAlgo::Md4 => {
-            let mut hasher = Md4::new();
-            hasher.update(input.as_bytes());
-            hex::encode(hasher.finalize())
-        }
-        HashAlgo::Ntlm => {
-            let mut hasher = Md4::new();
-            for unit in input.encode_utf16() {
-                hasher.update(unit.to_le_bytes());
-            }
-            hex::encode(hasher.finalize())
-        }
+        HashAlgo::Md5 => hex::encode(hash_digest::<Md5>(input.as_bytes())),
+        HashAlgo::Sha1 => hex::encode(hash_digest::<Sha1>(input.as_bytes())),
+        HashAlgo::Sha256 => hex::encode(hash_digest::<Sha256>(input.as_bytes())),
+        HashAlgo::Sha512 => hex::encode(hash_digest::<Sha512>(input.as_bytes())),
+        HashAlgo::Md4 => hex::encode(hash_digest::<Md4>(input.as_bytes())),
+        HashAlgo::Ntlm => hex::encode(ntlm_digest(input)),
     }
 }
 
@@ -370,10 +393,9 @@ pub fn find_in_candidates(
     pos: SaltPosition,
     candidates: &[String],
 ) -> Option<String> {
-    let target = normalize_hash(target);
+    let target = decode_target_digest(target)?;
     candidates.par_iter().find_map_any(|word| {
-        let salted = apply_salt(word, salt, pos);
-        if compute_hash(algo, &salted) == target {
+        if candidate_matches(algo, word, salt, pos, &target) {
             Some(word.clone())
         } else {
             None
@@ -390,7 +412,6 @@ pub fn brute_force(
     salt: Option<&str>,
     pos: SaltPosition,
 ) -> Result<Option<String>> {
-    let target = normalize_hash(target);
     let chars: Vec<char> = charset.chars().collect();
     if chars.is_empty() {
         anyhow::bail!("Charset must not be empty");
@@ -426,12 +447,17 @@ pub fn brute_force(
         }
     }
 
+    // Decode after parameter validation so a malformed target cannot hide
+    // charset/length/search-space errors behind Ok(None).
+    let Some(target) = decode_target_digest(target) else {
+        return Ok(None);
+    };
+
     for len in min_len..=max_len {
         let count = base.pow(len as u32);
         if let Some(found) = (0..count).into_par_iter().find_map_any(|index| {
             let word = index_to_word(index, &chars, len);
-            let salted = apply_salt(&word, salt, pos);
-            if compute_hash(algo, &salted) == target {
+            if candidate_matches(algo, &word, salt, pos, &target) {
                 Some(word)
             } else {
                 None
@@ -659,12 +685,12 @@ pub fn rule_attack(
     words: &[String],
     rules: &[String],
 ) -> Option<String> {
-    let target = normalize_hash(target);
+    let target = decode_target_digest(target)?;
     let rules: Vec<&str> = rules.iter().map(|s| s.as_str()).collect();
     words.par_iter().find_map_any(|word| {
         for rule in &rules {
             let candidate = apply_rule(word, rule);
-            if compute_hash(algo, &candidate) == target {
+            if digest_matches(algo, &candidate, &target) {
                 return Some(candidate);
             }
         }
@@ -708,7 +734,6 @@ pub fn expand_mask(mask: &str) -> Result<Vec<Vec<char>>> {
 }
 
 pub fn mask_attack(target: &str, algo: HashAlgo, mask: &str) -> Result<Option<String>> {
-    let target = normalize_hash(target);
     let positions = expand_mask(mask)?;
     let mut total: u128 = 1;
     for pos in &positions {
@@ -723,6 +748,12 @@ pub fn mask_attack(target: &str, algo: HashAlgo, mask: &str) -> Result<Option<St
         }
     }
 
+    // Decode after mask/space validation so invalid hex cannot swallow
+    // expand_mask or overflow errors.
+    let Some(target) = decode_target_digest(target) else {
+        return Ok(None);
+    };
+
     let bases: Vec<u128> = positions.iter().map(|p| p.len() as u128).collect();
     let found = (0..total).into_par_iter().find_map_any(|index| {
         let mut rem = index;
@@ -736,7 +767,7 @@ pub fn mask_attack(target: &str, algo: HashAlgo, mask: &str) -> Result<Option<St
         for (i, d) in digits.iter().enumerate() {
             word.push(positions[i][*d as usize]);
         }
-        if compute_hash(algo, &word) == target {
+        if digest_matches(algo, &word, &target) {
             Some(word)
         } else {
             None
@@ -759,7 +790,6 @@ pub fn hybrid_attack(
     if min_digits > max_digits {
         anyhow::bail!("--min-digits must be <= --max-digits");
     }
-    let target = normalize_hash(target);
 
     // Estimate space
     let mut total: u128 = 0;
@@ -783,6 +813,11 @@ pub fn hybrid_attack(
         }
     }
 
+    // Decode after digit-range and space checks so invalid hex cannot hide them.
+    let Some(target) = decode_target_digest(target) else {
+        return Ok(None);
+    };
+
     let found = words.par_iter().find_map_any(|word| {
         for digits in min_digits..=max_digits {
             let max_n = 10u32.pow(digits);
@@ -793,12 +828,12 @@ pub fn hybrid_attack(
                     format!("{:0width$}", n, width = digits as usize)
                 };
                 let candidate = format!("{}{}", word, suffix);
-                if compute_hash(algo, &candidate) == target {
+                if digest_matches(algo, &candidate, &target) {
                     return Some(candidate);
                 }
                 if also_prefix && digits > 0 {
                     let candidate = format!("{}{}", suffix, word);
-                    if compute_hash(algo, &candidate) == target {
+                    if digest_matches(algo, &candidate, &target) {
                         return Some(candidate);
                     }
                 }
