@@ -6,6 +6,17 @@ mod search;
 mod source;
 mod walk;
 
+#[cfg(all(target_os = "linux", not(test)))]
+#[path = "../linuxdir.rs"]
+mod linuxdir;
+
+#[path = "../outbuf.rs"]
+mod outbuf;
+
+#[cfg(not(target_env = "msvc"))]
+#[global_allocator]
+static GLOBAL: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
+
 use std::cell::RefCell;
 use std::fs;
 use std::io::{self, Read, Write};
@@ -106,9 +117,7 @@ fn main() -> ExitCode {
         |path| process_path(path, &job, &sink, &found, &errors, early),
     );
 
-    if let Ok(mut w) = sink.lock() {
-        let _ = w.flush();
-    }
+    outbuf::finish(&sink);
     exit_code(
         found.load(Ordering::Relaxed),
         errors.load(Ordering::Relaxed),
@@ -138,10 +147,8 @@ fn process_path(
             found.store(true, Ordering::Relaxed);
         }
         report(job, name, count, out);
-        if !out.is_empty()
-            && let Ok(mut w) = sink.lock()
-        {
-            let _ = w.write_all(out);
+        if !out.is_empty() {
+            outbuf::push(sink, out, None);
         }
     });
 }

@@ -4,11 +4,22 @@ mod gitconfig;
 mod ignore;
 mod walk;
 
-use std::io::{self, Write};
+#[cfg(all(target_os = "linux", not(test)))]
+#[path = "../linuxdir.rs"]
+mod linuxdir;
+
+#[path = "../outbuf.rs"]
+mod outbuf;
+
+use std::io;
 use std::process::ExitCode;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::SystemTime;
+
+#[cfg(not(target_env = "msvc"))]
+#[global_allocator]
+static GLOBAL: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
 
 use walk::WalkCfg;
 
@@ -46,9 +57,7 @@ fn run(parsed: args::Parsed) -> ExitCode {
             emit(&sink, bytes, nul);
         });
     });
-    if let Ok(mut w) = sink.lock() {
-        let _ = w.flush();
-    }
+    outbuf::finish(&sink);
     if errors.load(Ordering::Relaxed) {
         ExitCode::from(1)
     } else {
@@ -57,10 +66,7 @@ fn run(parsed: args::Parsed) -> ExitCode {
 }
 
 fn emit(sink: &Mutex<io::BufWriter<io::Stdout>>, bytes: &[u8], nul: bool) {
-    if let Ok(mut w) = sink.lock() {
-        let _ = w.write_all(bytes);
-        let _ = w.write_all(&[if nul { 0 } else { b'\n' }]);
-    }
+    outbuf::push(sink, bytes, Some(if nul { 0 } else { b'\n' }));
 }
 
 #[cfg(test)]

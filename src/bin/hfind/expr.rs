@@ -374,7 +374,7 @@ pub(crate) fn eval(
             let text = if *whole {
                 item.path.as_os_str().as_bytes()
             } else {
-                base_name(&item.path)
+                base_name(item.path)
             };
             glob_match(pat, text, *fold)
         }
@@ -382,14 +382,13 @@ pub(crate) fn eval(
         Expr::Type(k) => item.kind == *k,
         Expr::Size { cmp, n, unit } => item
             .meta
-            .as_ref()
             .is_some_and(|m| cmp_ord(*cmp, rounded_units(m.len(), *unit), *n)),
         Expr::Empty => match item.kind {
-            Kind::File => item.meta.as_ref().is_some_and(|m| m.len() == 0),
-            Kind::Dir => match fs::read_dir(&item.path) {
+            Kind::File => item.meta.is_some_and(|m| m.len() == 0),
+            Kind::Dir => match fs::read_dir(item.path) {
                 Ok(mut rd) => rd.next().is_none(),
                 Err(e) => {
-                    crate::walk::report(&item.path, e, errors);
+                    crate::walk::report(item.path, e, errors);
                     false
                 }
             },
@@ -397,12 +396,10 @@ pub(crate) fn eval(
         },
         Expr::Age { cmp, n, unit } => item
             .meta
-            .as_ref()
             .and_then(|m| m.modified().ok())
             .is_some_and(|mtime| cmp_ord(*cmp, age_units(now, mtime, *unit), *n)),
         Expr::Newer(t) => item
             .meta
-            .as_ref()
             .and_then(|m| m.modified().ok())
             .is_some_and(|mtime| mtime > *t),
     }
@@ -625,7 +622,6 @@ fn glob_match(pat: &[u8], text: &[u8], fold: bool) -> bool {
 mod tests {
     use super::*;
     use std::os::unix::fs::PermissionsExt;
-    use std::path::PathBuf;
 
     #[test]
     fn glob_and_age_edges() {
@@ -700,7 +696,7 @@ mod tests {
         )
         .unwrap();
         let item = Item {
-            path: PathBuf::from("ab"),
+            path: Path::new("ab"),
             kind: Kind::File,
             meta: None,
         };
@@ -732,9 +728,9 @@ mod tests {
         assert!(parse(&nots, Follow::Never).is_ok());
     }
 
-    fn item(path: &str, kind: Kind, meta: Option<fs::Metadata>) -> Item {
+    fn item<'a>(path: &'a str, kind: Kind, meta: Option<&'a fs::Metadata>) -> Item<'a> {
         Item {
-            path: PathBuf::from(path),
+            path: Path::new(path),
             kind,
             meta,
         }
@@ -914,14 +910,14 @@ mod tests {
         let meta = fs::symlink_metadata(&newer).unwrap();
         let _ = eval(
             &age,
-            &item(newer.to_str().unwrap(), Kind::File, Some(meta.clone())),
+            &item(newer.to_str().unwrap(), Kind::File, Some(&meta)),
             now,
             &errors,
             &mut noop,
         );
         let _ = eval(
             &age_h,
-            &item(newer.to_str().unwrap(), Kind::File, Some(meta)),
+            &item(newer.to_str().unwrap(), Kind::File, Some(&meta)),
             now,
             &errors,
             &mut noop,

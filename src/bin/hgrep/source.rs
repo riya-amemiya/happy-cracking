@@ -70,12 +70,16 @@ pub(crate) fn open_source<'a>(
         return Ok(Source(Kind::Mem(buf)));
     }
     if len >= MMAP_MIN {
+        #[cfg(target_os = "linux")]
+        let map_flags = libc::MAP_PRIVATE | libc::MAP_POPULATE;
+        #[cfg(not(target_os = "linux"))]
+        let map_flags = libc::MAP_PRIVATE;
         let ptr = unsafe {
             libc::mmap(
                 std::ptr::null_mut(),
                 len as usize,
                 libc::PROT_READ,
-                libc::MAP_PRIVATE,
+                map_flags,
                 file.as_raw_fd(),
                 0,
             )

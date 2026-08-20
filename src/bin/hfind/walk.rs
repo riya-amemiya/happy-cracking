@@ -126,10 +126,10 @@ pub(crate) enum Kind {
     Other,
 }
 
-pub(crate) struct Item {
-    pub(crate) path: PathBuf,
+pub(crate) struct Item<'a> {
+    pub(crate) path: &'a Path,
     pub(crate) kind: Kind,
-    pub(crate) meta: Option<fs::Metadata>,
+    pub(crate) meta: Option<&'a fs::Metadata>,
 }
 
 #[derive(Clone, Copy)]
@@ -397,7 +397,7 @@ fn classify(
         }
     } else {
         let kind = kind_from_ft(ft);
-        if !need_meta && kind != Kind::Dir {
+        if !need_meta && (kind != Kind::Dir || !follow) {
             return (None, kind);
         }
         match fs::symlink_metadata(path) {
@@ -410,7 +410,7 @@ fn classify(
     }
 }
 
-fn consider<F: Fn(&Item)>(
+fn consider<F: Fn(&Item<'_>)>(
     ctx: &Ctx<'_, F>,
     path: &Path,
     kind: Kind,
@@ -420,11 +420,7 @@ fn consider<F: Fn(&Item)>(
     if depth < ctx.cfg.mindepth {
         return;
     }
-    (ctx.visit)(&Item {
-        path: path.to_path_buf(),
-        kind,
-        meta: meta.cloned(),
-    });
+    (ctx.visit)(&Item { path, kind, meta });
 }
 
 fn push_anc(parent: Option<&Arc<Anc>>, id: (u64, u64), path: PathBuf) -> Arc<Anc> {
@@ -447,7 +443,7 @@ struct Child {
 }
 
 fn maybe_enqueue(
-    ctx: &Ctx<'_, impl Fn(&Item)>,
+    ctx: &Ctx<'_, impl Fn(&Item<'_>)>,
     child: Child,
     meta: Option<&fs::Metadata>,
     parent: &Node,
@@ -560,37 +556,156 @@ fn skip_followed_dir(
     ignore.is_some_and(|ig| ig.ignored(&rel_from_path(suffix, opts), true))
 }
 
-fn scan<F: Fn(&Item)>(node: &Node, ctx: &Ctx<'_, F>) -> Vec<Node> {
-    let entries = read_entries(&node.path, ctx.errors);
-    let follow_child = ctx.cfg.follow == Follow::Always;
+#[cfg(all(target_os = "linux", not(test)))]
+fn kind_from_dtype(d_type: u8) -> Option<Kind> {
+    match crate::linuxdir::is_dir(d_type) {
+        None => None,
+        Some(true) => Some(Kind::Dir),
+        Some(false) if crate::linuxdir::is_file(d_type) == Some(true) => Some(Kind::File),
+        Some(false) if crate::linuxdir::is_lnk(d_type) => Some(Kind::Link),
+        Some(false) => Some(Kind::Other),
+    }
+}
+
+#[cfg(all(target_os = "linux", not(test)))]
+fn classify_dtype(
+    path: &Path,
+    d_type: u8,
+    follow: bool,
+    need_meta: bool,
+    errors: &AtomicBool,
+) -> (Option<fs::Metadata>, Kind) {
+    if follow && crate::linuxdir::is_lnk(d_type) {
+        return match fs::metadata(path) {
+            Ok(m) => {
+                let kind = kind_from_meta(&m);
+                (Some(m), kind)
+            }
+            Err(e) => {
+                report(path, e, errors);
+                match fs::symlink_metadata(path) {
+                    Ok(m) => (Some(m), Kind::Link),
+                    Err(e2) => {
+                        report(path, e2, errors);
+                        (None, Kind::Link)
+                    }
+                }
+            }
+        };
+    }
+    let kind = match kind_from_dtype(d_type) {
+        Some(k) => k,
+        None => match fs::symlink_metadata(path) {
+            Ok(m) => {
+                let kind = kind_from_meta(&m);
+                if !need_meta && (kind != Kind::Dir || !follow) {
+                    return (None, kind);
+                }
+                return (Some(m), kind);
+            }
+            Err(e) => {
+                report(path, e, errors);
+                return (None, Kind::Other);
+            }
+        },
+    };
+    if !need_meta && (kind != Kind::Dir || !follow) {
+        return (None, kind);
+    }
+    match fs::symlink_metadata(path) {
+        Ok(m) => (Some(m), kind),
+        Err(e) => {
+            report(path, e, errors);
+            (None, kind)
+        }
+    }
+}
+
+fn scan_plain<F: Fn(&Item<'_>)>(node: &Node, ctx: &Ctx<'_, F>, follow_child: bool) -> Vec<Node> {
     let mut next = Vec::new();
-    if !ctx.cfg.gitignore {
-        for entry in entries {
+    let mut child = node.path.clone();
+    let depth = node.depth + 1;
+    #[cfg(all(target_os = "linux", not(test)))]
+    {
+        let ents = match crate::linuxdir::read(&node.path) {
+            Ok(ents) => ents,
+            Err(e) => {
+                report(&node.path, e, ctx.errors);
+                return next;
+            }
+        };
+        for ent in ents {
+            child.push(&ent.name);
+            let (meta, kind) = classify_dtype(
+                &child,
+                ent.d_type,
+                follow_child,
+                ctx.cfg.need_meta,
+                ctx.errors,
+            );
+            consider(ctx, &child, kind, meta.as_ref(), depth);
+            if kind == Kind::Dir && should_descend(ctx.cfg.maxdepth, depth) {
+                maybe_enqueue(
+                    ctx,
+                    Child {
+                        path: child.clone(),
+                        depth,
+                        kind,
+                        ignore_rel: Vec::new(),
+                        ignore: None,
+                        opts: RepoOpts::default(),
+                        in_repo: false,
+                        repo: None,
+                    },
+                    meta.as_ref(),
+                    node,
+                    &mut next,
+                );
+            }
+            child.pop();
+        }
+        next
+    }
+    #[cfg(not(all(target_os = "linux", not(test))))]
+    {
+        for entry in read_entries(&node.path, ctx.errors) {
             let Some(ft) = entry_type(&entry, ctx.errors) else {
                 continue;
             };
-            let child = node.path.join(entry.file_name());
+            child.push(entry.file_name());
             let (meta, kind) = classify(&child, ft, follow_child, ctx.cfg.need_meta, ctx.errors);
-            consider(ctx, &child, kind, meta.as_ref(), node.depth + 1);
-            maybe_enqueue(
-                ctx,
-                Child {
-                    path: child,
-                    depth: node.depth + 1,
-                    kind,
-                    ignore_rel: Vec::new(),
-                    ignore: None,
-                    opts: RepoOpts::default(),
-                    in_repo: false,
-                    repo: None,
-                },
-                meta.as_ref(),
-                node,
-                &mut next,
-            );
+            consider(ctx, &child, kind, meta.as_ref(), depth);
+            if kind == Kind::Dir && should_descend(ctx.cfg.maxdepth, depth) {
+                maybe_enqueue(
+                    ctx,
+                    Child {
+                        path: child.clone(),
+                        depth,
+                        kind,
+                        ignore_rel: Vec::new(),
+                        ignore: None,
+                        opts: RepoOpts::default(),
+                        in_repo: false,
+                        repo: None,
+                    },
+                    meta.as_ref(),
+                    node,
+                    &mut next,
+                );
+            }
+            child.pop();
         }
-        return next;
+        next
     }
+}
+
+fn scan<F: Fn(&Item<'_>)>(node: &Node, ctx: &Ctx<'_, F>) -> Vec<Node> {
+    let follow_child = ctx.cfg.follow == Follow::Always;
+    if !ctx.cfg.gitignore {
+        return scan_plain(node, ctx, follow_child);
+    }
+    let entries = read_entries(&node.path, ctx.errors);
+    let mut next = Vec::new();
     let boundary = entries
         .iter()
         .any(|entry| entry.file_name().as_bytes() == b".git")
@@ -645,6 +760,8 @@ fn scan<F: Fn(&Item)>(node: &Node, ctx: &Ctx<'_, F>) -> Vec<Node> {
     } else {
         inherited
     };
+    let mut child = node.path.clone();
+    let depth = node.depth + 1;
     for entry in entries {
         let Some(ft) = entry_type(&entry, ctx.errors) else {
             continue;
@@ -653,7 +770,7 @@ fn scan<F: Fn(&Item)>(node: &Node, ctx: &Ctx<'_, F>) -> Vec<Node> {
         if is_dot_git(name.as_bytes(), opts.fold) {
             continue;
         }
-        let child = node.path.join(&name);
+        child.push(&name);
         let (meta, kind) = classify(&child, ft, follow_child, ctx.cfg.need_meta, ctx.errors);
         if skip_followed_dir(
             &child,
@@ -663,41 +780,60 @@ fn scan<F: Fn(&Item)>(node: &Node, ctx: &Ctx<'_, F>) -> Vec<Node> {
             opts,
             repo.as_deref(),
         ) {
+            child.pop();
             continue;
         }
         let rel = child_rel(parent_rel, &name, opts);
         if let Some(ig) = &ignore
             && ig.ignored(&rel, kind == Kind::Dir)
         {
+            child.pop();
             continue;
         }
-        consider(ctx, &child, kind, meta.as_ref(), node.depth + 1);
-        maybe_enqueue(
-            ctx,
-            Child {
-                path: child,
-                depth: node.depth + 1,
-                kind,
-                ignore_rel: rel,
-                ignore: ignore.clone(),
-                opts,
-                in_repo,
-                repo: repo.clone(),
-            },
-            meta.as_ref(),
-            node,
-            &mut next,
-        );
+        consider(ctx, &child, kind, meta.as_ref(), depth);
+        if kind == Kind::Dir && should_descend(ctx.cfg.maxdepth, depth) {
+            maybe_enqueue(
+                ctx,
+                Child {
+                    path: child.clone(),
+                    depth,
+                    kind,
+                    ignore_rel: rel,
+                    ignore: ignore.clone(),
+                    opts,
+                    in_repo,
+                    repo: repo.clone(),
+                },
+                meta.as_ref(),
+                node,
+                &mut next,
+            );
+        }
+        child.pop();
     }
     next
 }
 
+fn walk_from<F: Fn(&Item<'_>) + Sync>(mut node: Node, ctx: &Ctx<'_, F>) {
+    loop {
+        let mut next = scan(&node, ctx);
+        match next.len() {
+            0 => return,
+            1 => node = next.pop().unwrap(),
+            _ => {
+                next.into_par_iter().for_each(|n| walk_from(n, ctx));
+                return;
+            }
+        }
+    }
+}
+
 pub(crate) fn for_each<F>(roots: &[OsString], cfg: &WalkCfg, errors: &AtomicBool, visit: F)
 where
-    F: Fn(&Item) + Sync,
+    F: Fn(&Item<'_>) + Sync,
 {
     let ctx = Ctx { cfg, errors, visit };
-    let mut level = Vec::new();
+    let mut seeds = Vec::new();
     for root in roots {
         let path = PathBuf::from(root);
         let follow_root = matches!(cfg.follow, Follow::Cli | Follow::Always);
@@ -716,11 +852,13 @@ where
         consider(&ctx, &path, kind, Some(&meta), 0);
         if kind == Kind::Dir && should_descend(cfg.maxdepth, 0) {
             node.path = path;
-            level.push(node);
+            seeds.push(node);
         }
     }
-    while !level.is_empty() {
-        level = level.par_iter().flat_map_iter(|n| scan(n, &ctx)).collect();
+    match seeds.len() {
+        0 => {}
+        1 => walk_from(seeds.pop().unwrap(), &ctx),
+        _ => seeds.into_par_iter().for_each(|n| walk_from(n, &ctx)),
     }
 }
 
@@ -757,7 +895,7 @@ mod tests {
         let ft = fs::symlink_metadata(&dir).unwrap().file_type();
         let errors = AtomicBool::new(false);
         let (meta, kind) = classify(&dir, ft, false, false, &errors);
-        assert!(meta.is_some());
+        assert!(meta.is_none());
         assert!(kind == Kind::Dir);
         assert!(!errors.load(Ordering::Relaxed));
         fs::remove_dir_all(&dir).unwrap();
@@ -792,7 +930,7 @@ mod tests {
             visit: |_: &Item| {},
         };
         (ctx.visit)(&Item {
-            path: dir.clone(),
+            path: &dir,
             kind: Kind::Dir,
             meta: None,
         });
@@ -907,9 +1045,9 @@ mod tests {
         assert!(!missing_follow.in_repo);
     }
 
-    fn dummy_item(path: &Path) -> Item {
+    fn dummy_item(path: &Path) -> Item<'_> {
         Item {
-            path: path.to_path_buf(),
+            path,
             kind: Kind::File,
             meta: None,
         }
