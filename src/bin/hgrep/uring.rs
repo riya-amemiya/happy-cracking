@@ -2,11 +2,9 @@
 
 use std::cell::RefCell;
 use std::ffi::{CString, OsString};
-use std::fs::File;
 use std::mem::size_of;
 use std::os::raw::c_void;
 use std::os::unix::ffi::OsStrExt;
-use std::os::unix::io::FromRawFd;
 use std::ptr;
 use std::sync::atomic::{AtomicU32, Ordering, compiler_fence};
 
@@ -21,12 +19,13 @@ const IORING_OP_CLOSE: u8 = 19;
 const IORING_OP_READ: u8 = 22;
 const IORING_ENTER_GETEVENTS: u32 = 1;
 const IORING_FEAT_SINGLE_MMAP: u32 = 1;
+const IORING_REGISTER_FILES: libc::c_long = 2;
 const IORING_SETUP_COOP_TASKRUN: u32 = 1 << 8;
 const IORING_SETUP_SINGLE_ISSUER: u32 = 1 << 12;
 const IORING_SETUP_DEFER_TASKRUN: u32 = 1 << 13;
-const OPEN_FLAGS: u32 =
-    (libc::O_RDONLY | libc::O_CLOEXEC | libc::O_NOFOLLOW | libc::O_NOATIME) as u32;
-const OPEN_FLAGS_NO_NOATIME: u32 = (libc::O_RDONLY | libc::O_CLOEXEC | libc::O_NOFOLLOW) as u32;
+const IOSQE_FIXED_FILE: u8 = 1 << 0;
+const IOSQE_IO_LINK: u8 = 1 << 2;
+const OPEN_FLAGS: u32 = (libc::O_RDONLY | libc::O_NOFOLLOW) as u32;
 
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -136,14 +135,12 @@ impl Drop for Ring {
 thread_local! {
     static RING: RefCell<Option<Option<Ring>>> = const { RefCell::new(None) };
     static BUFS: RefCell<Vec<Vec<u8>>> = const { RefCell::new(Vec::new()) };
-    static OPEN_FD: RefCell<Vec<i32>> = const { RefCell::new(Vec::new()) };
     static READ_RES: RefCell<Vec<i32>> = const { RefCell::new(Vec::new()) };
     static NAMES: RefCell<Vec<Option<CString>>> = const { RefCell::new(Vec::new()) };
 }
 
 pub enum ReadOut<'a> {
     Bytes(&'a [u8]),
-    File(File),
     Miss,
 }
 
@@ -242,7 +239,7 @@ fn setup_with(flags: u32) -> Option<Ring> {
         unsafe { *array.add(i) = i as u32 };
     }
     let sq_tail = unsafe { sq_ptr.add(params.sq_off.tail as usize).cast::<u32>() };
-    Some(Ring {
+    let ring = Ring {
         fd,
         sq_map: sq_ptr,
         sq_map_len: sq_len,
@@ -259,7 +256,25 @@ fn setup_with(flags: u32) -> Option<Ring> {
         cq_tail: unsafe { cq_ptr.add(params.cq_off.tail as usize).cast() },
         cqes: unsafe { cq_ptr.add(params.cq_off.cqes as usize).cast() },
         sq_tail_local: load_acq(sq_tail),
-    })
+    };
+    if !register_files(fd, BATCH as u32) {
+        return None;
+    }
+    Some(ring)
+}
+
+fn register_files(fd: i32, n: u32) -> bool {
+    let mut files = vec![-1i32; n as usize];
+    let rc = unsafe {
+        libc::syscall(
+            libc::SYS_io_uring_register,
+            fd as libc::c_long,
+            IORING_REGISTER_FILES,
+            files.as_mut_ptr(),
+            n as libc::c_long,
+        )
+    };
+    rc >= 0
 }
 
 fn setup() -> Option<Ring> {
@@ -316,7 +331,7 @@ fn submit_wait(ring: &mut Ring, wait: u32) -> bool {
     }
 }
 
-fn harvest(ring: &mut Ring, wait: u32, out: &mut [i32]) -> bool {
+fn harvest_reads(ring: &mut Ring, wait: u32, reads: &mut [i32]) -> bool {
     let mut seen = 0u32;
     while seen < wait {
         let tail = load_acq(ring.cq_tail);
@@ -329,9 +344,10 @@ fn harvest(ring: &mut Ring, wait: u32, out: &mut [i32]) -> bool {
         }
         while head != tail && seen < wait {
             let cqe = unsafe { *ring.cqes.add((head & ring.cq_mask) as usize) };
-            let i = cqe.user_data as usize;
-            if i < out.len() {
-                out[i] = cqe.res;
+            let i = (cqe.user_data & 0xff) as usize;
+            let phase = cqe.user_data >> 8;
+            if phase == 1 && i < reads.len() {
+                reads[i] = cqe.res;
             }
             head = head.wrapping_add(1);
             seen += 1;
@@ -341,50 +357,31 @@ fn harvest(ring: &mut Ring, wait: u32, out: &mut [i32]) -> bool {
     true
 }
 
-fn harvest_count(ring: &mut Ring, wait: u32) -> bool {
-    let mut seen = 0u32;
-    while seen < wait {
-        let tail = load_acq(ring.cq_tail);
-        let head = load_acq(ring.cq_head);
-        if head == tail {
-            if !submit_wait(ring, wait - seen) {
-                return false;
-            }
-            continue;
-        }
-        let avail = tail.wrapping_sub(head);
-        let take = avail.min(wait - seen);
-        store_rel(ring.cq_head, head.wrapping_add(take));
-        seen += take;
-    }
-    true
-}
-
-fn open_sqe(dirfd: i32, name: &CString, flags: u32, user: u64) -> Sqe {
+fn open_link_sqe(dirfd: i32, name: &CString, slot: u32, user: u64) -> Sqe {
     Sqe {
         opcode: IORING_OP_OPENAT,
-        flags: 0,
+        flags: IOSQE_IO_LINK,
         ioprio: 0,
         fd: dirfd,
         off: 0,
         addr: name.as_ptr() as u64,
         len: 0,
-        op_flags: flags,
+        op_flags: OPEN_FLAGS,
         user_data: user,
         buf_index: 0,
         personality: 0,
-        file_index: 0,
+        file_index: slot + 1,
         addr3: 0,
         pad2: 0,
     }
 }
 
-fn read_sqe(fd: i32, ptr: *mut u8, len: u32, user: u64) -> Sqe {
+fn read_link_sqe(slot: i32, ptr: *mut u8, len: u32, user: u64) -> Sqe {
     Sqe {
         opcode: IORING_OP_READ,
-        flags: 0,
+        flags: IOSQE_FIXED_FILE | IOSQE_IO_LINK,
         ioprio: 0,
-        fd,
+        fd: slot,
         off: 0,
         addr: ptr as u64,
         len,
@@ -398,12 +395,12 @@ fn read_sqe(fd: i32, ptr: *mut u8, len: u32, user: u64) -> Sqe {
     }
 }
 
-fn close_sqe(fd: i32, user: u64) -> Sqe {
+fn close_direct_sqe(slot: u32, user: u64) -> Sqe {
     Sqe {
         opcode: IORING_OP_CLOSE,
         flags: 0,
         ioprio: 0,
-        fd,
+        fd: 0,
         off: 0,
         addr: 0,
         len: 0,
@@ -411,33 +408,25 @@ fn close_sqe(fd: i32, user: u64) -> Sqe {
         user_data: user,
         buf_index: 0,
         personality: 0,
-        file_index: 0,
+        file_index: slot + 1,
         addr3: 0,
         pad2: 0,
     }
 }
 
-fn close_leaked(fds: &[i32]) {
-    for &fd in fds {
-        if fd >= 0 {
-            unsafe { libc::close(fd) };
-        }
-    }
-}
-
-/// Read each name relative to `dirfd`. Returns how many names were handled.
+/// Read each `(dirfd, name)` pair. Returns how many names were handled.
 /// `0` with a non-empty list means the ring could not be used.
-pub fn process(dirfd: i32, names: &[OsString], mut f: impl FnMut(usize, ReadOut<'_>)) -> usize {
-    if names.is_empty() {
+pub fn process(files: &[(i32, OsString)], mut f: impl FnMut(usize, ReadOut<'_>)) -> usize {
+    if files.is_empty() {
         return 0;
     }
     if with_ring(|_| ()).is_none() {
         return 0;
     }
     let mut done = 0usize;
-    while done < names.len() {
-        let n = (names.len() - done).min(BATCH);
-        if !batch(dirfd, &names[done..done + n], done, &mut f) {
+    while done < files.len() {
+        let n = (files.len() - done).min(BATCH);
+        if !batch(&files[done..done + n], done, &mut f) {
             return done;
         }
         done += n;
@@ -445,108 +434,55 @@ pub fn process(dirfd: i32, names: &[OsString], mut f: impl FnMut(usize, ReadOut<
     done
 }
 
-fn batch(
-    dirfd: i32,
-    names: &[OsString],
-    base: usize,
-    f: &mut impl FnMut(usize, ReadOut<'_>),
-) -> bool {
-    let n = names.len();
+fn batch(files: &[(i32, OsString)], base: usize, f: &mut impl FnMut(usize, ReadOut<'_>)) -> bool {
+    let n = files.len();
     let prepared = with_ring(|ring| {
         NAMES.with(|names_cell| {
-            OPEN_FD.with(|fds_cell| {
-                READ_RES.with(|res_cell| {
-                    BUFS.with(|bufs_cell| {
-                        let cnames = &mut *names_cell.borrow_mut();
-                        let fds = &mut *fds_cell.borrow_mut();
-                        let reads = &mut *res_cell.borrow_mut();
-                        let bufs = &mut *bufs_cell.borrow_mut();
-                        cnames.clear();
-                        for name in names {
-                            cnames.push(CString::new(name.as_bytes()).ok());
+            READ_RES.with(|res_cell| {
+                BUFS.with(|bufs_cell| {
+                    let cnames = &mut *names_cell.borrow_mut();
+                    let reads = &mut *res_cell.borrow_mut();
+                    let bufs = &mut *bufs_cell.borrow_mut();
+                    cnames.clear();
+                    for (_, name) in files {
+                        cnames.push(CString::new(name.as_bytes()).ok());
+                    }
+                    reads.clear();
+                    reads.resize(n, i32::MIN);
+                    if bufs.len() < n {
+                        bufs.resize_with(n, Vec::new);
+                    }
+                    let mut nfiles = 0u32;
+                    for (i, cname) in cnames.iter().enumerate() {
+                        let Some(cname) = cname else { continue };
+                        let buf = &mut bufs[i];
+                        buf.clear();
+                        if buf.capacity() < CHUNK {
+                            buf.reserve(CHUNK);
                         }
-                        fds.clear();
-                        fds.resize(n, i32::MIN);
-                        reads.clear();
-                        reads.resize(n, i32::MIN);
-                        if bufs.len() < n {
-                            bufs.resize_with(n, Vec::new);
+                        let spare = buf.spare_capacity_mut();
+                        let len = spare.len().min(CHUNK) as u32;
+                        let ptr = spare.as_mut_ptr().cast::<u8>();
+                        let slot = i as u32;
+                        let ud = i as u64;
+                        push(ring, open_link_sqe(files[i].0, cname, slot, ud));
+                        push(ring, read_link_sqe(i as i32, ptr, len, ud | (1 << 8)));
+                        push(ring, close_direct_sqe(slot, ud | (2 << 8)));
+                        nfiles += 1;
+                    }
+                    if nfiles == 0 {
+                        return true;
+                    }
+                    let wait = nfiles * 3;
+                    if !submit_wait(ring, wait) || !harvest_reads(ring, wait, reads) {
+                        return false;
+                    }
+                    for (i, res) in reads.iter().copied().enumerate() {
+                        if res >= 0 && (res as usize) < CHUNK {
+                            unsafe { bufs[i].set_len(res as usize) };
                         }
-                        let mut opens = 0u32;
-                        for (i, cname) in cnames.iter().enumerate() {
-                            let Some(cname) = cname else { continue };
-                            push(ring, open_sqe(dirfd, cname, OPEN_FLAGS, i as u64));
-                            opens += 1;
-                        }
-                        if opens > 0 && (!submit_wait(ring, opens) || !harvest(ring, opens, fds)) {
-                            close_leaked(fds);
-                            return false;
-                        }
-                        let mut eperm = 0u32;
-                        for (i, fd) in fds.iter_mut().enumerate() {
-                            if *fd == -libc::EPERM {
-                                let Some(cname) = cnames[i].as_ref() else {
-                                    continue;
-                                };
-                                push(
-                                    ring,
-                                    open_sqe(dirfd, cname, OPEN_FLAGS_NO_NOATIME, i as u64),
-                                );
-                                eperm += 1;
-                            }
-                        }
-                        if eperm > 0 && (!submit_wait(ring, eperm) || !harvest(ring, eperm, fds)) {
-                            close_leaked(fds);
-                            return false;
-                        }
-                        let mut nread = 0u32;
-                        for (i, fd) in fds.iter().copied().enumerate() {
-                            if fd < 0 {
-                                continue;
-                            }
-                            let buf = &mut bufs[i];
-                            buf.clear();
-                            if buf.capacity() < CHUNK {
-                                buf.reserve(CHUNK);
-                            }
-                            let spare = buf.spare_capacity_mut();
-                            let len = spare.len().min(CHUNK) as u32;
-                            let ptr = spare.as_mut_ptr().cast::<u8>();
-                            push(ring, read_sqe(fd, ptr, len, i as u64));
-                            nread += 1;
-                        }
-                        if nread > 0 && (!submit_wait(ring, nread) || !harvest(ring, nread, reads))
-                        {
-                            close_leaked(fds);
-                            return false;
-                        }
-                        let mut nclose = 0u32;
-                        for (i, fd) in fds.iter().copied().enumerate() {
-                            if fd < 0 {
-                                continue;
-                            }
-                            let res = reads[i];
-                            if res >= 0 && (res as usize) < CHUNK {
-                                unsafe { bufs[i].set_len(res as usize) };
-                                push(ring, close_sqe(fd, i as u64));
-                                nclose += 1;
-                            } else if res < 0 {
-                                push(ring, close_sqe(fd, i as u64));
-                                nclose += 1;
-                            }
-                        }
-                        if nclose > 0
-                            && (!submit_wait(ring, nclose) || !harvest_count(ring, nclose))
-                        {
-                            for (i, fd) in fds.iter().copied().enumerate() {
-                                if fd >= 0 && reads[i] >= 0 && (reads[i] as usize) >= CHUNK {
-                                    unsafe { libc::close(fd) };
-                                }
-                            }
-                            return false;
-                        }
-                        true
-                    })
+                    }
+                    true
                 })
             })
         })
@@ -555,27 +491,17 @@ fn batch(
         return false;
     }
     BUFS.with(|bufs_cell| {
-        OPEN_FD.with(|fds_cell| {
-            READ_RES.with(|res_cell| {
-                let bufs = bufs_cell.borrow();
-                let fds = fds_cell.borrow();
-                let reads = res_cell.borrow();
-                for i in 0..n {
-                    let fd = fds[i];
-                    if fd < 0 {
-                        f(base + i, ReadOut::Miss);
-                        continue;
-                    }
-                    let res = reads[i];
-                    if res >= 0 && (res as usize) < CHUNK {
-                        f(base + i, ReadOut::Bytes(&bufs[i]));
-                    } else if res >= 0 {
-                        f(base + i, ReadOut::File(unsafe { File::from_raw_fd(fd) }));
-                    } else {
-                        f(base + i, ReadOut::Miss);
-                    }
+        READ_RES.with(|res_cell| {
+            let bufs = bufs_cell.borrow();
+            let reads = res_cell.borrow();
+            for i in 0..n {
+                let res = reads[i];
+                if res >= 0 && (res as usize) < CHUNK {
+                    f(base + i, ReadOut::Bytes(&bufs[i]));
+                } else {
+                    f(base + i, ReadOut::Miss);
                 }
-            })
+            }
         })
     });
     true

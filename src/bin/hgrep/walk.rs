@@ -220,8 +220,9 @@ fn scan_plain_linux<F: Fn(&Path, Input<'_>)>(
         }
     };
     let mut sub = Vec::new();
-    let mut files = Vec::new();
+    let mut files: Vec<(i32, OsString)> = Vec::new();
     let mut child = dir.path.clone();
+    let raw = dirfd.as_raw_fd();
     for ent in ents {
         let d_type = if crate::linuxdir::is_dir(ent.d_type).is_none() {
             crate::linuxdir::dtype_at(&dirfd, &ent.name).unwrap_or(ent.d_type)
@@ -241,27 +242,26 @@ fn scan_plain_linux<F: Fn(&Path, Input<'_>)>(
                 child.pop();
             }
             Some(false) if crate::linuxdir::is_file(d_type) == Some(true) => {
-                files.push(ent.name);
+                files.push((raw, ent.name));
             }
             _ => {}
         }
     }
     if !files.is_empty() {
-        let handled = uring::process(dirfd.as_raw_fd(), &files, |i, out| {
-            child.push(&files[i]);
+        let handled = uring::process(&files, |i, out| {
+            child.push(&files[i].1);
             match out {
                 uring::ReadOut::Bytes(bytes) => visit(&child, Input::Bytes(bytes)),
-                uring::ReadOut::File(file) => visit(&child, Input::File(Some(file))),
                 uring::ReadOut::Miss => {
-                    let opened = crate::linuxdir::open_at(&dirfd, &files[i]).ok();
+                    let opened = crate::linuxdir::open_at_fd(files[i].0, &files[i].1).ok();
                     visit(&child, Input::File(opened));
                 }
             }
             child.pop();
         });
-        for name in files.iter().skip(handled) {
+        for (fd, name) in files.iter().skip(handled) {
             child.push(name);
-            let opened = crate::linuxdir::open_at(&dirfd, name).ok();
+            let opened = crate::linuxdir::open_at_fd(*fd, name).ok();
             visit(&child, Input::File(opened));
             child.pop();
         }

@@ -75,15 +75,20 @@ pub fn read(path: &Path) -> io::Result<Vec<RawEnt>> {
 /// Open `name` relative to `dir` (does not follow symlinks).
 #[allow(dead_code)]
 pub fn open_at(dir: &OwnedFd, name: &OsStr) -> io::Result<File> {
+    open_at_fd(dir.as_raw_fd(), name)
+}
+
+#[allow(dead_code)]
+pub fn open_at_fd(dirfd: i32, name: &OsStr) -> io::Result<File> {
     let cname = CString::new(name.as_bytes())
         .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "name contains NUL"))?;
     let flags = O_RDONLY | O_CLOEXEC | libc::O_NOFOLLOW | libc::O_NOATIME;
-    let mut fd = unsafe { libc::openat(dir.as_raw_fd(), cname.as_ptr(), flags) };
+    let mut fd = unsafe { libc::openat(dirfd, cname.as_ptr(), flags) };
     if fd < 0 {
         let err = io::Error::last_os_error();
         if err.raw_os_error() == Some(libc::EPERM) {
             let retry = O_RDONLY | O_CLOEXEC | libc::O_NOFOLLOW;
-            fd = unsafe { libc::openat(dir.as_raw_fd(), cname.as_ptr(), retry) };
+            fd = unsafe { libc::openat(dirfd, cname.as_ptr(), retry) };
             if fd < 0 {
                 return Err(io::Error::last_os_error());
             }
