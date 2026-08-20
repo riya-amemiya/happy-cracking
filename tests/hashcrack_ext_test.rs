@@ -57,6 +57,33 @@ fn hybrid_attack_numeric_suffix() {
 }
 
 #[test]
+fn hybrid_attack_zero_padded_suffix() {
+    let plain = "pass007";
+    let target = compute_hash(HashAlgo::Sha256, plain);
+    let words = vec!["pass".to_string()];
+    let found = hybrid_attack(&target, HashAlgo::Sha256, &words, 3, 3, false).unwrap();
+    assert_eq!(found.as_deref(), Some("pass007"));
+}
+
+#[test]
+fn hybrid_attack_numeric_prefix() {
+    let plain = "12admin";
+    let target = compute_hash(HashAlgo::Md5, plain);
+    let words = vec!["admin".to_string()];
+    let found = hybrid_attack(&target, HashAlgo::Md5, &words, 2, 2, true).unwrap();
+    assert_eq!(found.as_deref(), Some("12admin"));
+}
+
+#[test]
+fn hybrid_attack_bare_word_when_min_digits_zero() {
+    let plain = "admin";
+    let target = compute_hash(HashAlgo::Md5, plain);
+    let words = vec!["admin".to_string()];
+    let found = hybrid_attack(&target, HashAlgo::Md5, &words, 0, 0, false).unwrap();
+    assert_eq!(found.as_deref(), Some("admin"));
+}
+
+#[test]
 fn mask_rejects_unknown_class() {
     assert!(expand_mask("?z").is_err());
 }
