@@ -1,7 +1,5 @@
 use std::ffi::{OsStr, OsString};
 use std::fs::{self, File};
-#[cfg(all(target_os = "linux", not(test)))]
-use std::os::fd::AsRawFd;
 use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -11,10 +9,6 @@ use rayon::prelude::*;
 
 use crate::gitconfig::{RepoOpts, repo_sources};
 use crate::ignore::{Ignore, load_ignore};
-
-#[cfg(all(target_os = "linux", not(test)))]
-#[path = "uring.rs"]
-mod uring;
 
 #[cfg(target_os = "macos")]
 mod nfc {
@@ -192,24 +186,19 @@ fn root_ignore(path: &Path, errors: &AtomicBool, quiet: bool) -> Option<Dir> {
     })
 }
 
-#[cfg(not(all(target_os = "linux", not(test))))]
+#[cfg(not(all(unix, not(test))))]
 fn scan_plain(dir: &Dir, errors: &AtomicBool, quiet: bool) -> (Vec<Dir>, Vec<PathBuf>) {
     scan_plain_std(dir, errors, quiet)
 }
 
-pub(crate) enum Input<'a> {
-    File(Option<File>),
-    Bytes(&'a [u8]),
-}
-
-#[cfg(all(target_os = "linux", not(test)))]
-fn scan_plain_linux<F: Fn(&Path, Input<'_>)>(
+#[cfg(all(unix, not(test)))]
+fn scan_plain_unix<F: Fn(&Path, Option<File>)>(
     dir: &Dir,
     errors: &AtomicBool,
     quiet: bool,
     visit: &F,
 ) -> Vec<Dir> {
-    let (dirfd, ents) = match crate::linuxdir::list(&dir.path) {
+    let (dirfd, ents) = match crate::unixdir::list(&dir.path) {
         Ok(v) => v,
         Err(e) => {
             errors.store(true, Ordering::Relaxed);
@@ -220,16 +209,14 @@ fn scan_plain_linux<F: Fn(&Path, Input<'_>)>(
         }
     };
     let mut sub = Vec::new();
-    let mut files: Vec<(i32, OsString)> = Vec::new();
     let mut child = dir.path.clone();
-    let raw = dirfd.as_raw_fd();
     for ent in ents {
-        let d_type = if crate::linuxdir::is_dir(ent.d_type).is_none() {
-            crate::linuxdir::dtype_at(&dirfd, &ent.name).unwrap_or(ent.d_type)
+        let d_type = if crate::unixdir::is_dir(ent.d_type).is_none() {
+            crate::unixdir::dtype_at(&dirfd, &ent.name).unwrap_or(ent.d_type)
         } else {
             ent.d_type
         };
-        match crate::linuxdir::is_dir(d_type) {
+        match crate::unixdir::is_dir(d_type) {
             Some(true) => {
                 child.push(&ent.name);
                 sub.push(Dir {
@@ -241,35 +228,19 @@ fn scan_plain_linux<F: Fn(&Path, Input<'_>)>(
                 });
                 child.pop();
             }
-            Some(false) if crate::linuxdir::is_file(d_type) == Some(true) => {
-                files.push((raw, ent.name));
+            Some(false) if crate::unixdir::is_file(d_type) == Some(true) => {
+                child.push(&ent.name);
+                let opened = crate::unixdir::open_at(&dirfd, &ent.name).ok();
+                visit(&child, opened);
+                child.pop();
             }
             _ => {}
-        }
-    }
-    if !files.is_empty() {
-        let handled = uring::process(&files, |i, out| {
-            child.push(&files[i].1);
-            match out {
-                uring::ReadOut::Bytes(bytes) => visit(&child, Input::Bytes(bytes)),
-                uring::ReadOut::Miss => {
-                    let opened = crate::linuxdir::open_at_fd(files[i].0, &files[i].1).ok();
-                    visit(&child, Input::File(opened));
-                }
-            }
-            child.pop();
-        });
-        for (fd, name) in files.iter().skip(handled) {
-            child.push(name);
-            let opened = crate::linuxdir::open_at_fd(*fd, name).ok();
-            visit(&child, Input::File(opened));
-            child.pop();
         }
     }
     sub
 }
 
-#[cfg(not(all(target_os = "linux", not(test))))]
+#[cfg(not(all(unix, not(test))))]
 fn scan_plain_std(dir: &Dir, errors: &AtomicBool, quiet: bool) -> (Vec<Dir>, Vec<PathBuf>) {
     let mut sub = Vec::new();
     let mut leaves = Vec::new();
@@ -381,7 +352,7 @@ pub(crate) fn for_each_path<F>(
     quiet_errors: bool,
     visit: F,
 ) where
-    F: Fn(&Path, Input<'_>) + Sync,
+    F: Fn(&Path, Option<File>) + Sync,
 {
     let mut files = Vec::new();
     let mut level = Vec::new();
@@ -418,17 +389,15 @@ pub(crate) fn for_each_path<F>(
     }
 
     if !files.is_empty() {
-        files
-            .into_par_iter()
-            .for_each(|path| visit(&path, Input::File(None)));
+        files.into_par_iter().for_each(|path| visit(&path, None));
     }
 
     while !level.is_empty() {
-        #[cfg(all(target_os = "linux", not(test)))]
+        #[cfg(all(unix, not(test)))]
         if !gitignore {
             level = level
                 .into_par_iter()
-                .flat_map_iter(|dir| scan_plain_linux(&dir, errors, quiet_errors, &visit))
+                .flat_map_iter(|dir| scan_plain_unix(&dir, errors, quiet_errors, &visit))
                 .collect();
             continue;
         }
@@ -436,11 +405,11 @@ pub(crate) fn for_each_path<F>(
         let (dirs, found): (Vec<Vec<Dir>>, Vec<Vec<PathBuf>>) = level
             .par_iter()
             .map(|dir| {
-                #[cfg(all(target_os = "linux", not(test)))]
+                #[cfg(all(unix, not(test)))]
                 {
                     scan_ignored(dir, errors, quiet_errors)
                 }
-                #[cfg(not(all(target_os = "linux", not(test))))]
+                #[cfg(not(all(unix, not(test))))]
                 {
                     if gitignore {
                         scan_ignored(dir, errors, quiet_errors)
@@ -453,7 +422,7 @@ pub(crate) fn for_each_path<F>(
         found
             .into_par_iter()
             .flatten()
-            .for_each(|path| visit(&path, Input::File(None)));
+            .for_each(|path| visit(&path, None));
         level = dirs.into_iter().flatten().collect();
     }
 }

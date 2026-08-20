@@ -556,18 +556,18 @@ fn skip_followed_dir(
     ignore.is_some_and(|ig| ig.ignored(&rel_from_path(suffix, opts), true))
 }
 
-#[cfg(all(target_os = "linux", not(test)))]
+#[cfg(all(unix, not(test)))]
 fn kind_from_dtype(d_type: u8) -> Option<Kind> {
-    match crate::linuxdir::is_dir(d_type) {
+    match crate::unixdir::is_dir(d_type) {
         None => None,
         Some(true) => Some(Kind::Dir),
-        Some(false) if crate::linuxdir::is_file(d_type) == Some(true) => Some(Kind::File),
-        Some(false) if crate::linuxdir::is_lnk(d_type) => Some(Kind::Link),
+        Some(false) if crate::unixdir::is_file(d_type) == Some(true) => Some(Kind::File),
+        Some(false) if crate::unixdir::is_lnk(d_type) => Some(Kind::Link),
         Some(false) => Some(Kind::Other),
     }
 }
 
-#[cfg(all(target_os = "linux", not(test)))]
+#[cfg(all(unix, not(test)))]
 fn classify_dtype(
     path: &Path,
     d_type: u8,
@@ -575,7 +575,7 @@ fn classify_dtype(
     need_meta: bool,
     errors: &AtomicBool,
 ) -> (Option<fs::Metadata>, Kind) {
-    if follow && crate::linuxdir::is_lnk(d_type) {
+    if follow && crate::unixdir::is_lnk(d_type) {
         return match fs::metadata(path) {
             Ok(m) => {
                 let kind = kind_from_meta(&m);
@@ -625,9 +625,9 @@ fn scan_plain<F: Fn(&Item<'_>)>(node: &Node, ctx: &Ctx<'_, F>, follow_child: boo
     let mut next = Vec::new();
     let mut child = node.path.clone();
     let depth = node.depth + 1;
-    #[cfg(all(target_os = "linux", not(test)))]
+    #[cfg(all(unix, not(test)))]
     {
-        let (dirfd, ents) = match crate::linuxdir::list(&node.path) {
+        let (dirfd, ents) = match crate::unixdir::list(&node.path) {
             Ok(v) => v,
             Err(e) => {
                 report(&node.path, e, ctx.errors);
@@ -636,8 +636,8 @@ fn scan_plain<F: Fn(&Item<'_>)>(node: &Node, ctx: &Ctx<'_, F>, follow_child: boo
         };
         for ent in ents {
             child.push(&ent.name);
-            let d_type = if crate::linuxdir::is_dir(ent.d_type).is_none() {
-                crate::linuxdir::dtype_at(&dirfd, &ent.name).unwrap_or(ent.d_type)
+            let d_type = if crate::unixdir::is_dir(ent.d_type).is_none() {
+                crate::unixdir::dtype_at(&dirfd, &ent.name).unwrap_or(ent.d_type)
             } else {
                 ent.d_type
             };
@@ -666,7 +666,7 @@ fn scan_plain<F: Fn(&Item<'_>)>(node: &Node, ctx: &Ctx<'_, F>, follow_child: boo
         }
         next
     }
-    #[cfg(not(all(target_os = "linux", not(test))))]
+    #[cfg(not(all(unix, not(test))))]
     {
         for entry in read_entries(&node.path, ctx.errors) {
             let Some(ft) = entry_type(&entry, ctx.errors) else {

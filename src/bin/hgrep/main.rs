@@ -6,16 +6,12 @@ mod search;
 mod source;
 mod walk;
 
-#[cfg(all(target_os = "linux", not(test)))]
-#[path = "../linuxdir.rs"]
-mod linuxdir;
+#[cfg(all(unix, not(test)))]
+#[path = "../unixdir.rs"]
+mod unixdir;
 
 #[path = "../outbuf.rs"]
 mod outbuf;
-
-#[cfg(not(target_env = "msvc"))]
-#[global_allocator]
-static GLOBAL: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
 
 use std::cell::RefCell;
 use std::fs::{self, File};
@@ -32,7 +28,7 @@ use cli::Cli;
 use matcher::build_matcher;
 use search::{Job, may_stop_early, report, search_buf, search_exists, selected};
 use source::{from_file, open_source};
-use walk::{Input, for_each_path};
+use walk::for_each_path;
 
 thread_local! {
     static SLOT: RefCell<(Vec<u8>, Vec<u8>)> = const { RefCell::new((Vec::new(), Vec::new())) };
@@ -114,7 +110,7 @@ fn main() -> ExitCode {
         cli.gitignore,
         &errors,
         cli.no_messages,
-        |path, input| process_path(path, input, &job, &sink, &found, &errors, early),
+        |path, file| process_path(path, file, &job, &sink, &found, &errors, early),
     );
 
     outbuf::finish(&sink);
@@ -131,7 +127,7 @@ struct OpenedFile<'a> {
 
 fn process_path(
     path: &Path,
-    input: Input<'_>,
+    file: Option<File>,
     job: &Job<'_>,
     sink: &Mutex<io::BufWriter<io::Stdout>>,
     found: &AtomicBool,
@@ -145,18 +141,15 @@ fn process_path(
         let (read_buf, out) = &mut *slot.borrow_mut();
         out.clear();
         let name = path.as_os_str().as_bytes();
-        let count = match input {
-            Input::Bytes(bytes) => search_bytes(bytes, job, name, out, early),
-            Input::File(file) => stream_or_search(
-                OpenedFile { path, file },
-                job,
-                name,
-                read_buf,
-                out,
-                errors,
-                early,
-            ),
-        };
+        let count = stream_or_search(
+            OpenedFile { path, file },
+            job,
+            name,
+            read_buf,
+            out,
+            errors,
+            early,
+        );
         let Some(count) = count else {
             return;
         };
@@ -168,23 +161,6 @@ fn process_path(
             outbuf::push(sink, out, None);
         }
     });
-}
-
-fn search_bytes(
-    bytes: &[u8],
-    job: &Job<'_>,
-    name: &[u8],
-    out: &mut Vec<u8>,
-    early: bool,
-) -> Option<u64> {
-    if early
-        && !job.cli.invert
-        && !job.cli.count
-        && let Some(overlap) = job.matcher.stream_overlap()
-    {
-        return Some(search_exists(bytes, job, overlap, || {}));
-    }
-    Some(search_buf(bytes, job, name, out))
 }
 
 fn source_of<'a>(

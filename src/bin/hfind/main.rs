@@ -4,9 +4,9 @@ mod gitconfig;
 mod ignore;
 mod walk;
 
-#[cfg(all(target_os = "linux", not(test)))]
-#[path = "../linuxdir.rs"]
-mod linuxdir;
+#[cfg(all(unix, not(test)))]
+#[path = "../unixdir.rs"]
+mod unixdir;
 
 #[path = "../outbuf.rs"]
 mod outbuf;
@@ -16,10 +16,6 @@ use std::process::ExitCode;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::SystemTime;
-
-#[cfg(not(target_env = "msvc"))]
-#[global_allocator]
-static GLOBAL: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
 
 use walk::WalkCfg;
 

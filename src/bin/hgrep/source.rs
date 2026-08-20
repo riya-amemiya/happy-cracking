@@ -1,4 +1,4 @@
-use std::fs::{File, OpenOptions};
+use std::fs::File;
 use std::io::{self, Read};
 use std::os::fd::AsRawFd;
 use std::path::Path;
@@ -6,22 +6,7 @@ use std::path::Path;
 const MMAP_MIN: u64 = 64 * 1024;
 
 fn open_read(path: &Path) -> io::Result<File> {
-    let mut opts = OpenOptions::new();
-    opts.read(true);
-    #[cfg(target_os = "linux")]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        opts.custom_flags(libc::O_NOATIME);
-        match opts.open(path) {
-            Ok(f) => Ok(f),
-            Err(e) if e.raw_os_error() == Some(libc::EPERM) => File::open(path),
-            Err(e) => Err(e),
-        }
-    }
-    #[cfg(not(target_os = "linux"))]
-    {
-        opts.open(path)
-    }
+    File::open(path)
 }
 
 const CHUNK: usize = 16 * 1024;
@@ -54,9 +39,6 @@ pub(crate) fn from_file<'a>(
     if let Ok(meta) = file.metadata() {
         let len = meta.len();
         if len >= MMAP_MIN {
-            #[cfg(target_os = "linux")]
-            let map_flags = libc::MAP_PRIVATE | libc::MAP_POPULATE;
-            #[cfg(not(target_os = "linux"))]
             let map_flags = libc::MAP_PRIVATE;
             let ptr = unsafe {
                 libc::mmap(
