@@ -1,14 +1,15 @@
 //! POSIX directory listing with `d_type`, used by hfind and hgrep on Unix.
 //!
 //! Opens the directory once, reads entries via `fdopendir`/`readdir`, and keeps
-//! the original fd so callers can `openat` / `fstatat` without another path walk.
-//! `d_type` is filled on Linux, macOS, and BSD; `DT_UNKNOWN` falls back to `fstatat`.
+//! the `DIR*` so callers can `openat` / `fstatat` via `dirfd` without another
+//! path walk. `d_type` is filled on Linux, macOS, and BSD; `DT_UNKNOWN` falls
+//! back to `fstatat`.
 
 use std::ffi::{CStr, CString, OsStr, OsString};
 use std::fs::File;
 use std::io;
+use std::os::fd::{AsRawFd, FromRawFd, RawFd};
 use std::os::unix::ffi::OsStrExt;
-use std::os::unix::io::{AsRawFd, FromRawFd, OwnedFd};
 use std::path::Path;
 
 use libc::{O_CLOEXEC, O_DIRECTORY, O_RDONLY};
@@ -18,13 +19,23 @@ pub struct RawEnt {
     pub d_type: u8,
 }
 
-struct DirList(*mut libc::DIR);
+/// Open directory whose `DIR*` owns the fd. `closedir` runs on drop.
+pub struct DirFd {
+    dir: *mut libc::DIR,
+}
 
-impl Drop for DirList {
+impl Drop for DirFd {
     fn drop(&mut self) {
-        if !self.0.is_null() {
-            unsafe { libc::closedir(self.0) };
+        if !self.dir.is_null() {
+            unsafe { libc::closedir(self.dir) };
+            self.dir = std::ptr::null_mut();
         }
+    }
+}
+
+impl AsRawFd for DirFd {
+    fn as_raw_fd(&self) -> RawFd {
+        unsafe { libc::dirfd(self.dir) }
     }
 }
 
@@ -52,18 +63,24 @@ pub fn is_lnk(d_type: u8) -> bool {
     d_type == libc::DT_LNK
 }
 
-/// Open a directory and return its fd plus entries. Caller keeps the fd for
-/// `open_at` / `dtype_at` on the same listing.
-pub fn list(path: &Path) -> io::Result<(OwnedFd, Vec<RawEnt>)> {
+/// Open a directory and return a live `DIR*` plus entries. Caller keeps the
+/// handle for `open_at` / `dtype_at` on the same listing.
+pub fn list(path: &Path) -> io::Result<(DirFd, Vec<RawEnt>)> {
     let cpath = CString::new(path.as_os_str().as_bytes())
         .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "path contains NUL"))?;
     let fd = unsafe { libc::open(cpath.as_ptr(), O_RDONLY | O_DIRECTORY | O_CLOEXEC) };
     if fd < 0 {
         return Err(io::Error::last_os_error());
     }
-    let fd = unsafe { OwnedFd::from_raw_fd(fd) };
-    let ents = read_dents(&fd)?;
-    Ok((fd, ents))
+    let stream = unsafe { libc::fdopendir(fd) };
+    if stream.is_null() {
+        let err = io::Error::last_os_error();
+        unsafe { libc::close(fd) };
+        return Err(err);
+    }
+    let dir = DirFd { dir: stream };
+    let ents = read_dents(dir.dir)?;
+    Ok((dir, ents))
 }
 
 #[allow(dead_code)]
@@ -73,7 +90,7 @@ pub fn read(path: &Path) -> io::Result<Vec<RawEnt>> {
 
 /// Open `name` relative to `dir` (does not follow symlinks).
 #[allow(dead_code)]
-pub fn open_at(dir: &OwnedFd, name: &OsStr) -> io::Result<File> {
+pub fn open_at(dir: &impl AsRawFd, name: &OsStr) -> io::Result<File> {
     open_at_fd(dir.as_raw_fd(), name)
 }
 
@@ -91,7 +108,7 @@ pub fn open_at_fd(dirfd: i32, name: &OsStr) -> io::Result<File> {
 
 /// `fstatat` when `d_type` is unknown. Returns a concrete `DT_*` value.
 #[allow(dead_code)]
-pub fn dtype_at(dir: &OwnedFd, name: &OsStr) -> Option<u8> {
+pub fn dtype_at(dir: &impl AsRawFd, name: &OsStr) -> Option<u8> {
     let cname = CString::new(name.as_bytes()).ok()?;
     let mut st: libc::stat = unsafe { std::mem::zeroed() };
     let rc = unsafe {
@@ -117,21 +134,10 @@ pub fn dtype_at(dir: &OwnedFd, name: &OsStr) -> Option<u8> {
     }
 }
 
-fn read_dents(dir: &OwnedFd) -> io::Result<Vec<RawEnt>> {
-    let listing = unsafe { libc::fcntl(dir.as_raw_fd(), libc::F_DUPFD_CLOEXEC, 0) };
-    if listing < 0 {
-        return Err(io::Error::last_os_error());
-    }
-    let stream = unsafe { libc::fdopendir(listing) };
-    if stream.is_null() {
-        let err = io::Error::last_os_error();
-        unsafe { libc::close(listing) };
-        return Err(err);
-    }
-    let stream = DirList(stream);
+fn read_dents(dir: *mut libc::DIR) -> io::Result<Vec<RawEnt>> {
     let mut out = Vec::with_capacity(32);
     loop {
-        let ent = unsafe { libc::readdir(stream.0) };
+        let ent = unsafe { libc::readdir(dir) };
         if ent.is_null() {
             break;
         }
