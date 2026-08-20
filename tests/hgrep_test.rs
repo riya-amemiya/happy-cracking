@@ -255,6 +255,31 @@ fn recursive_over_directory() {
     fs::remove_dir_all(&dir).unwrap();
 }
 
+#[test]
+fn recursive_search_reads_past_the_first_chunk() {
+    let dir = scratch("over_chunk");
+    let mut body = vec![b'x'; 20 * 1024];
+    body.extend_from_slice(b"needle-after-chunk\n");
+    put(&dir, "sub/big.txt", &body);
+    put(&dir, "sub/tiny.txt", b"nope\n");
+
+    let out = run(&["-r", "needle-after-chunk", dir.to_str().unwrap()]);
+    assert!(
+        out.stdout.contains("needle-after-chunk"),
+        "got {:?}",
+        out.stdout
+    );
+    assert_eq!(out.code, 0, "stderr {:?}", out.stderr);
+    assert_eq!(
+        run(&["-rl", "needle-after-chunk", dir.to_str().unwrap()])
+            .stdout
+            .trim(),
+        dir.join("sub/big.txt").to_string_lossy(),
+    );
+
+    fs::remove_dir_all(&dir).unwrap();
+}
+
 fn build_ignore_tree(tag: &str) -> PathBuf {
     let dir = scratch(tag);
     for sub in ["target", "logs", "sub/deep", "excluded/nested", "keepdir"] {

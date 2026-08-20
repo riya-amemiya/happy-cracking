@@ -32,7 +32,7 @@ use cli::Cli;
 use matcher::build_matcher;
 use search::{Job, may_stop_early, report, search_buf, search_exists, selected};
 use source::{from_file, open_source};
-use walk::for_each_path;
+use walk::{Input, for_each_path};
 
 thread_local! {
     static SLOT: RefCell<(Vec<u8>, Vec<u8>)> = const { RefCell::new((Vec::new(), Vec::new())) };
@@ -114,16 +114,7 @@ fn main() -> ExitCode {
         cli.gitignore,
         &errors,
         cli.no_messages,
-        |path, opened| {
-            process_path(
-                OpenedFile { path, file: opened },
-                &job,
-                &sink,
-                &found,
-                &errors,
-                early,
-            )
-        },
+        |path, input| process_path(path, input, &job, &sink, &found, &errors, early),
     );
 
     outbuf::finish(&sink);
@@ -139,7 +130,8 @@ struct OpenedFile<'a> {
 }
 
 fn process_path(
-    opened: OpenedFile<'_>,
+    path: &Path,
+    input: Input<'_>,
     job: &Job<'_>,
     sink: &Mutex<io::BufWriter<io::Stdout>>,
     found: &AtomicBool,
@@ -152,22 +144,21 @@ fn process_path(
     SLOT.with(|slot| {
         let (read_buf, out) = &mut *slot.borrow_mut();
         out.clear();
-        let path = opened.path;
         let name = path.as_os_str().as_bytes();
-        let count = match stream_or_search(
-            OpenedFile {
-                path,
-                file: opened.file,
-            },
-            job,
-            name,
-            read_buf,
-            out,
-            errors,
-            early,
-        ) {
-            Some(c) => c,
-            None => return,
+        let count = match input {
+            Input::Bytes(bytes) => search_bytes(bytes, job, name, out, early),
+            Input::File(file) => stream_or_search(
+                OpenedFile { path, file },
+                job,
+                name,
+                read_buf,
+                out,
+                errors,
+                early,
+            ),
+        };
+        let Some(count) = count else {
+            return;
         };
         if selected(job.cli, count) {
             found.store(true, Ordering::Relaxed);
@@ -177,6 +168,23 @@ fn process_path(
             outbuf::push(sink, out, None);
         }
     });
+}
+
+fn search_bytes(
+    bytes: &[u8],
+    job: &Job<'_>,
+    name: &[u8],
+    out: &mut Vec<u8>,
+    early: bool,
+) -> Option<u64> {
+    if early
+        && !job.cli.invert
+        && !job.cli.count
+        && let Some(overlap) = job.matcher.stream_overlap()
+    {
+        return Some(search_exists(bytes, job, overlap, || {}));
+    }
+    Some(search_buf(bytes, job, name, out))
 }
 
 fn source_of<'a>(

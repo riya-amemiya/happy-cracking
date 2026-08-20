@@ -1,5 +1,7 @@
 use std::ffi::{OsStr, OsString};
 use std::fs::{self, File};
+#[cfg(all(target_os = "linux", not(test)))]
+use std::os::fd::AsRawFd;
 use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -9,6 +11,10 @@ use rayon::prelude::*;
 
 use crate::gitconfig::{RepoOpts, repo_sources};
 use crate::ignore::{Ignore, load_ignore};
+
+#[cfg(all(target_os = "linux", not(test)))]
+#[path = "uring.rs"]
+mod uring;
 
 #[cfg(target_os = "macos")]
 mod nfc {
@@ -191,8 +197,13 @@ fn scan_plain(dir: &Dir, errors: &AtomicBool, quiet: bool) -> (Vec<Dir>, Vec<Pat
     scan_plain_std(dir, errors, quiet)
 }
 
+pub(crate) enum Input<'a> {
+    File(Option<File>),
+    Bytes(&'a [u8]),
+}
+
 #[cfg(all(target_os = "linux", not(test)))]
-fn scan_plain_linux<F: Fn(&Path, Option<File>)>(
+fn scan_plain_linux<F: Fn(&Path, Input<'_>)>(
     dir: &Dir,
     errors: &AtomicBool,
     quiet: bool,
@@ -209,29 +220,51 @@ fn scan_plain_linux<F: Fn(&Path, Option<File>)>(
         }
     };
     let mut sub = Vec::new();
+    let mut files = Vec::new();
     let mut child = dir.path.clone();
     for ent in ents {
-        child.push(&ent.name);
         let d_type = if crate::linuxdir::is_dir(ent.d_type).is_none() {
             crate::linuxdir::dtype_at(&dirfd, &ent.name).unwrap_or(ent.d_type)
         } else {
             ent.d_type
         };
         match crate::linuxdir::is_dir(d_type) {
-            Some(true) => sub.push(Dir {
-                path: child.clone(),
-                rel: Vec::new(),
-                ignore: None,
-                opts: RepoOpts::default(),
-                in_repo: false,
-            }),
+            Some(true) => {
+                child.push(&ent.name);
+                sub.push(Dir {
+                    path: child.clone(),
+                    rel: Vec::new(),
+                    ignore: None,
+                    opts: RepoOpts::default(),
+                    in_repo: false,
+                });
+                child.pop();
+            }
             Some(false) if crate::linuxdir::is_file(d_type) == Some(true) => {
-                let opened = crate::linuxdir::open_at(&dirfd, &ent.name).ok();
-                visit(&child, opened);
+                files.push(ent.name);
             }
             _ => {}
         }
-        child.pop();
+    }
+    if !files.is_empty() {
+        let handled = uring::process(dirfd.as_raw_fd(), &files, |i, out| {
+            child.push(&files[i]);
+            match out {
+                uring::ReadOut::Bytes(bytes) => visit(&child, Input::Bytes(bytes)),
+                uring::ReadOut::File(file) => visit(&child, Input::File(Some(file))),
+                uring::ReadOut::Miss => {
+                    let opened = crate::linuxdir::open_at(&dirfd, &files[i]).ok();
+                    visit(&child, Input::File(opened));
+                }
+            }
+            child.pop();
+        });
+        for name in files.iter().skip(handled) {
+            child.push(name);
+            let opened = crate::linuxdir::open_at(&dirfd, name).ok();
+            visit(&child, Input::File(opened));
+            child.pop();
+        }
     }
     sub
 }
@@ -348,7 +381,7 @@ pub(crate) fn for_each_path<F>(
     quiet_errors: bool,
     visit: F,
 ) where
-    F: Fn(&Path, Option<File>) + Sync,
+    F: Fn(&Path, Input<'_>) + Sync,
 {
     let mut files = Vec::new();
     let mut level = Vec::new();
@@ -385,7 +418,9 @@ pub(crate) fn for_each_path<F>(
     }
 
     if !files.is_empty() {
-        files.into_par_iter().for_each(|path| visit(&path, None));
+        files
+            .into_par_iter()
+            .for_each(|path| visit(&path, Input::File(None)));
     }
 
     while !level.is_empty() {
@@ -418,7 +453,7 @@ pub(crate) fn for_each_path<F>(
         found
             .into_par_iter()
             .flatten()
-            .for_each(|path| visit(&path, None));
+            .for_each(|path| visit(&path, Input::File(None)));
         level = dirs.into_iter().flatten().collect();
     }
 }
