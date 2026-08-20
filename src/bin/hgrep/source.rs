@@ -1,9 +1,35 @@
-use std::fs::File;
+use std::fs::{File, OpenOptions};
 use std::io::{self, Read};
 use std::os::fd::AsRawFd;
 use std::path::Path;
 
 const MMAP_MIN: u64 = 64 * 1024;
+
+fn open_read(path: &Path) -> io::Result<File> {
+    let mut opts = OpenOptions::new();
+    opts.read(true);
+    #[cfg(target_os = "linux")]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        opts.custom_flags(libc::O_NOATIME);
+        match opts.open(path) {
+            Ok(f) => Ok(f),
+            Err(e) if e.raw_os_error() == Some(libc::EPERM) => File::open(path),
+            Err(e) => Err(e),
+        }
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        opts.open(path)
+    }
+}
+
+fn read_into(file: &mut File, len: u64, buf: &mut Vec<u8>) -> io::Result<()> {
+    buf.clear();
+    buf.resize(len as usize, 0);
+    file.read_exact(buf)?;
+    Ok(())
+}
 
 struct Mapped {
     ptr: *mut libc::c_void,
@@ -51,22 +77,15 @@ impl Source<'_> {
     }
 }
 
-fn read_into(file: &File, len: u64, buf: &mut Vec<u8>) -> io::Result<()> {
-    buf.clear();
-    buf.reserve(len as usize);
-    file.take(len).read_to_end(buf)?;
-    Ok(())
-}
-
 pub(crate) fn open_source<'a>(
     path: &Path,
     buf: &'a mut Vec<u8>,
     early: bool,
 ) -> io::Result<Source<'a>> {
-    let file = File::open(path)?;
+    let mut file = open_read(path)?;
     let len = file.metadata()?.len();
     if len > usize::MAX as u64 {
-        read_into(&file, len, buf)?;
+        read_into(&mut file, len, buf)?;
         return Ok(Source(Kind::Mem(buf)));
     }
     if len >= MMAP_MIN {
@@ -94,6 +113,6 @@ pub(crate) fn open_source<'a>(
             })));
         }
     }
-    read_into(&file, len, buf)?;
+    read_into(&mut file, len, buf)?;
     Ok(Source(Kind::Mem(buf)))
 }

@@ -394,64 +394,21 @@ pub(crate) fn for_each_path<F>(
         files.into_par_iter().for_each(|path| visit(&path));
     }
 
-    fn walk_one<F: Fn(&Path) + Sync>(
-        dir: Dir,
-        gitignore: bool,
-        errors: &AtomicBool,
-        quiet: bool,
-        visit: &F,
-    ) {
-        let (subs, found) = if gitignore {
-            scan_ignored(&dir, errors, quiet)
-        } else {
-            scan_plain(&dir, errors, quiet)
-        };
-        match (found.len(), subs.len()) {
-            (0, 0) => {}
-            (_, 0) => found.into_par_iter().for_each(|path| visit(&path)),
-            (0, 1) => walk_one(
-                subs.into_iter().next().unwrap(),
-                gitignore,
-                errors,
-                quiet,
-                visit,
-            ),
-            (0, _) => subs
-                .into_par_iter()
-                .for_each(|d| walk_one(d, gitignore, errors, quiet, visit)),
-            (_, 1) => {
-                found.into_par_iter().for_each(|path| visit(&path));
-                walk_one(
-                    subs.into_iter().next().unwrap(),
-                    gitignore,
-                    errors,
-                    quiet,
-                    visit,
-                );
-            }
-            _ => {
-                rayon::join(
-                    || found.into_par_iter().for_each(|path| visit(&path)),
-                    || {
-                        subs.into_par_iter()
-                            .for_each(|d| walk_one(d, gitignore, errors, quiet, visit));
-                    },
-                );
-            }
-        }
-    }
-
-    match level.len() {
-        0 => {}
-        1 => walk_one(
-            level.pop().unwrap(),
-            gitignore,
-            errors,
-            quiet_errors,
-            &visit,
-        ),
-        _ => level
+    while !level.is_empty() {
+        let (dirs, found): (Vec<Vec<Dir>>, Vec<Vec<PathBuf>>) = level
+            .par_iter()
+            .map(|dir| {
+                if gitignore {
+                    scan_ignored(dir, errors, quiet_errors)
+                } else {
+                    scan_plain(dir, errors, quiet_errors)
+                }
+            })
+            .unzip();
+        found
             .into_par_iter()
-            .for_each(|dir| walk_one(dir, gitignore, errors, quiet_errors, &visit)),
+            .flatten()
+            .for_each(|path| visit(&path));
+        level = dirs.into_iter().flatten().collect();
     }
 }
