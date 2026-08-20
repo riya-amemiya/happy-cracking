@@ -56,5 +56,5 @@ zip = { version = "8.6.0", default-features = false, features = ["aes-crypto", "
 libc = "0.2.189"
 
 [profile.release]
-lto = "thin"
+lto = "fat"
 codegen-units = 1
