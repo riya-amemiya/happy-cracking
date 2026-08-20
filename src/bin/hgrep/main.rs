@@ -6,8 +6,15 @@ mod search;
 mod source;
 mod walk;
 
+#[cfg(all(unix, not(test)))]
+#[path = "../unixdir.rs"]
+mod unixdir;
+
+#[path = "../outbuf.rs"]
+mod outbuf;
+
 use std::cell::RefCell;
-use std::fs;
+use std::fs::{self, File};
 use std::io::{self, Read, Write};
 use std::os::unix::ffi::{OsStrExt, OsStringExt};
 use std::path::Path;
@@ -20,7 +27,7 @@ use clap::Parser;
 use cli::Cli;
 use matcher::build_matcher;
 use search::{Job, may_stop_early, report, search_buf, search_exists, selected};
-use source::open_source;
+use source::{from_file, open_source};
 use walk::for_each_path;
 
 thread_local! {
@@ -103,20 +110,24 @@ fn main() -> ExitCode {
         cli.gitignore,
         &errors,
         cli.no_messages,
-        |path| process_path(path, &job, &sink, &found, &errors, early),
+        |path, file| process_path(path, file, &job, &sink, &found, &errors, early),
     );
 
-    if let Ok(mut w) = sink.lock() {
-        let _ = w.flush();
-    }
+    outbuf::finish(&sink);
     exit_code(
         found.load(Ordering::Relaxed),
         errors.load(Ordering::Relaxed),
     )
 }
 
+struct OpenedFile<'a> {
+    path: &'a Path,
+    file: Option<File>,
+}
+
 fn process_path(
     path: &Path,
+    file: Option<File>,
     job: &Job<'_>,
     sink: &Mutex<io::BufWriter<io::Stdout>>,
     found: &AtomicBool,
@@ -130,24 +141,41 @@ fn process_path(
         let (read_buf, out) = &mut *slot.borrow_mut();
         out.clear();
         let name = path.as_os_str().as_bytes();
-        let count = match stream_or_search(path, job, name, read_buf, out, errors, early) {
-            Some(c) => c,
-            None => return,
+        let count = stream_or_search(
+            OpenedFile { path, file },
+            job,
+            name,
+            read_buf,
+            out,
+            errors,
+            early,
+        );
+        let Some(count) = count else {
+            return;
         };
         if selected(job.cli, count) {
             found.store(true, Ordering::Relaxed);
         }
         report(job, name, count, out);
-        if !out.is_empty()
-            && let Ok(mut w) = sink.lock()
-        {
-            let _ = w.write_all(out);
+        if !out.is_empty() {
+            outbuf::push(sink, out, None);
         }
     });
 }
 
+fn source_of<'a>(
+    opened: OpenedFile<'_>,
+    buf: &'a mut Vec<u8>,
+    early: bool,
+) -> io::Result<source::Source<'a>> {
+    match opened.file {
+        Some(file) => from_file(file, buf, early),
+        None => open_source(opened.path, buf, early),
+    }
+}
+
 fn stream_or_search(
-    path: &Path,
+    opened: OpenedFile<'_>,
     job: &Job<'_>,
     name: &[u8],
     read_buf: &mut Vec<u8>,
@@ -160,7 +188,8 @@ fn stream_or_search(
         && !job.cli.count
         && let Some(overlap) = job.matcher.stream_overlap()
     {
-        return match open_source(path, read_buf, true) {
+        let path = opened.path;
+        return match source_of(opened, read_buf, true) {
             Ok(src) => {
                 let count = search_exists(src.bytes(), job, overlap, || src.prefetch_from(0));
                 drop(src);
@@ -175,11 +204,11 @@ fn stream_or_search(
             }
         };
     }
-    open_and_search(path, job, name, read_buf, out, errors, early)
+    open_and_search(opened, job, name, read_buf, out, errors, early)
 }
 
 fn open_and_search(
-    path: &Path,
+    opened: OpenedFile<'_>,
     job: &Job<'_>,
     name: &[u8],
     read_buf: &mut Vec<u8>,
@@ -187,7 +216,8 @@ fn open_and_search(
     errors: &AtomicBool,
     early: bool,
 ) -> Option<u64> {
-    match open_source(path, read_buf, early) {
+    let path = opened.path;
+    match source_of(opened, read_buf, early) {
         Ok(src) => {
             let count = search_buf(src.bytes(), job, name, out);
             drop(src);

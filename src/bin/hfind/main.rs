@@ -4,7 +4,14 @@ mod gitconfig;
 mod ignore;
 mod walk;
 
-use std::io::{self, Write};
+#[cfg(all(unix, not(test)))]
+#[path = "../unixdir.rs"]
+mod unixdir;
+
+#[path = "../outbuf.rs"]
+mod outbuf;
+
+use std::io;
 use std::process::ExitCode;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -46,9 +53,7 @@ fn run(parsed: args::Parsed) -> ExitCode {
             emit(&sink, bytes, nul);
         });
     });
-    if let Ok(mut w) = sink.lock() {
-        let _ = w.flush();
-    }
+    outbuf::finish(&sink);
     if errors.load(Ordering::Relaxed) {
         ExitCode::from(1)
     } else {
@@ -57,10 +62,7 @@ fn run(parsed: args::Parsed) -> ExitCode {
 }
 
 fn emit(sink: &Mutex<io::BufWriter<io::Stdout>>, bytes: &[u8], nul: bool) {
-    if let Ok(mut w) = sink.lock() {
-        let _ = w.write_all(bytes);
-        let _ = w.write_all(&[if nul { 0 } else { b'\n' }]);
-    }
+    outbuf::push(sink, bytes, Some(if nul { 0 } else { b'\n' }));
 }
 
 #[cfg(test)]
