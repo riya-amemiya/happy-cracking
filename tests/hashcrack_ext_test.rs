@@ -48,6 +48,29 @@ fn mask_attack_recovers_short_password() {
 }
 
 #[test]
+fn mask_attack_literal_prefix() {
+    let plain = "ab1";
+    let target = compute_hash(HashAlgo::Md5, plain);
+    let found = mask_attack(&target, HashAlgo::Md5, "ab?d").unwrap();
+    assert_eq!(found.as_deref(), Some("ab1"));
+}
+
+#[test]
+fn mask_attack_unicode_literal() {
+    let plain = "café";
+    let target = compute_hash(HashAlgo::Sha256, plain);
+    let found = mask_attack(&target, HashAlgo::Sha256, "café").unwrap();
+    assert_eq!(found.as_deref(), Some("café"));
+}
+
+#[test]
+fn mask_attack_miss_returns_none() {
+    let target = "0".repeat(32);
+    let found = mask_attack(&target, HashAlgo::Md5, "?l?d").unwrap();
+    assert!(found.is_none());
+}
+
+#[test]
 fn hybrid_attack_numeric_suffix() {
     let plain = "pass12";
     let target = compute_hash(HashAlgo::Md5, plain);
