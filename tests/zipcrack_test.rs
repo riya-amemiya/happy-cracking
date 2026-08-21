@@ -68,3 +68,13 @@ fn list_entries_reports_encrypted() {
     assert_eq!(entries[0].name, "flag.txt");
     assert!(entries[0].encrypted);
 }
+
+#[test]
+fn verify_password_streams_larger_member_without_failing() {
+    // ~64 KiB is well under the 16 MiB cap; this exercises the sink path
+    // (no in-memory decompressed buffer) on a bigger payload than the other tests.
+    let content = "flag{zip_streamed_verify}\n".repeat(2048);
+    let bytes = make_encrypted_zip("hunter2", &content);
+    assert!(zipcrack::verify_password(&bytes, "hunter2"));
+    assert!(!zipcrack::verify_password(&bytes, "wrongpass"));
+}
