@@ -39,9 +39,10 @@ pub fn dump_bytes(data: &[u8]) -> String {
     }
 
     // Optimization: Avoid `format!` overhead in hot loop and preallocate
-    // Each line has a fixed maximum length of 68 chars
+    // Each line has a fixed maximum length of 68 chars. Build as bytes then
+    // convert once so the hot path stays allocation-light without unsafe UTF-8.
     let num_lines = data.len().div_ceil(16);
-    let mut output = String::with_capacity(num_lines * 68);
+    let mut output = Vec::with_capacity(num_lines * 68);
     let hex_chars = b"0123456789abcdef";
 
     for (line_idx, chunk) in data.chunks(16).enumerate() {
@@ -66,53 +67,47 @@ pub fn dump_bytes(data: &[u8]) -> String {
             buf[start_idx] = b'0';
         }
 
-        // Safety: `buf` contains only ASCII hex characters
-        output.push_str(unsafe { std::str::from_utf8_unchecked(&buf[start_idx..]) });
-        output.push_str(": ");
+        output.extend_from_slice(&buf[start_idx..]);
+        output.extend_from_slice(b": ");
 
         // Hex pairs
         for pair_idx in 0..8 {
             let byte_offset = pair_idx * 2;
             if byte_offset < chunk.len() {
                 let b = chunk[byte_offset];
-                let b_hex = [hex_chars[(b >> 4) as usize], hex_chars[(b & 0xf) as usize]];
-                // Safety: `b_hex` contains only ASCII hex characters
-                output.push_str(unsafe { std::str::from_utf8_unchecked(&b_hex) });
+                output.push(hex_chars[(b >> 4) as usize]);
+                output.push(hex_chars[(b & 0xf) as usize]);
 
                 if byte_offset + 1 < chunk.len() {
                     let b2 = chunk[byte_offset + 1];
-                    let b2_hex = [
-                        hex_chars[(b2 >> 4) as usize],
-                        hex_chars[(b2 & 0xf) as usize],
-                    ];
-                    // Safety: `b2_hex` contains only ASCII hex characters
-                    output.push_str(unsafe { std::str::from_utf8_unchecked(&b2_hex) });
+                    output.push(hex_chars[(b2 >> 4) as usize]);
+                    output.push(hex_chars[(b2 & 0xf) as usize]);
                 } else {
-                    output.push_str("  ");
+                    output.extend_from_slice(b"  ");
                 }
             } else {
-                output.push_str("    ");
+                output.extend_from_slice(b"    ");
             }
             if pair_idx < 7 {
-                output.push(' ');
+                output.push(b' ');
             }
         }
 
         // Pad if less than 16 bytes
-        output.push_str("  ");
+        output.extend_from_slice(b"  ");
 
         // ASCII column
         for &byte in chunk {
             if byte.is_ascii_graphic() || byte == b' ' {
-                output.push(byte as char);
+                output.push(byte);
             } else {
-                output.push('.');
+                output.push(b'.');
             }
         }
 
-        output.push('\n');
+        output.push(b'\n');
     }
-    output
+    String::from_utf8(output).expect("hexdump output is ASCII")
 }
 
 pub fn reverse(hex_dump: &str) -> Result<Vec<u8>> {

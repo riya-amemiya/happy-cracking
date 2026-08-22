@@ -1,4 +1,4 @@
-use std::ffi::{OsStr, OsString};
+use std::ffi::OsStr;
 use std::fs;
 use std::os::unix::ffi::{OsStrExt, OsStringExt};
 use std::path::{Path, PathBuf};
@@ -10,6 +10,9 @@ use memchr::memchr;
 use regex::bytes::{Regex, RegexBuilder};
 
 use crate::ignore::{Ignore, glob_to_regex, load_ignore};
+
+#[path = "../unixhome.rs"]
+mod unixhome;
 
 #[derive(Clone, Default)]
 struct GitConfig {
@@ -229,31 +232,7 @@ fn config_bool(value: &[u8]) -> bool {
 }
 
 fn home_of(user: &[u8]) -> Option<PathBuf> {
-    let name = std::ffi::CString::new(user).ok()?;
-    let mut record: libc::passwd = unsafe { std::mem::zeroed() };
-    let mut scratch = vec![0 as libc::c_char; 4096];
-    let mut found: *mut libc::passwd = std::ptr::null_mut();
-    let rc = unsafe {
-        libc::getpwnam_r(
-            name.as_ptr(),
-            &mut record,
-            scratch.as_mut_ptr(),
-            scratch.len(),
-            &mut found,
-        )
-    };
-    if rc != 0 || found.is_null() {
-        return None;
-    }
-    home_dir_from_passwd(unsafe { (*found).pw_dir })
-}
-
-fn home_dir_from_passwd(dir: *const libc::c_char) -> Option<PathBuf> {
-    if dir.is_null() {
-        return None;
-    }
-    let bytes = unsafe { std::ffi::CStr::from_ptr(dir) }.to_bytes().to_vec();
-    Some(PathBuf::from(OsString::from_vec(bytes)))
+    unixhome::home_of(user)
 }
 
 fn expand_tilde(value: &[u8]) -> Option<PathBuf> {

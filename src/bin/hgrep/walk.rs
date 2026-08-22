@@ -10,84 +10,8 @@ use rayon::prelude::*;
 use crate::gitconfig::{RepoOpts, repo_sources};
 use crate::ignore::{Ignore, load_ignore};
 
-#[cfg(target_os = "macos")]
-mod nfc {
-    use std::cell::Cell;
-    use std::ffi::c_void;
-    use std::os::raw::{c_char, c_int};
-
-    #[link(name = "iconv")]
-    unsafe extern "C" {
-        fn iconv_open(to: *const c_char, from: *const c_char) -> *mut c_void;
-        fn iconv(
-            cd: *mut c_void,
-            input: *mut *const c_char,
-            inleft: *mut usize,
-            output: *mut *mut c_char,
-            outleft: *mut usize,
-        ) -> usize;
-        fn iconv_close(cd: *mut c_void) -> c_int;
-    }
-
-    struct Conv(Cell<*mut c_void>);
-
-    impl Drop for Conv {
-        fn drop(&mut self) {
-            let cd = self.0.get();
-            if !cd.is_null() && cd as usize != usize::MAX {
-                unsafe { iconv_close(cd) };
-            }
-        }
-    }
-
-    thread_local! {
-        static CONV: Conv = const { Conv(Cell::new(std::ptr::null_mut())) };
-    }
-
-    pub fn precomposed(raw: &[u8]) -> Option<Vec<u8>> {
-        if !raw.iter().any(|&b| b >= 0x80) {
-            return None;
-        }
-        CONV.with(|conv| {
-            let mut cd = conv.0.get();
-            if cd.is_null() {
-                cd = unsafe { iconv_open(c"UTF-8".as_ptr(), c"UTF-8-MAC".as_ptr()) };
-                conv.0.set(cd);
-            }
-            if cd as usize == usize::MAX {
-                return None;
-            }
-            let mut out = vec![0u8; raw.len() * 2 + 4];
-            let mut input = raw.as_ptr() as *const c_char;
-            let mut inleft = raw.len();
-            let mut output = out.as_mut_ptr() as *mut c_char;
-            let mut outleft = out.len();
-            let rc = unsafe { iconv(cd, &mut input, &mut inleft, &mut output, &mut outleft) };
-            if rc == usize::MAX || inleft != 0 {
-                unsafe {
-                    iconv(
-                        cd,
-                        std::ptr::null_mut(),
-                        std::ptr::null_mut(),
-                        std::ptr::null_mut(),
-                        std::ptr::null_mut(),
-                    )
-                };
-                return None;
-            }
-            let used = out.len() - outleft;
-            out.truncate(used);
-            Some(out)
-        })
-    }
-}
-
-#[cfg(not(target_os = "macos"))]
-mod nfc {
-    pub fn precomposed(_raw: &[u8]) -> Option<Vec<u8>> {
-        None
-    }
-}
+#[path = "../nfc.rs"]
+mod nfc;
 
 struct Dir {
     path: PathBuf,

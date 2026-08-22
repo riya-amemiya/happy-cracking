@@ -73,8 +73,9 @@ pub fn ord(input: &str) -> String {
                 buf[i] = (n % 10) as u8 + b'0';
                 n /= 10;
             }
-            // SAFETY: buf only contains ascii digits b'0'..=b'9'
-            out.push_str(unsafe { std::str::from_utf8_unchecked(&buf[i..]) });
+            for &digit in &buf[i..] {
+                out.push(char::from(digit));
+            }
         }
     }
 

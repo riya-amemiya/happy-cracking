@@ -1,25 +1,21 @@
 use std::fs::File;
 use std::io::{self, Read};
-use std::os::fd::AsRawFd;
 use std::path::Path;
 
+use memmap2::{Advice, Mmap, MmapOptions};
+
 const MMAP_MIN: u64 = 64 * 1024;
+const CHUNK: usize = 16 * 1024;
 
 fn open_read(path: &Path) -> io::Result<File> {
     File::open(path)
 }
 
-const CHUNK: usize = 16 * 1024;
-
-fn read_spare(file: &mut File, buf: &mut Vec<u8>) -> io::Result<usize> {
-    let spare = buf.spare_capacity_mut();
-    let len = spare.len();
-    if len == 0 {
-        return Ok(0);
-    }
-    let slice = unsafe { std::slice::from_raw_parts_mut(spare.as_mut_ptr().cast::<u8>(), len) };
-    let n = file.read(slice)?;
-    unsafe { buf.set_len(buf.len() + n) };
+fn read_first_chunk(file: &mut File, buf: &mut Vec<u8>) -> io::Result<usize> {
+    buf.clear();
+    buf.resize(CHUNK, 0);
+    let n = file.read(&mut buf[..])?;
+    buf.truncate(n);
     Ok(n)
 }
 
@@ -28,36 +24,22 @@ pub(crate) fn from_file<'a>(
     buf: &'a mut Vec<u8>,
     early: bool,
 ) -> io::Result<Source<'a>> {
-    buf.clear();
-    if buf.capacity() < CHUNK {
-        buf.reserve(CHUNK);
-    }
-    let n = read_spare(&mut file, buf)?;
+    let n = read_first_chunk(&mut file, buf)?;
     if n < CHUNK {
         return Ok(Source(Kind::Mem(buf)));
     }
     if let Ok(meta) = file.metadata() {
         let len = meta.len();
         if len >= MMAP_MIN {
-            let map_flags = libc::MAP_PRIVATE;
-            let ptr = unsafe {
-                libc::mmap(
-                    std::ptr::null_mut(),
-                    len as usize,
-                    libc::PROT_READ,
-                    map_flags,
-                    file.as_raw_fd(),
-                    0,
-                )
-            };
-            if ptr != libc::MAP_FAILED {
+            // SAFETY: the mapping is used only as an immutable `&[u8]` for
+            // searching. Concurrent truncation/writes can SIGBUS; that is the
+            // same mmap contract as GNU grep and the previous libc MAP_PRIVATE
+            // implementation.
+            if let Ok(mmap) = unsafe { MmapOptions::new().map_copy_read_only(&file) } {
                 if !early {
-                    unsafe { libc::madvise(ptr, len as usize, libc::MADV_WILLNEED) };
+                    let _ = mmap.advise(Advice::WillNeed);
                 }
-                return Ok(Source(Kind::Map(Mapped {
-                    ptr,
-                    len: len as usize,
-                })));
+                return Ok(Source(Kind::Map(mmap)));
             }
         }
     }
@@ -65,22 +47,8 @@ pub(crate) fn from_file<'a>(
     Ok(Source(Kind::Mem(buf)))
 }
 
-struct Mapped {
-    ptr: *mut libc::c_void,
-    len: usize,
-}
-
-unsafe impl Send for Mapped {}
-unsafe impl Sync for Mapped {}
-
-impl Drop for Mapped {
-    fn drop(&mut self) {
-        unsafe { libc::munmap(self.ptr, self.len) };
-    }
-}
-
 enum Kind<'a> {
-    Map(Mapped),
+    Map(Mmap),
     Mem(&'a [u8]),
 }
 
@@ -89,7 +57,7 @@ pub(crate) struct Source<'a>(Kind<'a>);
 impl Source<'_> {
     pub(crate) fn bytes(&self) -> &[u8] {
         match &self.0 {
-            Kind::Map(m) => unsafe { std::slice::from_raw_parts(m.ptr as *const u8, m.len) },
+            Kind::Map(m) => m.as_ref(),
             Kind::Mem(v) => v,
         }
     }
@@ -98,14 +66,8 @@ impl Source<'_> {
         if let Kind::Map(m) = &self.0 {
             let page = 4096usize;
             let off = offset & !(page - 1);
-            if off < m.len {
-                unsafe {
-                    libc::madvise(
-                        (m.ptr as *mut u8).add(off) as *mut libc::c_void,
-                        m.len - off,
-                        libc::MADV_WILLNEED,
-                    )
-                };
+            if off < m.len() {
+                let _ = m.advise_range(Advice::WillNeed, off, m.len() - off);
             }
         }
     }
