@@ -58,10 +58,29 @@ fn test_solve_returns_result() {
     let alphabet = "ZYXWVUTSRQPONMLKJIHGFEDCBA";
     let plaintext = "THE QUICK BROWN FOX JUMPS OVER THE LAZY DOG THIS IS A LONGER TEXT TO HELP WITH FREQUENCY ANALYSIS";
     let ciphertext = substitution::encode(plaintext, alphabet).unwrap();
-    let (key, result, score) = substitution::solve(&ciphertext, 10000);
+    let (key, result, score) = substitution::solve(&ciphertext, 10000).unwrap();
     assert!(!key.is_empty());
     assert!(!result.is_empty());
     assert!(score > 0.0);
+}
+
+#[test]
+fn test_solve_rejects_excessive_iterations() {
+    use std::time::Instant;
+
+    let start = Instant::now();
+    let res = substitution::solve("HELLOWORLD", substitution::MAX_SOLVE_ITERATIONS + 1);
+    assert!(res.is_err(), "Expected error for excessive iterations");
+    let err = res.unwrap_err().to_string();
+    assert!(
+        err.contains("exceeds the maximum allowed limit"),
+        "unexpected error: {err}"
+    );
+    assert!(
+        start.elapsed().as_millis() < 100,
+        "Rejection took too long: {:?}",
+        start.elapsed()
+    );
 }
 
 #[test]

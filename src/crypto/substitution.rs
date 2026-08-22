@@ -45,7 +45,7 @@ pub fn run(action: SubstitutionAction) -> Result<()> {
             println!("{}", decode(&input, &alphabet)?);
         }
         SubstitutionAction::Solve { input, iterations } => {
-            let (key, plaintext, score) = solve(&input, iterations);
+            let (key, plaintext, score) = solve(&input, iterations)?;
             println!("Best key: {}", key);
             println!("Score: {:.2}", score);
             println!("Plaintext: {}", plaintext);
@@ -265,7 +265,26 @@ impl SimpleRng {
     }
 }
 
-pub fn solve(input: &str, iterations: usize) -> (String, String, f64) {
+/// Maximum hill-climbing iterations for substitution auto-solve.
+///
+/// SECURITY: `--iterations` / `--substitution-iters` are user-controlled loop
+/// bounds. Unbounded values let a caller hang the process (CPU exhaustion DoS).
+pub const MAX_SOLVE_ITERATIONS: usize = 1_000_000;
+
+pub fn check_solve_iterations(iterations: usize) -> Result<()> {
+    if iterations > MAX_SOLVE_ITERATIONS {
+        anyhow::bail!(
+            "Hill-climbing iterations {} exceeds the maximum allowed limit of {} to prevent Denial of Service",
+            iterations,
+            MAX_SOLVE_ITERATIONS
+        );
+    }
+    Ok(())
+}
+
+pub fn solve(input: &str, iterations: usize) -> Result<(String, String, f64)> {
+    check_solve_iterations(iterations)?;
+
     // Performance: preprocess the input once into compact 0..=25 indices and
     // cache a reference to the bigram table so the hot loop below is a pure
     // numeric scan with no allocations or hashing.
@@ -300,5 +319,5 @@ pub fn solve(input: &str, iterations: usize) -> (String, String, f64) {
     // implementation did this on every improving iteration.
     let best_text = apply_key(input, &best_key);
     let key_str: String = best_key.iter().map(|&b| b as char).collect();
-    (key_str, best_text, best_score)
+    Ok((key_str, best_text, best_score))
 }
