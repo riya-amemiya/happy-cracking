@@ -583,12 +583,29 @@ mod tests {
     }
 
     #[test]
-    fn home_dir_from_passwd_null_and_value() {
-        assert!(home_dir_from_passwd(std::ptr::null()).is_none());
-        let c = std::ffi::CString::new("/tmp/hfind-home").unwrap();
+    fn home_of_rejects_invalid_names() {
+        assert!(home_of(b"").is_none());
+        assert!(home_of(b"a\0b").is_none());
+        assert!(home_of(b"a/b").is_none());
+        assert!(home_of(b"a:b").is_none());
         assert_eq!(
-            home_dir_from_passwd(c.as_ptr()).as_deref(),
-            Some(Path::new("/tmp/hfind-home"))
+            unixhome::home_from_passwd_bytes(
+                b"alice:x:1000:1000:Alice:/home/alice:/bin/bash\n",
+                b"alice"
+            )
+            .as_deref(),
+            Some(Path::new("/home/alice"))
+        );
+        assert!(
+            unixhome::home_from_passwd_bytes(
+                b"alice:x:1000:1000:Alice:/home/alice:/bin/bash\n",
+                b"bob"
+            )
+            .is_none()
+        );
+        assert!(
+            unixhome::home_from_passwd_bytes(b"alice:x:1000:1000:Alice::/bin/bash\n", b"alice")
+                .is_none()
         );
     }
 

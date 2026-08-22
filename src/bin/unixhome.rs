@@ -25,7 +25,7 @@ pub fn home_of(user: &[u8]) -> Option<PathBuf> {
         })
 }
 
-fn home_from_passwd_bytes(data: &[u8], name: &[u8]) -> Option<PathBuf> {
+pub fn home_from_passwd_bytes(data: &[u8], name: &[u8]) -> Option<PathBuf> {
     for line in data.split(|&b| b == b'\n') {
         let line = line.strip_suffix(b"\r").unwrap_or(line);
         if line.is_empty() || line.starts_with(b"#") {
