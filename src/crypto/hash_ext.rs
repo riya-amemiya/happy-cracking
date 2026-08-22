@@ -64,14 +64,19 @@ pub fn sha256_extend(
     }
 
     // Compute the padding that would have been applied to the original message
-    let glue_padding = sha256_padding(original_len);
+    let glue_padding = sha256_padding(original_len)?;
 
     // The total length processed so far (must be a multiple of 64)
-    let total_processed = original_len + glue_padding.len() as u64;
+    let total_processed = original_len
+        .checked_add(glue_padding.len() as u64)
+        .context("Padded original length overflow")?;
 
     // Build the message blocks for the appended data and process them
     let mut buffer = append.to_vec();
-    let final_bit_len = (total_processed + append.len() as u64) * 8;
+    let total_bytes = total_processed
+        .checked_add(append.len() as u64)
+        .context("Extended message length overflow")?;
+    let final_bit_len = sha256_bit_len(total_bytes)?;
     let append_padding = sha256_finish_padding(append.len() as u64, final_bit_len);
     buffer.extend_from_slice(&append_padding);
 
@@ -98,11 +103,21 @@ pub fn sha256_extend(
     })
 }
 
+/// Convert a byte length to SHA-256's 64-bit bit-length field.
+///
+/// Security: `byte_len * 8` panics in debug (CLI DoS via `--original-len`) and
+/// wraps in release, producing incorrect glue padding and a wrong forged hash.
+fn sha256_bit_len(byte_len: u64) -> Result<u64> {
+    byte_len
+        .checked_mul(8)
+        .context("Message length exceeds SHA-256's 64-bit bit-length field")
+}
+
 // Computes the SHA-256 padding for a message of the given byte length.
 // Padding is: 0x80, then zeros, then 8-byte big-endian bit length,
 // such that the total padded length is a multiple of 64 bytes.
-fn sha256_padding(message_len: u64) -> Vec<u8> {
-    let bit_len = message_len * 8;
+fn sha256_padding(message_len: u64) -> Result<Vec<u8>> {
+    let bit_len = sha256_bit_len(message_len)?;
     // Number of bytes in the last incomplete block
     let remainder = (message_len % 64) as usize;
     // We need at least 1 + 8 bytes (0x80 + length), padded to 64
@@ -116,7 +131,7 @@ fn sha256_padding(message_len: u64) -> Vec<u8> {
     padding.push(0x80);
     padding.resize(padding_len, 0x00);
     padding.extend_from_slice(&bit_len.to_be_bytes());
-    padding
+    Ok(padding)
 }
 
 // Computes padding for the appended data block, using the total accumulated

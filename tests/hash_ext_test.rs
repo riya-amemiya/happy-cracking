@@ -101,3 +101,40 @@ fn extend_invalid_hex() {
 fn extend_flag_format() {
     verify_extension(b"hmac_secret", b"flag{hash_", b"extension}");
 }
+
+fn dummy_sha256_hex() -> &'static str {
+    // Valid 32-byte hash (SHA-256 of empty string); contents unused on overflow reject.
+    "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+}
+
+#[test]
+fn extend_rejects_bit_length_overflow() {
+    // SHA-256 length is a 64-bit bit count; byte_len * 8 must not overflow.
+    let too_big = u64::MAX / 8 + 1;
+    match hash_ext::sha256_extend(dummy_sha256_hex(), too_big, b"x") {
+        Ok(_) => panic!("expected overflow error"),
+        Err(err) => {
+            let msg = format!("{err:#}").to_ascii_lowercase();
+            assert!(
+                msg.contains("length") || msg.contains("64-bit"),
+                "unexpected error: {msg}"
+            );
+        }
+    }
+}
+
+#[test]
+fn extend_rejects_padded_length_overflow() {
+    // original_len * 8 fits, but adding SHA-256 padding exceeds the 64-bit field.
+    let max_bytes = u64::MAX / 8;
+    match hash_ext::sha256_extend(dummy_sha256_hex(), max_bytes, b"") {
+        Ok(_) => panic!("expected overflow error"),
+        Err(err) => {
+            let msg = format!("{err:#}").to_ascii_lowercase();
+            assert!(
+                msg.contains("length") || msg.contains("overflow") || msg.contains("64-bit"),
+                "unexpected error: {msg}"
+            );
+        }
+    }
+}
