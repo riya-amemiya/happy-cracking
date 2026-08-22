@@ -166,6 +166,53 @@ fn test_brute_force_not_found() {
 }
 
 #[test]
+fn test_brute_force_first_and_last_index() {
+    // Stack path must emit MSD-first like the old Vec<char> collect (index 0 = "aaa").
+    let target = compute_hash(HashAlgo::Md5, "aaa");
+    let found = brute_force(
+        &target,
+        HashAlgo::Md5,
+        "abc",
+        3,
+        3,
+        None,
+        SaltPosition::Suffix,
+    )
+    .unwrap();
+    assert_eq!(found, Some("aaa".to_string()));
+
+    let target = compute_hash(HashAlgo::Md5, "ccc");
+    let found = brute_force(
+        &target,
+        HashAlgo::Md5,
+        "abc",
+        3,
+        3,
+        None,
+        SaltPosition::Suffix,
+    )
+    .unwrap();
+    assert_eq!(found, Some("ccc".to_string()));
+}
+
+#[test]
+fn test_brute_force_unicode_charset() {
+    // Non-ASCII charset skips the stack buffer and still enumerates correctly.
+    let target = compute_hash(HashAlgo::Sha256, "βα");
+    let found = brute_force(
+        &target,
+        HashAlgo::Sha256,
+        "αβ",
+        2,
+        2,
+        None,
+        SaltPosition::Suffix,
+    )
+    .unwrap();
+    assert_eq!(found, Some("βα".to_string()));
+}
+
+#[test]
 fn test_brute_force_oversized_space_errors() {
     let charset =
         "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()-_=+[]{};:,.<>?";

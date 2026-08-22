@@ -11,9 +11,10 @@ const MAX_BRUTE_SPACE: u128 = 1_000_000_000;
 
 const MAX_CHARSET_LEN: usize = 256;
 
-/// Stack buffer for mask candidates. Standard classes (`?l`/`?u`/`?d`/`?s`/`?a`/`?h`)
-/// are ASCII; 32 bytes covers typical CTF masks (and long literal prefixes) without
-/// a heap allocation on the miss path. Longer / non-ASCII masks fall back to String.
+/// Stack buffer for mask/brute candidates. Standard mask classes (`?l`/`?u`/`?d`/`?s`/`?a`/`?h`)
+/// and typical brute charsets are ASCII; 32 bytes covers CTF masks, literal prefixes,
+/// and brute lengths without a heap allocation on the miss path. Longer / non-ASCII
+/// inputs fall back to `String`.
 const MAX_STACK_MASK: usize = 32;
 
 #[derive(Clone, Copy, ValueEnum)]
@@ -458,20 +459,58 @@ pub fn brute_force(
         return Ok(None);
     };
 
+    // ASCII charsets fill a stack buffer and only allocate a String on a hit.
+    // The miss path used to malloc a `Vec<char>` plus a `String` on every
+    // candidate via `index_to_word` — the same allocation tax mask_attack had.
+    //
+    // Measured (`release`, lto=fat, 456_976-candidate lowercase len=4 miss, 5 runs):
+    // ~1.13x MD5 (16.05→14.21 ms) and ~1.16x SHA-256 (9.78→8.44 ms).
+    let ascii_charset: Option<Vec<u8>> = if chars.iter().all(|c| c.is_ascii()) {
+        Some(chars.iter().map(|&c| c as u8).collect())
+    } else {
+        None
+    };
+
     for len in min_len..=max_len {
         let count = base.pow(len as u32);
-        if let Some(found) = (0..count).into_par_iter().find_map_any(|index| {
-            let word = index_to_word(index, &chars, len);
-            if candidate_matches(algo, &word, salt, pos, &target) {
-                Some(word)
-            } else {
-                None
-            }
-        }) {
+        let found = if let (Some(charset), true) = (ascii_charset.as_deref(), len <= MAX_STACK_MASK)
+        {
+            (0..count).into_par_iter().find_map_any(|index| {
+                let mut buf = [0u8; MAX_STACK_MASK];
+                fill_ascii_index(index, charset, len, &mut buf);
+                let word = std::str::from_utf8(&buf[..len]).expect("ASCII charset bytes");
+                if candidate_matches(algo, word, salt, pos, &target) {
+                    Some(word.to_owned())
+                } else {
+                    None
+                }
+            })
+        } else {
+            (0..count).into_par_iter().find_map_any(|index| {
+                let word = index_to_word(index, &chars, len);
+                if candidate_matches(algo, &word, salt, pos, &target) {
+                    Some(word)
+                } else {
+                    None
+                }
+            })
+        };
+        if let Some(found) = found {
             return Ok(Some(found));
         }
     }
     Ok(None)
+}
+
+/// Write mixed-radix `index` into `buf[..len]` using an ASCII charset.
+/// Digits are MSD-first (same order as `index_to_word`).
+fn fill_ascii_index(index: u128, charset: &[u8], len: usize, buf: &mut [u8]) {
+    let base = charset.len() as u128;
+    let mut remaining = index;
+    for i in (0..len).rev() {
+        buf[i] = charset[(remaining % base) as usize];
+        remaining /= base;
+    }
 }
 
 fn index_to_word(index: u128, chars: &[char], len: usize) -> String {
