@@ -131,14 +131,16 @@ fn names(root: &Path, args: &[&str]) -> Vec<String> {
 }
 
 fn set_mtime(path: &Path, secs: i64) {
-    let c = std::ffi::CString::new(path.as_os_str().as_bytes()).unwrap();
-    let tv = libc::timeval {
-        tv_sec: secs,
-        tv_usec: 0,
+    use std::time::Duration;
+    let dest = if secs >= 0 {
+        UNIX_EPOCH + Duration::from_secs(secs as u64)
+    } else {
+        UNIX_EPOCH - Duration::from_secs(secs.unsigned_abs())
     };
-    let times = [tv, tv];
-    let rc = unsafe { libc::utimes(c.as_ptr(), times.as_ptr()) };
-    assert_eq!(rc, 0, "utimes {}", path.display());
+    fs::File::open(path)
+        .unwrap_or_else(|e| panic!("open {} for mtime: {e}", path.display()))
+        .set_modified(dest)
+        .unwrap_or_else(|e| panic!("set_modified {}: {e}", path.display()));
 }
 
 fn now_secs() -> i64 {
@@ -715,9 +717,11 @@ fn symlink_l_file_link_has_target_type() {
 fn fifo_is_other() {
     let dir = scratch("fifo");
     let fifo = dir.join("pipe");
-    let c = std::ffi::CString::new(fifo.as_os_str().as_bytes()).unwrap();
-    let rc = unsafe { libc::mkfifo(c.as_ptr(), 0o644) };
-    assert_eq!(rc, 0);
+    let status = Command::new("mkfifo")
+        .arg(&fifo)
+        .status()
+        .expect("spawn mkfifo");
+    assert!(status.success(), "mkfifo {}", fifo.display());
     let out = run(&[dir.to_str().unwrap(), "-name", "pipe"]);
     assert!(out.stdout.contains("pipe"), "{}", out.stdout);
     let typed = run(&[dir.to_str().unwrap(), "-type", "f", "-name", "pipe"]);

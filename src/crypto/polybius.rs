@@ -68,7 +68,8 @@ pub fn encrypt(input: &str) -> Result<String> {
         anyhow::bail!("Failed to encrypt input");
     }
 
-    Ok(unsafe { String::from_utf8_unchecked(bytes) })
+    // ASCII digits and spaces only; validate instead of from_utf8_unchecked.
+    Ok(String::from_utf8(bytes).expect("polybius encrypt produces ASCII digits and spaces"))
 }
 
 pub fn decrypt(input: &str) -> Result<String> {

@@ -20,96 +20,8 @@ use rayon::prelude::*;
 use crate::gitconfig::{RepoOpts, repo_sources};
 use crate::ignore::{Ignore, load_ignore};
 
-#[cfg(target_os = "macos")]
-mod nfc {
-    use std::cell::Cell;
-    use std::ffi::c_void;
-    use std::os::raw::{c_char, c_int};
-
-    #[link(name = "iconv")]
-    unsafe extern "C" {
-        fn iconv_open(to: *const c_char, from: *const c_char) -> *mut c_void;
-        fn iconv(
-            cd: *mut c_void,
-            input: *mut *const c_char,
-            inleft: *mut usize,
-            output: *mut *mut c_char,
-            outleft: *mut usize,
-        ) -> usize;
-        fn iconv_close(cd: *mut c_void) -> c_int;
-    }
-
-    struct Conv(Cell<*mut c_void>);
-
-    impl Drop for Conv {
-        fn drop(&mut self) {
-            let cd = self.0.get();
-            if !cd.is_null() && cd as usize != usize::MAX {
-                unsafe { iconv_close(cd) };
-            }
-        }
-    }
-
-    thread_local! {
-        static CONV: Conv = const { Conv(Cell::new(std::ptr::null_mut())) };
-    }
-
-    #[cfg(test)]
-    pub(super) static ICONV_FAIL: std::sync::atomic::AtomicBool =
-        std::sync::atomic::AtomicBool::new(false);
-
-    fn open_iconv() -> *mut c_void {
-        #[cfg(test)]
-        if ICONV_FAIL.load(std::sync::atomic::Ordering::Relaxed) {
-            return usize::MAX as *mut c_void;
-        }
-        unsafe { iconv_open(c"UTF-8".as_ptr(), c"UTF-8-MAC".as_ptr()) }
-    }
-
-    pub fn precomposed(raw: &[u8]) -> Option<Vec<u8>> {
-        if !raw.iter().any(|&b| b >= 0x80) {
-            return None;
-        }
-        CONV.with(|conv| {
-            let mut cd = conv.0.get();
-            if cd.is_null() {
-                cd = open_iconv();
-                conv.0.set(cd);
-            }
-            if cd as usize == usize::MAX {
-                return None;
-            }
-            let mut out = vec![0u8; raw.len() * 2 + 4];
-            let mut input = raw.as_ptr() as *const c_char;
-            let mut inleft = raw.len();
-            let mut output = out.as_mut_ptr() as *mut c_char;
-            let mut outleft = out.len();
-            let rc = unsafe { iconv(cd, &mut input, &mut inleft, &mut output, &mut outleft) };
-            if rc == usize::MAX || inleft != 0 {
-                unsafe {
-                    iconv(
-                        cd,
-                        std::ptr::null_mut(),
-                        std::ptr::null_mut(),
-                        std::ptr::null_mut(),
-                        std::ptr::null_mut(),
-                    )
-                };
-                return None;
-            }
-            let used = out.len() - outleft;
-            out.truncate(used);
-            Some(out)
-        })
-    }
-}
-
-#[cfg(not(target_os = "macos"))]
-mod nfc {
-    pub fn precomposed(_raw: &[u8]) -> Option<Vec<u8>> {
-        None
-    }
-}
+#[path = "../nfc.rs"]
+mod nfc;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Follow {
@@ -872,15 +784,6 @@ mod tests {
         assert!(nfc::precomposed(b"ascii").is_none());
         let _ = nfc::precomposed(&[0xff, 0xff, 0xff]);
         let _ = nfc::precomposed("e\u{0301}".as_bytes());
-        #[cfg(target_os = "macos")]
-        {
-            nfc::ICONV_FAIL.store(true, std::sync::atomic::Ordering::Relaxed);
-            let failed = std::thread::spawn(|| nfc::precomposed(&[0xc3, 0xa9]).is_none())
-                .join()
-                .unwrap();
-            nfc::ICONV_FAIL.store(false, std::sync::atomic::Ordering::Relaxed);
-            assert!(failed);
-        }
     }
 
     #[test]
@@ -1120,8 +1023,11 @@ mod tests {
         fs::write(dir.join("sub/b.txt"), b"").unwrap();
         std::os::unix::fs::symlink("a.txt", dir.join("l")).unwrap();
         let fifo = dir.join("pipe");
-        let c = std::ffi::CString::new(fifo.as_os_str().as_bytes()).unwrap();
-        assert_eq!(unsafe { libc::mkfifo(c.as_ptr(), 0o644) }, 0);
+        let status = std::process::Command::new("mkfifo")
+            .arg(&fifo)
+            .status()
+            .expect("spawn mkfifo");
+        assert!(status.success(), "mkfifo {}", fifo.display());
         let errors = AtomicBool::new(false);
         let ft = fs::symlink_metadata(&fifo).unwrap().file_type();
         assert!(kind_from_ft(ft) == Kind::Other);
