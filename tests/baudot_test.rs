@@ -6,10 +6,27 @@ fn test_encode_basic() {
 }
 
 #[test]
-fn test_encode_hello() {
+fn test_encode_lowercase() {
     assert_eq!(
-        baudot::encode("HELLO").unwrap(),
-        "10100 00001 10010 10010 11000"
+        baudot::encode("hello").unwrap(),
+        baudot::encode("HELLO").unwrap()
+    );
+}
+
+#[test]
+fn test_encode_skips_unknown_chars() {
+    assert_eq!(
+        baudot::encode("HE@LLO").unwrap(),
+        baudot::encode("HELLO").unwrap()
+    );
+}
+
+#[test]
+fn test_encode_figures_in_letter_word() {
+    // '!' shares F's ITA2 slot and needs a FIGS shift (and LTRS to resume).
+    assert_eq!(
+        baudot::encode("HE!LLO").unwrap(),
+        "10100 00001 11011 01101 11111 10010 10010 11000"
     );
 }
 
