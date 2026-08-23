@@ -64,6 +64,7 @@ pub fn run(action: SolveAction) -> Result<()> {
             aggressive,
             max_depth,
         } => {
+            substitution::check_solve_iterations(substitution_iters)?;
             let results = solve(
                 &input,
                 SolveOptions {
@@ -228,8 +229,10 @@ fn try_classic_ciphers(
         }
     }
 
-    if letters.len() >= 40 && options.substitution_iters > 0 {
-        let (key, plain, _score) = substitution::solve(text, options.substitution_iters);
+    if letters.len() >= 40
+        && options.substitution_iters > 0
+        && let Ok((key, plain, _score)) = substitution::solve(text, options.substitution_iters)
+    {
         push_candidate(out, seen, format!("substitution:key={}", key), plain);
     }
 }
