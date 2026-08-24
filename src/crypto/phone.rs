@@ -41,15 +41,9 @@ const KEYPAD: &[(char, &[char])] = &[
 
 /// `DECODE_LUT[digit][press_count - 1]` → letter for T9 keys 2–9.
 ///
-/// Performance: a `[Option<char>; 4]` per digit 0–9 replaces
-/// `HashMap<(char, usize), char>`. T9 is ASCII digits 2–9 with 1–4 presses,
-/// so decode is two array indexes instead of hashing a tuple, chasing a
-/// bucket, and comparing keys. Built at compile time (no `LazyLock`).
-///
-/// Measured (`release`, opt-level=3, ~1.7 KiB mixed letters, 5000 iters):
-/// decode ~1.8x vs leftover HashMap (31170→17637 ns/op). Encode ~2.7x
-/// (14710→5456 ns/op) by reading the keypad digit from `PHONE_PRESS_TABLE`
-/// instead of a second HashMap lookup per letter.
+/// A `[Option<char>; 4]` per digit 0–9 replaces `HashMap<(char, usize), char>`.
+/// T9 is ASCII digits 2–9 with 1–4 presses, so decode is two array indexes
+/// instead of hashing a tuple. Built at compile time (no `LazyLock`).
 const fn build_decode_lut() -> [[Option<char>; 4]; 10] {
     let mut lut = [[None; 4]; 10];
     let mut i = 0;
