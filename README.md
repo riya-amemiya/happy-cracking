@@ -362,7 +362,7 @@ hfd . -print0
 ## Development
 
 ```bash
-cargo build            # Build
+cargo build            # Build happy-cracking, hgrep, and hfind
 cargo test             # Run all tests
 cargo fmt              # Format code
 cargo clippy -- -D warnings  # Lint

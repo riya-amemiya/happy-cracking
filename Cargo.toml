@@ -1,5 +1,7 @@
 [workspace]
 members = ["crates/hc-internal", "crates/hgrep", "crates/hfind"]
+# Root package workspaces otherwise default to the root crate only.
+default-members = [".", "crates/hc-internal", "crates/hgrep", "crates/hfind"]
 resolver = "3"
 
 [workspace.package]
