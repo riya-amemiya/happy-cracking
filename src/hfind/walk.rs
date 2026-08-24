@@ -17,9 +17,9 @@ thread_local! {
 
 use rayon::prelude::*;
 
-use hc_internal::gitconfig::{RepoOpts, repo_sources};
-use hc_internal::ignore::{Ignore, load_ignore};
-use hc_internal::nfc;
+use crate::hc_internal::gitconfig::{RepoOpts, repo_sources};
+use crate::hc_internal::ignore::{Ignore, load_ignore};
+use crate::hc_internal::nfc;
 
 const PROG: &str = "hfind";
 
@@ -471,11 +471,13 @@ fn skip_followed_dir(
 
 #[cfg(all(unix, not(test)))]
 fn kind_from_dtype(d_type: u8) -> Option<Kind> {
-    match hc_internal::unixdir::is_dir(d_type) {
+    match crate::hc_internal::unixdir::is_dir(d_type) {
         None => None,
         Some(true) => Some(Kind::Dir),
-        Some(false) if hc_internal::unixdir::is_file(d_type) == Some(true) => Some(Kind::File),
-        Some(false) if hc_internal::unixdir::is_lnk(d_type) => Some(Kind::Link),
+        Some(false) if crate::hc_internal::unixdir::is_file(d_type) == Some(true) => {
+            Some(Kind::File)
+        }
+        Some(false) if crate::hc_internal::unixdir::is_lnk(d_type) => Some(Kind::Link),
         Some(false) => Some(Kind::Other),
     }
 }
@@ -488,7 +490,7 @@ fn classify_dtype(
     need_meta: bool,
     errors: &AtomicBool,
 ) -> (Option<fs::Metadata>, Kind) {
-    if follow && hc_internal::unixdir::is_lnk(d_type) {
+    if follow && crate::hc_internal::unixdir::is_lnk(d_type) {
         return match fs::metadata(path) {
             Ok(m) => {
                 let kind = kind_from_meta(&m);
@@ -540,7 +542,7 @@ fn scan_plain<F: Fn(&Item<'_>)>(node: &Node, ctx: &Ctx<'_, F>, follow_child: boo
     let depth = node.depth + 1;
     #[cfg(all(unix, not(test)))]
     {
-        let (dirfd, ents) = match hc_internal::unixdir::list(&node.path) {
+        let (dirfd, ents) = match crate::hc_internal::unixdir::list(&node.path) {
             Ok(v) => v,
             Err(e) => {
                 report(&node.path, e, ctx.errors);
@@ -549,8 +551,8 @@ fn scan_plain<F: Fn(&Item<'_>)>(node: &Node, ctx: &Ctx<'_, F>, follow_child: boo
         };
         for ent in ents {
             child.push(&ent.name);
-            let d_type = if hc_internal::unixdir::is_dir(ent.d_type).is_none() {
-                hc_internal::unixdir::dtype_at(&dirfd, &ent.name).unwrap_or(ent.d_type)
+            let d_type = if crate::hc_internal::unixdir::is_dir(ent.d_type).is_none() {
+                crate::hc_internal::unixdir::dtype_at(&dirfd, &ent.name).unwrap_or(ent.d_type)
             } else {
                 ent.d_type
             };

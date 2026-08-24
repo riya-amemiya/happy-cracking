@@ -429,7 +429,7 @@ dependencies = [
 
 [[package]]
 name = "happy-cracking"
-version = "0.10.0"
+version = "0.11.0"
 dependencies = [
  "aes",
  "anyhow",
@@ -440,15 +440,20 @@ dependencies = [
  "hex",
  "md-5",
  "md4",
+ "memchr",
+ "memmap2",
  "num-bigint 0.5.1",
  "num-integer",
  "num-traits",
  "rayon",
+ "regex",
+ "rustix",
  "serde",
  "serde_json",
  "sha1",
  "sha2",
  "umt_rust",
+ "unicode-normalization",
  "urlencoding",
  "zip",
 ]
@@ -458,17 +463,6 @@ name = "hashbrown"
 version = "0.17.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ed5909b6e89a2db4456e54cd5f673791d7eca6732202bbf2a9cc504fe2f9b84a"
-
-[[package]]
-name = "hc-internal"
-version = "0.10.0"
-dependencies = [
- "memchr",
- "rayon",
- "regex",
- "rustix",
- "unicode-normalization",
-]
 
 [[package]]
 name = "heck"
@@ -481,27 +475,6 @@ name = "hex"
 version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
-
-[[package]]
-name = "hfind"
-version = "0.10.0"
-dependencies = [
- "hc-internal",
- "rayon",
- "regex",
-]
-
-[[package]]
-name = "hgrep"
-version = "0.10.0"
-dependencies = [
- "clap",
- "hc-internal",
- "memchr",
- "memmap2",
- "rayon",
- "regex",
-]
 
 [[package]]
 name = "hmac"

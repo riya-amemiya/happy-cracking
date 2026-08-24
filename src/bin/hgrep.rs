@@ -1,5 +1,5 @@
 use std::process::ExitCode;
 
 fn main() -> ExitCode {
-    hfind::run()
+    happy_cracking::hgrep::run()
 }

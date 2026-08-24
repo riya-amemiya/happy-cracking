@@ -3,8 +3,8 @@ use std::ffi::{OsStr, OsString};
 use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
 
-use crate::expr::{self, Expr};
-use crate::walk::Follow;
+use super::expr::{self, Expr};
+use super::walk::Follow;
 
 pub(crate) enum Outcome {
     Help(String),

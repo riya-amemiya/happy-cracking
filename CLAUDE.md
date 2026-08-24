@@ -8,14 +8,14 @@
 
 ```tree
 happy-cracking/
-├── Cargo.toml            # Workspace root + happy-cracking package
-├── crates/
-│   ├── hc-internal/      # Unpublished shared crate (gitignore, gitconfig, fs I/O)
-│   ├── hgrep/            # hgrep / hg binaries
-│   └── hfind/            # hfind / hfd binaries
+├── Cargo.toml            # happy-cracking package
 ├── src/
 │   ├── main.rs           # CLI entry point with clap subcommands
-│   ├── lib.rs            # Library root, exposes crypto module
+│   ├── lib.rs            # Library root, exposes crypto, hgrep, and hfind
+│   ├── bin/              # hgrep, hg, hfind, hfd binaries
+│   ├── hgrep/            # Parallel grep-compatible line matcher
+│   ├── hfind/            # Parallel find-compatible walker
+│   ├── hc_internal/      # Shared gitignore, gitconfig, and fs helpers
 │   └── crypto/           # Cryptographic operations
 │       ├── mod.rs        # Module exports
 │       │
@@ -191,9 +191,9 @@ cargo clippy -- -D warnings
 # Run the CLI
 cargo run -- <command>
 
-# Companion binaries (separate crates)
-cargo run -p hgrep -- <args>
-cargo run -p hfind -- <args>
+# Companion binaries in the same package
+cargo run --bin hgrep -- <args>
+cargo run --bin hfind -- <args>
 ```
 
 ## CLI Usage Examples
@@ -585,7 +585,7 @@ All checks must pass before merging.
 6. Add integration tests in `tests/`
 7. Run `cargo fmt` and `cargo clippy --workspace -- -D warnings` before committing
 
-Companion binaries (`hgrep`, `hfind`) live in `crates/` and depend on the unpublished `hc-internal` crate for shared filesystem/gitignore logic.
+Companion binaries (`hgrep`, `hfind`, `hg`, `hfd`) ship from the happy-cracking package. Shared filesystem/gitignore helpers live in `src/hc_internal/`.
 
 ## Notes for AI Assistants
 

@@ -1,7 +1,7 @@
 use memchr::{memchr, memchr2, memmem::Finder};
 use regex::bytes::{Regex, RegexBuilder};
 
-use crate::cli::Cli;
+use super::cli::Cli;
 
 pub(crate) enum Matcher {
     Never,

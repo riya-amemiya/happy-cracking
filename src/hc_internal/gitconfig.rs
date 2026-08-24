@@ -9,8 +9,8 @@ use std::sync::atomic::AtomicBool;
 use memchr::memchr;
 use regex::bytes::{Regex, RegexBuilder};
 
-use crate::ignore::{Ignore, glob_to_regex, load_ignore};
-use crate::unixhome;
+use super::ignore::{Ignore, glob_to_regex, load_ignore};
+use super::unixhome;
 
 #[derive(Clone, Default)]
 struct GitConfig {

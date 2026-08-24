@@ -1,8 +1,8 @@
 use memchr::{memchr, memchr_iter, memrchr};
 use rayon::prelude::*;
 
-use crate::cli::Cli;
-use crate::matcher::Matcher;
+use super::cli::Cli;
+use super::matcher::Matcher;
 
 fn line_bounds(buf: &[u8], start: usize, end: usize) -> (usize, usize) {
     (

@@ -7,9 +7,9 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use rayon::prelude::*;
 
-use hc_internal::gitconfig::{RepoOpts, repo_sources};
-use hc_internal::ignore::{Ignore, load_ignore};
-use hc_internal::nfc;
+use crate::hc_internal::gitconfig::{RepoOpts, repo_sources};
+use crate::hc_internal::ignore::{Ignore, load_ignore};
+use crate::hc_internal::nfc;
 
 const PROG: &str = "hgrep";
 
@@ -123,7 +123,7 @@ fn scan_plain_unix<F: Fn(&Path, Option<File>)>(
     quiet: bool,
     visit: &F,
 ) -> Vec<Dir> {
-    let (dirfd, ents) = match hc_internal::unixdir::list(&dir.path) {
+    let (dirfd, ents) = match crate::hc_internal::unixdir::list(&dir.path) {
         Ok(v) => v,
         Err(e) => {
             errors.store(true, Ordering::Relaxed);
@@ -136,12 +136,12 @@ fn scan_plain_unix<F: Fn(&Path, Option<File>)>(
     let mut sub = Vec::new();
     let mut child = dir.path.clone();
     for ent in ents {
-        let d_type = if hc_internal::unixdir::is_dir(ent.d_type).is_none() {
-            hc_internal::unixdir::dtype_at(&dirfd, &ent.name).unwrap_or(ent.d_type)
+        let d_type = if crate::hc_internal::unixdir::is_dir(ent.d_type).is_none() {
+            crate::hc_internal::unixdir::dtype_at(&dirfd, &ent.name).unwrap_or(ent.d_type)
         } else {
             ent.d_type
         };
-        match hc_internal::unixdir::is_dir(d_type) {
+        match crate::hc_internal::unixdir::is_dir(d_type) {
             Some(true) => {
                 child.push(&ent.name);
                 sub.push(Dir {
@@ -153,9 +153,9 @@ fn scan_plain_unix<F: Fn(&Path, Option<File>)>(
                 });
                 child.pop();
             }
-            Some(false) if hc_internal::unixdir::is_file(d_type) == Some(true) => {
+            Some(false) if crate::hc_internal::unixdir::is_file(d_type) == Some(true) => {
                 child.push(&ent.name);
-                let opened = hc_internal::unixdir::open_at(&dirfd, &ent.name).ok();
+                let opened = crate::hc_internal::unixdir::open_at(&dirfd, &ent.name).ok();
                 visit(&child, opened);
                 child.pop();
             }

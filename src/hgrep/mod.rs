@@ -13,8 +13,8 @@ use std::process::ExitCode;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 
+use crate::hc_internal::outbuf;
 use clap::Parser;
-use hc_internal::outbuf;
 
 use cli::Cli;
 use matcher::build_matcher;
