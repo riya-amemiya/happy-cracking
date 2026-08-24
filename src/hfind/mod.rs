@@ -8,7 +8,7 @@ use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::SystemTime;
 
-use hc_internal::outbuf;
+use crate::hc_internal::outbuf;
 use walk::WalkCfg;
 
 pub fn run() -> ExitCode {

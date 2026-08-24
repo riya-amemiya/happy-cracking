@@ -80,10 +80,6 @@ pub fn list(path: &Path) -> io::Result<(DirFd, Vec<RawEnt>)> {
     Ok((DirFd { dir }, ents))
 }
 
-pub fn read(path: &Path) -> io::Result<Vec<RawEnt>> {
-    list(path).map(|(_, ents)| ents)
-}
-
 /// Open `name` relative to `dir` (does not follow symlinks).
 pub fn open_at(dir: &DirFd, name: &OsStr) -> io::Result<File> {
     let fd = openat(

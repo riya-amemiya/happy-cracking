@@ -7,7 +7,7 @@ use std::time::SystemTime;
 
 use regex::bytes::{Regex, RegexBuilder};
 
-use crate::walk::{Follow, Item, Kind};
+use super::walk::{Follow, Item, Kind};
 
 #[derive(Clone, Copy)]
 pub(crate) enum Cmp {
@@ -388,7 +388,7 @@ pub(crate) fn eval(
             Kind::Dir => match fs::read_dir(item.path) {
                 Ok(mut rd) => rd.next().is_none(),
                 Err(e) => {
-                    crate::walk::report(item.path, e, errors);
+                    super::walk::report(item.path, e, errors);
                     false
                 }
             },
