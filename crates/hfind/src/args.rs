@@ -31,7 +31,7 @@ fn bin_name(argv0: Option<&OsStr>) -> String {
         .and_then(|a| Path::new(a).file_name())
         .and_then(|n| n.to_str())
         .map(str::to_owned)
-        .unwrap_or_else(|| env!("CARGO_BIN_NAME").to_string())
+        .unwrap_or_else(|| env!("CARGO_PKG_NAME").to_string())
 }
 
 fn is_expr_start(tok: &OsStr) -> bool {
@@ -138,10 +138,10 @@ mod tests {
 
     #[test]
     fn bin_name_falls_back() {
-        assert_eq!(bin_name(None), env!("CARGO_BIN_NAME"));
+        assert_eq!(bin_name(None), env!("CARGO_PKG_NAME"));
         assert_eq!(
             bin_name(Some(OsStr::from_bytes(b"/tmp/\xff"))),
-            env!("CARGO_BIN_NAME")
+            env!("CARGO_PKG_NAME")
         );
         assert_eq!(
             bin_name(Some(OsStr::new("/usr/bin/hfd"))),
