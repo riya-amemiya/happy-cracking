@@ -7,6 +7,25 @@ use super::{base32, base58, base64, binary, hex, morse, url};
 const MAX_TREE_NODES: usize = 256;
 const MAX_OUTPUT_CHARS: usize = 1_000_000;
 
+/// Hard cap on recursive auto-decode depth (`--max-depth`).
+///
+/// SECURITY: `decode_recursive` is stack recursion with no cycle detection.
+/// An unbounded `--max-depth` can exhaust the stack or CPU, especially when
+/// several encodings match the same layer (branching). Aggressive mode already
+/// clamps to this value; recursive mode must as well.
+pub const MAX_DECODE_DEPTH: usize = 12;
+
+pub fn check_decode_depth(max_depth: usize) -> Result<()> {
+    if max_depth > MAX_DECODE_DEPTH {
+        anyhow::bail!(
+            "Maximum decode depth {} exceeds the maximum allowed limit of {} to prevent Denial of Service",
+            max_depth,
+            MAX_DECODE_DEPTH
+        );
+    }
+    Ok(())
+}
+
 #[derive(Subcommand)]
 pub enum AutoDecodeAction {
     #[command(about = "Automatically detect and decode")]
@@ -55,6 +74,7 @@ pub fn run(action: AutoDecodeAction) -> Result<()> {
                     }
                 }
             } else if recursive {
+                check_decode_depth(max_depth)?;
                 decode_recursive(&input, 0, max_depth);
             } else {
                 let results = detect_and_decode(&input);
@@ -200,7 +220,7 @@ pub fn score_decode_candidate(s: &str) -> f64 {
 /// Breadth-first multi-path decode tree for aggressive mode.
 /// Returns (path, decoded) pairs sorted by score descending.
 pub fn decode_tree(input: &str, max_depth: usize, max_nodes: usize) -> Vec<(String, String)> {
-    let max_depth = max_depth.min(12);
+    let max_depth = max_depth.min(MAX_DECODE_DEPTH);
     let max_nodes = max_nodes.clamp(1, MAX_TREE_NODES);
 
     let mut queue: VecDeque<(String, String, usize)> = VecDeque::new();
