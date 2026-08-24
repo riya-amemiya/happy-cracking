@@ -8,6 +8,11 @@
 
 ```tree
 happy-cracking/
+├── Cargo.toml            # Workspace root + happy-cracking package
+├── crates/
+│   ├── hc-internal/      # Unpublished shared crate (gitignore, gitconfig, fs I/O)
+│   ├── hgrep/            # hgrep / hg binaries
+│   └── hfind/            # hfind / hfd binaries
 ├── src/
 │   ├── main.rs           # CLI entry point with clap subcommands
 │   ├── lib.rs            # Library root, exposes crypto module
@@ -185,6 +190,10 @@ cargo clippy -- -D warnings
 
 # Run the CLI
 cargo run -- <command>
+
+# Companion binaries (separate crates)
+cargo run -p hgrep -- <args>
+cargo run -p hfind -- <args>
 ```
 
 ## CLI Usage Examples
@@ -539,7 +548,7 @@ The GitHub Actions workflow (`.github/workflows/static-check.yml`) runs on PRs a
 
 1. **Build** - `cargo build --verbose`
 2. **Test** - `cargo test --verbose`
-3. **Lint** - `cargo fmt --all -- --check` and `cargo clippy -- -D warnings`
+3. **Lint** - `cargo fmt --all -- --check` and `cargo clippy --workspace -- -D warnings`
 
 All checks must pass before merging.
 
@@ -574,7 +583,9 @@ All checks must pass before merging.
 4. Export the module in `src/crypto/mod.rs`
 5. Add the subcommand to `Commands` enum in `src/main.rs` (in appropriate category)
 6. Add integration tests in `tests/`
-7. Run `cargo fmt` and `cargo clippy -- -D warnings` before committing
+7. Run `cargo fmt` and `cargo clippy --workspace -- -D warnings` before committing
+
+Companion binaries (`hgrep`, `hfind`) live in `crates/` and depend on the unpublished `hc-internal` crate for shared filesystem/gitignore logic.
 
 ## Notes for AI Assistants
 

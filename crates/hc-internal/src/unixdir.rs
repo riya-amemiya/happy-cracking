@@ -49,7 +49,6 @@ pub fn is_file(d_type: u8) -> Option<bool> {
 }
 
 #[inline]
-#[allow(dead_code)]
 pub fn is_lnk(d_type: u8) -> bool {
     d_type == DT_LNK
 }
@@ -81,13 +80,11 @@ pub fn list(path: &Path) -> io::Result<(DirFd, Vec<RawEnt>)> {
     Ok((DirFd { dir }, ents))
 }
 
-#[allow(dead_code)]
 pub fn read(path: &Path) -> io::Result<Vec<RawEnt>> {
     list(path).map(|(_, ents)| ents)
 }
 
 /// Open `name` relative to `dir` (does not follow symlinks).
-#[allow(dead_code)]
 pub fn open_at(dir: &DirFd, name: &OsStr) -> io::Result<File> {
     let fd = openat(
         dir.dir.fd()?,
@@ -99,7 +96,6 @@ pub fn open_at(dir: &DirFd, name: &OsStr) -> io::Result<File> {
 }
 
 /// `fstatat` when `d_type` is unknown. Returns a concrete `DT_*` value.
-#[allow(dead_code)]
 pub fn dtype_at(dir: &DirFd, name: &OsStr) -> Option<u8> {
     let st = statat(dir.dir.fd().ok()?, name, AtFlags::SYMLINK_NOFOLLOW).ok()?;
     Some(dtype_from(FileType::from_raw_mode(st.st_mode)))

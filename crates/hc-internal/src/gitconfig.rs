@@ -10,9 +10,7 @@ use memchr::memchr;
 use regex::bytes::{Regex, RegexBuilder};
 
 use crate::ignore::{Ignore, glob_to_regex, load_ignore};
-
-#[path = "../unixhome.rs"]
-mod unixhome;
+use crate::unixhome;
 
 #[derive(Clone, Default)]
 struct GitConfig {
@@ -22,9 +20,9 @@ struct GitConfig {
 }
 
 #[derive(Clone, Copy, Default)]
-pub(crate) struct RepoOpts {
-    pub(crate) fold: bool,
-    pub(crate) precompose: bool,
+pub struct RepoOpts {
+    pub fold: bool,
+    pub precompose: bool,
 }
 
 struct Scope<'a> {
@@ -39,9 +37,16 @@ fn skip_line(data: &[u8], from: usize) -> usize {
     memchr(b'\n', &data[from..]).map_or(data.len(), |i| from + i + 1)
 }
 
-fn trim_end(text: &[u8]) -> &[u8] {
-    let keep = text.iter().rposition(|b| !b.is_ascii_whitespace());
-    keep.map_or(&[][..], |i| &text[..=i])
+fn join_or_abs(base: &Path, raw: PathBuf) -> PathBuf {
+    if raw.is_absolute() {
+        raw
+    } else {
+        base.join(raw)
+    }
+}
+
+fn config_path(base: &Path, value: &[u8]) -> Option<PathBuf> {
+    Some(join_or_abs(base, expand_tilde(value)?))
 }
 
 fn read_section(data: &[u8], start: usize) -> Option<(Vec<u8>, Vec<u8>, usize)> {
@@ -301,7 +306,11 @@ fn by_branch(cond: &[u8], scope: &Scope) -> bool {
     let Ok(head) = fs::read(gitdir.join("HEAD")) else {
         return false;
     };
-    let line = trim_end(head.split(|&b| b == b'\n').next().unwrap_or(&[]));
+    let line = head
+        .split(|&b| b == b'\n')
+        .next()
+        .unwrap_or(&[])
+        .trim_ascii_end();
     let Some(branch) = line.strip_prefix(b"ref: refs/heads/") else {
         return false;
     };
@@ -354,17 +363,12 @@ fn apply_entry(
         let Some(v) = value else {
             return false;
         };
-        let Some(raw) = expand_tilde(&v) else {
+        let Some(path) = config_path(scope.dir, &v) else {
             return false;
         };
         if scope.depth >= CONFIG_INCLUDE_DEPTH {
             return false;
         }
-        let path = if raw.is_absolute() {
-            raw
-        } else {
-            scope.dir.join(raw)
-        };
         read_config_file(&path, scope.gitdir, scope.depth + 1, cfg);
     }
     true
@@ -487,14 +491,7 @@ fn repo_config(gitdir: Option<&Path>) -> GitConfig {
 fn excludes_path(cfg: &GitConfig, repo: &Path) -> Option<PathBuf> {
     match &cfg.excludes_file {
         Some(v) if v.is_empty() => None,
-        Some(v) => {
-            let raw = expand_tilde(v)?;
-            Some(if raw.is_absolute() {
-                raw
-            } else {
-                repo.join(raw)
-            })
-        }
+        Some(v) => config_path(repo, v),
         None => xdg_config_home().map(|d| d.join("git").join("ignore")),
     }
 }
@@ -506,36 +503,33 @@ fn resolve_gitdir(repo: &Path) -> Option<PathBuf> {
     }
     let data = fs::read(&dot).ok()?;
     let line = data.split(|&b| b == b'\n').next()?;
-    let raw = trim_end(line.strip_prefix(b"gitdir:")?);
-    let target = trim_end(raw.strip_prefix(b" ").unwrap_or(raw));
+    let raw = line.strip_prefix(b"gitdir:")?.trim_ascii_end();
+    let target = raw.strip_prefix(b" ").unwrap_or(raw).trim_ascii_end();
     if target.is_empty() {
         return None;
     }
     let named = PathBuf::from(OsStr::from_bytes(target));
-    let gitdir = if named.is_absolute() {
-        named
-    } else {
-        repo.join(named)
-    };
+    let gitdir = join_or_abs(repo, named);
     let Ok(shared) = fs::read(gitdir.join("commondir")) else {
         return Some(gitdir);
     };
-    let common = trim_end(shared.split(|&b| b == b'\n').next().unwrap_or(&[]));
+    let common = shared
+        .split(|&b| b == b'\n')
+        .next()
+        .unwrap_or(&[])
+        .trim_ascii_end();
     if common.is_empty() {
         return Some(gitdir);
     }
     let named = PathBuf::from(OsStr::from_bytes(common));
-    Some(if named.is_absolute() {
-        named
-    } else {
-        gitdir.join(named)
-    })
+    Some(join_or_abs(&gitdir, named))
 }
 
-pub(crate) fn repo_sources(
+pub fn repo_sources(
     repo: &Path,
     errors: &AtomicBool,
     quiet: bool,
+    prog: &str,
 ) -> (Option<Arc<Ignore>>, RepoOpts) {
     let gitdir = resolve_gitdir(repo);
     let cfg = repo_config(gitdir.as_deref());
@@ -544,7 +538,7 @@ pub(crate) fn repo_sources(
         precompose: cfg.precompose,
     };
     let global = excludes_path(&cfg, repo)
-        .and_then(|path| load_ignore(&path, 0, None, opts.fold, errors, quiet));
+        .and_then(|path| load_ignore(&path, 0, None, opts.fold, errors, quiet, prog));
     let stacked = match &gitdir {
         Some(dir) => load_ignore(
             &dir.join("info").join("exclude"),
@@ -553,8 +547,349 @@ pub(crate) fn repo_sources(
             opts.fold,
             errors,
             quiet,
+            prog,
         ),
         None => global,
     };
     (stacked, opts)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::os::unix::ffi::OsStrExt;
+    use std::sync::atomic::AtomicBool;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    #[test]
+    fn repo_sources_precompose_and_relative_include() {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!("hfind_gitcfg_{}_{nanos}", std::process::id()));
+        fs::create_dir_all(dir.join(".git")).unwrap();
+        fs::write(
+            dir.join(".git/config"),
+            b"[core]\n\tprecomposeunicode = true\n[include]\n\tpath = extra\n",
+        )
+        .unwrap();
+        fs::write(dir.join(".git/extra"), b"[core]\n\tignorecase = true\n").unwrap();
+        let errors = AtomicBool::new(false);
+        let (_, opts) = repo_sources(&dir, &errors, false, "hc-internal");
+        assert!(opts.precompose);
+        assert!(opts.fold);
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn home_of_rejects_invalid_names() {
+        assert!(home_of(b"").is_none());
+        assert!(home_of(b"a\0b").is_none());
+        assert!(home_of(b"a/b").is_none());
+        assert!(home_of(b"a:b").is_none());
+        assert_eq!(
+            unixhome::home_from_passwd_bytes(
+                b"alice:x:1000:1000:Alice:/home/alice:/bin/bash\n",
+                b"alice"
+            )
+            .as_deref(),
+            Some(Path::new("/home/alice"))
+        );
+        assert!(
+            unixhome::home_from_passwd_bytes(
+                b"alice:x:1000:1000:Alice:/home/alice:/bin/bash\n",
+                b"bob"
+            )
+            .is_none()
+        );
+        assert!(
+            unixhome::home_from_passwd_bytes(b"alice:x:1000:1000:Alice::/bin/bash\n", b"alice")
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn config_parser_numbers_and_paths() {
+        assert_eq!(skip_line(b"abc", 0), 3);
+        assert_eq!(skip_line(b"a\nb", 0), 2);
+        assert_eq!(config_int(b"-10"), Some(-10));
+        assert_eq!(config_int(b"+2"), Some(2));
+        assert_eq!(config_int(b"0x10"), Some(16));
+        assert_eq!(config_int(b"0X10"), Some(16));
+        assert_eq!(config_int(b"010"), Some(8));
+        assert_eq!(config_int(b"1k"), Some(1024));
+        assert_eq!(config_int(b"1K"), Some(1024));
+        assert_eq!(config_int(b"1m"), Some(1024 * 1024));
+        assert_eq!(config_int(b"1M"), Some(1024 * 1024));
+        assert_eq!(config_int(b"1g"), Some(1024 * 1024 * 1024));
+        assert_eq!(config_int(b"1G"), Some(1024 * 1024 * 1024));
+        assert!(config_int(b"").is_none());
+        assert!(config_int(b"k").is_none());
+        assert!(config_int(b"999999999999999999999").is_none());
+        assert!(config_bool(b"true"));
+        assert!(config_bool(b"YES"));
+        assert!(config_bool(b"on"));
+        assert!(!config_bool(b"false"));
+        assert!(!config_bool(b"no"));
+        assert!(!config_bool(b"off"));
+        assert!(config_bool(b"2"));
+        assert!(!config_bool(b"0"));
+        assert!(!config_bool(b"xyz"));
+        assert_eq!(
+            expand_tilde(b"/abs/x").as_deref(),
+            Some(Path::new("/abs/x"))
+        );
+        assert!(expand_tilde(b"~hfind-no-such-user/x").is_none());
+        let _ = expand_tilde(b"~");
+        let _ = expand_tilde(b"~/tmp-hfind");
+        assert!(home_of(b"hfind-no-such-user").is_none());
+        assert!(home_of(b"a\0b").is_none());
+        if let Ok(name) = std::env::var("USER") {
+            let _ = home_of(name.as_bytes());
+        }
+        assert!(path_glob(b"[", false).is_none());
+        assert!(path_glob(b"foo*", false).is_some());
+        let _ = xdg_config_home();
+        let cfg = GitConfig {
+            excludes_file: Some(Vec::new()),
+            ignorecase: false,
+            precompose: false,
+        };
+        assert!(excludes_path(&cfg, Path::new("/tmp")).is_none());
+        let cfg = GitConfig {
+            excludes_file: Some(b"rel".to_vec()),
+            ..GitConfig::default()
+        };
+        assert_eq!(
+            excludes_path(&cfg, Path::new("/repo")).as_deref(),
+            Some(Path::new("/repo/rel"))
+        );
+        let cfg = GitConfig {
+            excludes_file: Some(b"/abs".to_vec()),
+            ..GitConfig::default()
+        };
+        assert_eq!(
+            excludes_path(&cfg, Path::new("/repo")).as_deref(),
+            Some(Path::new("/abs"))
+        );
+        let cfg = GitConfig::default();
+        let _ = excludes_path(&cfg, Path::new("/repo"));
+        assert!(!config_bool(b""));
+    }
+
+    #[test]
+    fn config_bytes_sections_and_include() {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let dir =
+            std::env::temp_dir().join(format!("hfind_gitcfg_u_{}_{nanos}", std::process::id()));
+        fs::create_dir_all(dir.join(".git")).unwrap();
+        fs::write(dir.join(".git/HEAD"), b"ref: refs/heads/main\n").unwrap();
+        let extra = dir.join("extra.cfg");
+        fs::write(&extra, b"[core]\n\tignorecase = true\n").unwrap();
+        let bom = "\u{feff}";
+        let data = format!(
+            "{bom}[core]\n\texcludesFile = {p}\n\tignorecase = yes\n\tprecomposeunicode = on\n[include]\n\tpath = extra.cfg\n[includeIf \"gitdir:{d}/\"]\n\tpath = extra.cfg\n[includeIf \"gitdir/i:{D}/\"]\n\tpath = extra.cfg\n[includeIf \"onbranch:ma*\"]\n\tpath = extra.cfg\n[includeIf \"unknown:x\"]\n\tpath = extra.cfg\n#c\n;c\n",
+            p = extra.display(),
+            d = dir.display(),
+            D = dir.display().to_string().to_ascii_uppercase(),
+        );
+        let gitdir = dir.join(".git");
+        let scope = Scope {
+            dir: &dir,
+            gitdir: Some(gitdir.as_path()),
+            depth: 0,
+        };
+        let mut cfg = GitConfig::default();
+        assert!(read_config_bytes(data.as_bytes(), &scope, &mut cfg));
+        apply_config(data.as_bytes(), &scope, &mut cfg);
+        apply_config(b"!", &scope, &mut cfg);
+        assert!(read_section(b"[core]", 0).is_some());
+        assert!(read_section(b"[core \"sub\"]", 0).is_some());
+        assert!(read_section(b"[core \"a\\\"b\"]", 0).is_some());
+        assert!(read_section(b"[core \"a\\\nb\"]", 0).is_none());
+        assert!(read_section(b"[core \"ab\n\"]", 0).is_none());
+        assert!(read_section(b"[core extra]", 0).is_none());
+        assert!(read_section(b"[core!]", 0).is_none());
+        assert!(read_section(b"[core \"x\"", 0).is_none());
+        assert!(read_section(b"[core \"x\" y]", 0).is_none());
+        assert!(read_value(b"abc\n", 0).is_some());
+        assert!(read_value(b"\"ab\"\n", 0).is_some());
+        assert!(read_value(b"ab #c\n", 0).is_some());
+        assert!(read_value(b"ab ;c\n", 0).is_some());
+        assert!(read_value(b"ab\r\n", 0).is_some());
+        assert!(read_value(b"a\\\nb\n", 0).is_some());
+        assert!(read_value(b"a\\\r\nb\n", 0).is_some());
+        assert!(read_value(b"\\n\\t\\b\\\\\\\"\n", 0).is_some());
+        assert!(read_value(b"\\.\n", 0).is_none());
+        assert!(read_value(b"\"ab", 0).is_none());
+        assert!(read_value(b"\"ab\n", 0).is_none());
+        assert!(read_entry(b"key=val\n", 0).is_some());
+        assert!(read_entry(b"key", 0).is_some());
+        assert!(read_entry(b"key\n", 0).is_some());
+        assert!(read_entry(b"key\r\n", 0).is_some());
+        assert!(read_entry(b"key =\n", 0).is_some());
+        assert!(read_entry(b"key x", 0).is_none());
+        let no_git = Scope {
+            dir: &dir,
+            gitdir: None,
+            depth: 0,
+        };
+        assert!(!by_gitdir(b"foo", &no_git, false));
+        assert!(!by_branch(b"main", &no_git));
+        assert!(!condition_holds(b"nope", &scope));
+        assert!(condition_holds(b"onbranch:main", &scope));
+        assert!(condition_holds(b"gitdir:**/.git", &scope));
+        let _ = by_gitdir(b"./", &scope, false);
+        assert!(!by_gitdir(b"[", &scope, false));
+        let _ = by_gitdir(b"./nope/", &scope, false);
+        let _ = by_gitdir(b"../.git/", &scope, true);
+        fs::write(dir.join(".git/HEAD"), b"abc\n").unwrap();
+        assert!(!by_branch(b"main", &scope));
+        fs::write(dir.join(".git/HEAD"), b"ref: refs/heads/feat/\n").unwrap();
+        let _ = by_branch(b"feat/", &scope);
+        let missing_head = Scope {
+            dir: &dir,
+            gitdir: Some(Path::new("/hfind-no-gitdir")),
+            depth: 0,
+        };
+        assert!(!by_branch(b"main", &missing_head));
+        let mut cfg = GitConfig::default();
+        assert!(!apply_entry(
+            b"core",
+            b"",
+            b"excludesfile",
+            None,
+            &scope,
+            &mut cfg
+        ));
+        apply_entry(b"core", b"", b"ignorecase", None, &scope, &mut cfg);
+        apply_entry(b"core", b"", b"precomposeunicode", None, &scope, &mut cfg);
+        apply_entry(
+            b"core",
+            b"",
+            b"other",
+            Some(b"x".to_vec()),
+            &scope,
+            &mut cfg,
+        );
+        assert!(apply_entry(
+            b"includeIf",
+            b"gitdir:hfind-no-such/",
+            b"path",
+            Some(b"x".to_vec()),
+            &scope,
+            &mut cfg
+        ));
+        assert!(!apply_entry(
+            b"include", b"", b"path", None, &scope, &mut cfg
+        ));
+        assert!(!apply_entry(
+            b"include",
+            b"",
+            b"path",
+            Some(b"~hfind-no-such-user/x".to_vec()),
+            &scope,
+            &mut cfg
+        ));
+        let deep = Scope {
+            dir: &dir,
+            gitdir: Some(gitdir.as_path()),
+            depth: CONFIG_INCLUDE_DEPTH,
+        };
+        assert!(!apply_entry(
+            b"include",
+            b"",
+            b"path",
+            Some(b"extra.cfg".to_vec()),
+            &deep,
+            &mut cfg
+        ));
+        apply_entry(
+            b"include",
+            b"",
+            b"path",
+            Some(extra.as_os_str().as_bytes().to_vec()),
+            &scope,
+            &mut cfg,
+        );
+        apply_entry(
+            b"include",
+            b"",
+            b"path",
+            Some(b"extra.cfg".to_vec()),
+            &scope,
+            &mut cfg,
+        );
+        assert!(!read_config_bytes(b"[core!]\n", &scope, &mut cfg));
+        assert!(!read_config_bytes(b"1key\n", &scope, &mut cfg));
+        assert!(!read_config_bytes(b"!\n", &scope, &mut cfg));
+        read_config_file(Path::new("/hfind-no-config"), None, 0, &mut cfg);
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn resolve_gitdir_shapes() {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let dir =
+            std::env::temp_dir().join(format!("hfind_gitdir_u_{}_{nanos}", std::process::id()));
+        fs::create_dir_all(dir.join("repo/.git")).unwrap();
+        assert!(resolve_gitdir(&dir.join("repo")).unwrap().ends_with(".git"));
+        fs::create_dir_all(dir.join("store")).unwrap();
+        fs::create_dir_all(dir.join("ptr")).unwrap();
+        fs::write(
+            dir.join("ptr/.git"),
+            format!("gitdir: {}\n", dir.join("store").display()).as_bytes(),
+        )
+        .unwrap();
+        assert_eq!(
+            resolve_gitdir(&dir.join("ptr")).as_deref(),
+            Some(dir.join("store").as_path())
+        );
+        fs::create_dir_all(dir.join("rel")).unwrap();
+        fs::write(dir.join("rel/.git"), b"gitdir: ../store2\n").unwrap();
+        fs::create_dir_all(dir.join("store2")).unwrap();
+        assert!(
+            resolve_gitdir(&dir.join("rel"))
+                .unwrap()
+                .ends_with("store2")
+        );
+        fs::create_dir_all(dir.join("empty")).unwrap();
+        fs::write(dir.join("empty/.git"), b"gitdir:\n").unwrap();
+        assert!(resolve_gitdir(&dir.join("empty")).is_none());
+        fs::create_dir_all(dir.join("wt")).unwrap();
+        fs::write(dir.join("wt/.git"), b"gitdir: ../wtstore\n").unwrap();
+        fs::create_dir_all(dir.join("wtstore")).unwrap();
+        fs::write(dir.join("wtstore/commondir"), b"").unwrap();
+        assert!(
+            resolve_gitdir(&dir.join("wt"))
+                .unwrap()
+                .ends_with("wtstore")
+        );
+        fs::write(dir.join("wtstore/commondir"), b"../common\n").unwrap();
+        fs::create_dir_all(dir.join("common")).unwrap();
+        assert!(resolve_gitdir(&dir.join("wt")).unwrap().ends_with("common"));
+        fs::write(
+            dir.join("wtstore/commondir"),
+            format!("{}\n", dir.join("abscommon").display()).as_bytes(),
+        )
+        .unwrap();
+        fs::create_dir_all(dir.join("abscommon")).unwrap();
+        assert_eq!(
+            resolve_gitdir(&dir.join("wt")).as_deref(),
+            Some(dir.join("abscommon").as_path())
+        );
+        fs::create_dir_all(dir.join("nocommon")).unwrap();
+        fs::write(dir.join("nocommon/.git"), b"gitdir: ../missing-store\n").unwrap();
+        assert!(resolve_gitdir(&dir.join("nocommon")).is_some());
+        let errors = AtomicBool::new(false);
+        let _ = repo_sources(&dir.join("repo"), &errors, true, "hc-internal");
+        fs::remove_dir_all(&dir).unwrap();
+    }
 }

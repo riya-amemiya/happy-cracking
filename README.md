@@ -368,7 +368,7 @@ cargo fmt              # Format code
 cargo clippy -- -D warnings  # Lint
 ```
 
-`cargo run -- <command>` runs `happy-cracking`. Use `cargo run --bin hgrep -- <args>` or `cargo run --bin hfind -- <args>` for the companion binaries. `hg` is an alias for `hgrep`. `hfd` is an alias for `hfind`.
+`cargo run -- <command>` runs `happy-cracking`. Companion binaries live in their own crates: `cargo run -p hgrep -- <args>` and `cargo run -p hfind -- <args>`. `hg` is an alias for `hgrep`. `hfd` is an alias for `hfind`.
 
 ## License
 

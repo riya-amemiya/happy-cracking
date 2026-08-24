@@ -1,15 +1,6 @@
 mod args;
 mod expr;
-mod gitconfig;
-mod ignore;
 mod walk;
-
-#[cfg(all(unix, not(test)))]
-#[path = "../unixdir.rs"]
-mod unixdir;
-
-#[path = "../outbuf.rs"]
-mod outbuf;
 
 use std::io;
 use std::process::ExitCode;
@@ -17,6 +8,7 @@ use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::SystemTime;
 
+use hc_internal::outbuf;
 use walk::WalkCfg;
 
 fn main() -> ExitCode {

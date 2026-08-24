@@ -7,11 +7,11 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use rayon::prelude::*;
 
-use crate::gitconfig::{RepoOpts, repo_sources};
-use crate::ignore::{Ignore, load_ignore};
+use hc_internal::gitconfig::{RepoOpts, repo_sources};
+use hc_internal::ignore::{Ignore, load_ignore};
+use hc_internal::nfc;
 
-#[path = "../nfc.rs"]
-mod nfc;
+const PROG: &str = "hgrep";
 
 struct Dir {
     path: PathBuf,
@@ -59,7 +59,7 @@ fn root_ignore(path: &Path, errors: &AtomicBool, quiet: bool) -> Option<Dir> {
         return Some(loose(path));
     };
     if abs.join(".git").exists() {
-        let (seed, opts) = repo_sources(&abs, errors, quiet);
+        let (seed, opts) = repo_sources(&abs, errors, quiet, PROG);
         return Some(Dir {
             path: path.to_path_buf(),
             rel: Vec::new(),
@@ -80,7 +80,7 @@ fn root_ignore(path: &Path, errors: &AtomicBool, quiet: bool) -> Option<Dir> {
     let (Some(root), Some(name)) = (repo, abs.file_name()) else {
         return Some(loose(path));
     };
-    let (seed, opts) = repo_sources(root, errors, quiet);
+    let (seed, opts) = repo_sources(root, errors, quiet, PROG);
     let mut rel = Vec::new();
     let mut ignore = seed;
     for (idx, dir) in chain.iter().rev().enumerate() {
@@ -95,6 +95,7 @@ fn root_ignore(path: &Path, errors: &AtomicBool, quiet: bool) -> Option<Dir> {
             opts.fold,
             errors,
             quiet,
+            PROG,
         );
     }
     let rel = child_rel(&rel, name, opts);
@@ -122,7 +123,7 @@ fn scan_plain_unix<F: Fn(&Path, Option<File>)>(
     quiet: bool,
     visit: &F,
 ) -> Vec<Dir> {
-    let (dirfd, ents) = match crate::unixdir::list(&dir.path) {
+    let (dirfd, ents) = match hc_internal::unixdir::list(&dir.path) {
         Ok(v) => v,
         Err(e) => {
             errors.store(true, Ordering::Relaxed);
@@ -135,12 +136,12 @@ fn scan_plain_unix<F: Fn(&Path, Option<File>)>(
     let mut sub = Vec::new();
     let mut child = dir.path.clone();
     for ent in ents {
-        let d_type = if crate::unixdir::is_dir(ent.d_type).is_none() {
-            crate::unixdir::dtype_at(&dirfd, &ent.name).unwrap_or(ent.d_type)
+        let d_type = if hc_internal::unixdir::is_dir(ent.d_type).is_none() {
+            hc_internal::unixdir::dtype_at(&dirfd, &ent.name).unwrap_or(ent.d_type)
         } else {
             ent.d_type
         };
-        match crate::unixdir::is_dir(d_type) {
+        match hc_internal::unixdir::is_dir(d_type) {
             Some(true) => {
                 child.push(&ent.name);
                 sub.push(Dir {
@@ -152,9 +153,9 @@ fn scan_plain_unix<F: Fn(&Path, Option<File>)>(
                 });
                 child.pop();
             }
-            Some(false) if crate::unixdir::is_file(d_type) == Some(true) => {
+            Some(false) if hc_internal::unixdir::is_file(d_type) == Some(true) => {
                 child.push(&ent.name);
-                let opened = crate::unixdir::open_at(&dirfd, &ent.name).ok();
+                let opened = hc_internal::unixdir::open_at(&dirfd, &ent.name).ok();
                 visit(&child, opened);
                 child.pop();
             }
@@ -212,7 +213,7 @@ fn scan_ignored(dir: &Dir, errors: &AtomicBool, quiet: bool) -> (Vec<Dir>, Vec<P
     let boundary = entries
         .iter()
         .any(|entry| entry.file_name().as_bytes() == b".git")
-        .then(|| repo_sources(&dir.path, errors, quiet));
+        .then(|| repo_sources(&dir.path, errors, quiet, PROG));
     let (parent_rel, inherited, opts, in_repo) = match &boundary {
         Some((seed, opts)) => (&[][..], seed.clone(), *opts, true),
         None => (&dir.rel[..], dir.ignore.clone(), dir.opts, dir.in_repo),
@@ -230,6 +231,7 @@ fn scan_ignored(dir: &Dir, errors: &AtomicBool, quiet: bool) -> (Vec<Dir>, Vec<P
             opts.fold,
             errors,
             quiet,
+            PROG,
         )
     } else {
         None

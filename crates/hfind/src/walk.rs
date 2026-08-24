@@ -17,11 +17,11 @@ thread_local! {
 
 use rayon::prelude::*;
 
-use crate::gitconfig::{RepoOpts, repo_sources};
-use crate::ignore::{Ignore, load_ignore};
+use hc_internal::gitconfig::{RepoOpts, repo_sources};
+use hc_internal::ignore::{Ignore, load_ignore};
+use hc_internal::nfc;
 
-#[path = "../nfc.rs"]
-mod nfc;
+const PROG: &str = "hfind";
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Follow {
@@ -192,7 +192,7 @@ fn root_ignore(path: &Path, is_dir: bool, follow: bool, errors: &AtomicBool) -> 
         return Some(plain_node(path.to_path_buf()));
     };
     if abs.join(".git").exists() {
-        let (seed, opts) = repo_sources(&abs, errors, false);
+        let (seed, opts) = repo_sources(&abs, errors, false, PROG);
         return Some(Node {
             path: path.to_path_buf(),
             depth: 0,
@@ -216,7 +216,7 @@ fn root_ignore(path: &Path, is_dir: bool, follow: bool, errors: &AtomicBool) -> 
     let (Some(root), Some(name)) = (repo, abs.file_name()) else {
         return Some(plain_node(path.to_path_buf()));
     };
-    let (seed, opts) = repo_sources(root, errors, false);
+    let (seed, opts) = repo_sources(root, errors, false, PROG);
     let mut rel = Vec::new();
     let mut ignore = seed;
     for (idx, dir) in chain.iter().rev().enumerate() {
@@ -231,6 +231,7 @@ fn root_ignore(path: &Path, is_dir: bool, follow: bool, errors: &AtomicBool) -> 
             opts.fold,
             errors,
             false,
+            PROG,
         );
     }
     let rel = child_rel(&rel, name, opts);
@@ -470,11 +471,11 @@ fn skip_followed_dir(
 
 #[cfg(all(unix, not(test)))]
 fn kind_from_dtype(d_type: u8) -> Option<Kind> {
-    match crate::unixdir::is_dir(d_type) {
+    match hc_internal::unixdir::is_dir(d_type) {
         None => None,
         Some(true) => Some(Kind::Dir),
-        Some(false) if crate::unixdir::is_file(d_type) == Some(true) => Some(Kind::File),
-        Some(false) if crate::unixdir::is_lnk(d_type) => Some(Kind::Link),
+        Some(false) if hc_internal::unixdir::is_file(d_type) == Some(true) => Some(Kind::File),
+        Some(false) if hc_internal::unixdir::is_lnk(d_type) => Some(Kind::Link),
         Some(false) => Some(Kind::Other),
     }
 }
@@ -487,7 +488,7 @@ fn classify_dtype(
     need_meta: bool,
     errors: &AtomicBool,
 ) -> (Option<fs::Metadata>, Kind) {
-    if follow && crate::unixdir::is_lnk(d_type) {
+    if follow && hc_internal::unixdir::is_lnk(d_type) {
         return match fs::metadata(path) {
             Ok(m) => {
                 let kind = kind_from_meta(&m);
@@ -539,7 +540,7 @@ fn scan_plain<F: Fn(&Item<'_>)>(node: &Node, ctx: &Ctx<'_, F>, follow_child: boo
     let depth = node.depth + 1;
     #[cfg(all(unix, not(test)))]
     {
-        let (dirfd, ents) = match crate::unixdir::list(&node.path) {
+        let (dirfd, ents) = match hc_internal::unixdir::list(&node.path) {
             Ok(v) => v,
             Err(e) => {
                 report(&node.path, e, ctx.errors);
@@ -548,8 +549,8 @@ fn scan_plain<F: Fn(&Item<'_>)>(node: &Node, ctx: &Ctx<'_, F>, follow_child: boo
         };
         for ent in ents {
             child.push(&ent.name);
-            let d_type = if crate::unixdir::is_dir(ent.d_type).is_none() {
-                crate::unixdir::dtype_at(&dirfd, &ent.name).unwrap_or(ent.d_type)
+            let d_type = if hc_internal::unixdir::is_dir(ent.d_type).is_none() {
+                hc_internal::unixdir::dtype_at(&dirfd, &ent.name).unwrap_or(ent.d_type)
             } else {
                 ent.d_type
             };
@@ -621,7 +622,7 @@ fn scan<F: Fn(&Item<'_>)>(node: &Node, ctx: &Ctx<'_, F>) -> Vec<Node> {
     let boundary = entries
         .iter()
         .any(|entry| entry.file_name().as_bytes() == b".git")
-        .then(|| repo_sources(&node.path, ctx.errors, false));
+        .then(|| repo_sources(&node.path, ctx.errors, false, PROG));
     let (parent_rel, inherited, opts, in_repo, repo) = match &boundary {
         Some((seed, opts)) => (
             &[][..],
@@ -668,6 +669,7 @@ fn scan<F: Fn(&Item<'_>)>(node: &Node, ctx: &Ctx<'_, F>) -> Vec<Node> {
             opts.fold,
             ctx.errors,
             false,
+            PROG,
         )
     } else {
         inherited
