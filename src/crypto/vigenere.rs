@@ -45,9 +45,7 @@ pub fn run(action: VigenereAction) -> Result<()> {
         VigenereAction::Crack { input, key_length } => {
             let key_len = match key_length {
                 Some(len) => {
-                    if len == 0 {
-                        anyhow::bail!("Key length must be at least 1");
-                    }
+                    check_key_length(len)?;
                     len
                 }
                 None => {
@@ -60,12 +58,15 @@ pub fn run(action: VigenereAction) -> Result<()> {
                     candidates[0].0
                 }
             };
-            let key = recover_key(&input, key_len);
+            let key = recover_key(&input, key_len)?;
             let plaintext = decrypt(&input, &key)?;
             println!("Key: {}", key);
             println!("Plaintext: {}", plaintext);
         }
         VigenereAction::KeyLength { input, max_length } => {
+            if max_length > MAX_KEY_LENGTH {
+                check_key_length(max_length)?;
+            }
             let candidates = estimate_key_length(&input, max_length);
             println!("Key length candidates (by Index of Coincidence):");
             println!("{:<8} {:<10}", "Length", "IoC");
@@ -196,7 +197,30 @@ fn kasiski_examination(input: &str, max_key_len: usize) -> HashMap<usize, usize>
     factor_counts
 }
 
+/// Maximum key length for Vigenère crack / key-length estimation.
+///
+/// SECURITY: `--key-length` and `--max-length` are user-controlled loop and
+/// allocation bounds. `recover_key` does `String::with_capacity(key_length)`
+/// and iterates `0..key_length`; `estimate_key_length` scans O(max_length * n).
+/// Unbounded values allow CPU/memory exhaustion.
+pub const MAX_KEY_LENGTH: usize = 256;
+
+pub fn check_key_length(len: usize) -> Result<()> {
+    if len == 0 {
+        anyhow::bail!("Key length must be at least 1");
+    }
+    if len > MAX_KEY_LENGTH {
+        anyhow::bail!(
+            "Key length {} exceeds the maximum allowed of {} to prevent Denial of Service",
+            len,
+            MAX_KEY_LENGTH
+        );
+    }
+    Ok(())
+}
+
 pub fn estimate_key_length(input: &str, max_length: usize) -> Vec<(usize, f64)> {
+    let max_length = max_length.min(MAX_KEY_LENGTH);
     let letters = extract_alpha(input);
     if letters.len() < 2 {
         return Vec::new();
@@ -259,7 +283,8 @@ pub fn estimate_key_length(input: &str, max_length: usize) -> Vec<(usize, f64)> 
     results
 }
 
-pub fn recover_key(input: &str, key_length: usize) -> String {
+pub fn recover_key(input: &str, key_length: usize) -> Result<String> {
+    check_key_length(key_length)?;
     let letters = extract_alpha(input);
     let mut key = String::with_capacity(key_length);
 
@@ -280,7 +305,7 @@ pub fn recover_key(input: &str, key_length: usize) -> String {
         key.push((b'A' + best_shift) as char);
     }
 
-    key
+    Ok(key)
 }
 
 fn find_best_shift(counts: &[usize; 26], n: usize) -> u8 {

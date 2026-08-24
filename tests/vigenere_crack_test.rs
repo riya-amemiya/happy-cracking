@@ -9,7 +9,7 @@ fn test_crack_with_known_key_length() {
                      THEQUICKBROWNFOXJUMPSOVERTHELAZYDOG";
     let key = "KEY";
     let ciphertext = vigenere::encrypt(plaintext, key).unwrap();
-    let recovered_key = vigenere::recover_key(&ciphertext, 3);
+    let recovered_key = vigenere::recover_key(&ciphertext, 3).unwrap();
     assert_eq!(recovered_key, "KEY");
 }
 
@@ -22,7 +22,7 @@ fn test_crack_longer_text() {
                      ANDPREPAREFORTHECOMINGBATTLEWEEXPECTHEAVYRESISTANCE";
     let key = "LEMON";
     let ciphertext = vigenere::encrypt(plaintext, key).unwrap();
-    let recovered_key = vigenere::recover_key(&ciphertext, 5);
+    let recovered_key = vigenere::recover_key(&ciphertext, 5).unwrap();
     assert_eq!(recovered_key, "LEMON");
 }
 
@@ -64,8 +64,30 @@ fn test_recover_key_two_char() {
                      ETAOINSHRDLUETAOINSHRDLUETAOINSHRDLU";
     let key = "AB";
     let ciphertext = vigenere::encrypt(plaintext, key).unwrap();
-    let recovered = vigenere::recover_key(&ciphertext, 2);
+    let recovered = vigenere::recover_key(&ciphertext, 2).unwrap();
     assert_eq!(recovered, "AB");
+}
+
+#[test]
+fn test_recover_key_rejects_zero_length() {
+    let err = vigenere::recover_key("HELLOWORLD", 0).unwrap_err();
+    assert!(err.to_string().contains("at least 1"));
+}
+
+#[test]
+fn test_recover_key_rejects_excessive_length() {
+    let err = vigenere::recover_key("HELLOWORLD", vigenere::MAX_KEY_LENGTH + 1).unwrap_err();
+    assert!(err.to_string().contains("Denial of Service"));
+}
+
+#[test]
+fn test_estimate_key_length_caps_excessive_max() {
+    let candidates = vigenere::estimate_key_length("HELLOWORLDHELLOWORLD", usize::MAX);
+    assert!(
+        candidates
+            .iter()
+            .all(|&(len, _)| len <= vigenere::MAX_KEY_LENGTH)
+    );
 }
 
 #[test]

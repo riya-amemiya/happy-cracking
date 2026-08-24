@@ -222,7 +222,9 @@ fn try_classic_ciphers(
             if key_len == 0 {
                 continue;
             }
-            let key = vigenere::recover_key(text, key_len);
+            let Ok(key) = vigenere::recover_key(text, key_len) else {
+                continue;
+            };
             if let Ok(plain) = vigenere::decrypt(text, &key) {
                 push_candidate(out, seen, format!("vigenere:key={}", key), plain);
             }
