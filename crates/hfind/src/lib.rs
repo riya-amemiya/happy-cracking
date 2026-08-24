@@ -11,7 +11,7 @@ use std::time::SystemTime;
 use hc_internal::outbuf;
 use walk::WalkCfg;
 
-fn main() -> ExitCode {
+pub fn run() -> ExitCode {
     finish(args::parse_args())
 }
 
@@ -25,11 +25,11 @@ fn finish(parsed: Result<args::Outcome, String>) -> ExitCode {
             eprintln!("hfind: {msg}");
             ExitCode::from(2)
         }
-        Ok(args::Outcome::Run(parsed)) => run(parsed),
+        Ok(args::Outcome::Run(parsed)) => execute(parsed),
     }
 }
 
-fn run(parsed: args::Parsed) -> ExitCode {
+fn execute(parsed: args::Parsed) -> ExitCode {
     let errors = AtomicBool::new(false);
     let sink = Mutex::new(io::BufWriter::with_capacity(256 * 1024, io::stdout()));
     let now = SystemTime::now();
@@ -98,10 +98,10 @@ mod tests {
         }
         let ok = args::parse([dir.clone().into_os_string()], "hfind".into()).unwrap();
         assert!(as_run(args::Outcome::Help("x".into())).is_none());
-        assert_eq!(run(as_run(ok).unwrap()), ExitCode::SUCCESS);
+        assert_eq!(execute(as_run(ok).unwrap()), ExitCode::SUCCESS);
         let missing =
             args::parse([OsString::from("/hfind-no-such-main-root")], "hfind".into()).unwrap();
-        assert_eq!(run(as_run(missing).unwrap()), ExitCode::from(1));
+        assert_eq!(execute(as_run(missing).unwrap()), ExitCode::from(1));
         fs::remove_dir_all(&dir).unwrap();
     }
 

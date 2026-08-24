@@ -26,7 +26,7 @@ thread_local! {
     static SLOT: RefCell<(Vec<u8>, Vec<u8>)> = const { RefCell::new((Vec::new(), Vec::new())) };
 }
 
-fn main() -> ExitCode {
+pub fn run() -> ExitCode {
     let mut cli = Cli::parse();
 
     let patterns: Vec<Vec<u8>> = if !cli.patterns.is_empty() || cli.pattern_file.is_some() {
