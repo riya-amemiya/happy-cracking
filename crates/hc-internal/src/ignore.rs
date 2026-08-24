@@ -6,7 +6,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use regex::bytes::{RegexSet, RegexSetBuilder};
 
-pub(crate) struct Ignore {
+pub struct Ignore {
     parent: Option<Arc<Ignore>>,
     base: usize,
     set: RegexSet,
@@ -15,7 +15,7 @@ pub(crate) struct Ignore {
 }
 
 impl Ignore {
-    pub(crate) fn ignored(&self, rel: &[u8], is_dir: bool) -> bool {
+    pub fn ignored(&self, rel: &[u8], is_dir: bool) -> bool {
         std::iter::successors(Some(self), |n| n.parent.as_deref())
             .find_map(|n| {
                 n.set
@@ -136,7 +136,7 @@ fn push_class(pat: &[u8], open: usize, out: &mut String, fold: bool) -> Option<u
     None
 }
 
-pub(crate) fn glob_to_regex(pat: &[u8], fold: bool) -> Option<String> {
+pub fn glob_to_regex(pat: &[u8], fold: bool) -> Option<String> {
     let mut out = String::with_capacity(pat.len() * 4 + 8);
     let mut i = 0usize;
     while i < pat.len() {
@@ -220,13 +220,14 @@ fn parse_rule(line: &[u8], fold: bool) -> Option<(String, bool, bool)> {
     ))
 }
 
-pub(crate) fn load_ignore(
+pub fn load_ignore(
     path: &Path,
     base: usize,
     parent: Option<Arc<Ignore>>,
     fold: bool,
     errors: &AtomicBool,
     quiet: bool,
+    prog: &str,
 ) -> Option<Arc<Ignore>> {
     let data = match fs::read(path) {
         Ok(d) => d,
@@ -234,7 +235,7 @@ pub(crate) fn load_ignore(
             if e.kind() != io::ErrorKind::NotFound {
                 errors.store(true, Ordering::Relaxed);
                 if !quiet {
-                    eprintln!("hfind: {}: {e}", path.display());
+                    eprintln!("{prog}: {}: {e}", path.display());
                 }
             }
             return parent;
@@ -265,7 +266,7 @@ pub(crate) fn load_ignore(
         Err(e) => {
             errors.store(true, Ordering::Relaxed);
             if !quiet {
-                eprintln!("hfind: {}: {e}", path.display());
+                eprintln!("{prog}: {}: {e}", path.display());
             }
             parent
         }
@@ -288,7 +289,7 @@ mod tests {
         let blocked = dir.join("blocked");
         fs::create_dir(&blocked).unwrap();
         let errors = AtomicBool::new(false);
-        let _ = load_ignore(&blocked, 0, None, false, &errors, true);
+        let _ = load_ignore(&blocked, 0, None, false, &errors, true, "hc-internal");
         let empty = dir.join("empty");
         fs::write(&empty, b"# only\n\n").unwrap();
         let parent = Some(Arc::new(Ignore {
@@ -298,7 +299,15 @@ mod tests {
             negate: Vec::new(),
             dir_only: Vec::new(),
         }));
-        let got = load_ignore(&empty, 0, parent.clone(), false, &errors, false);
+        let got = load_ignore(
+            &empty,
+            0,
+            parent.clone(),
+            false,
+            &errors,
+            false,
+            "hc-internal",
+        );
         assert!(got.is_some());
         fs::remove_dir_all(&dir).unwrap();
     }
@@ -315,9 +324,9 @@ mod tests {
         let path = dir.join("ignore");
         fs::write(&path, "a".repeat(4000).as_bytes()).unwrap();
         let errors = AtomicBool::new(false);
-        let _ = load_ignore(&path, 0, None, false, &errors, false);
+        let _ = load_ignore(&path, 0, None, false, &errors, false, "hc-internal");
         assert!(errors.load(Ordering::Relaxed));
-        let _ = load_ignore(&path, 0, None, false, &errors, true);
+        let _ = load_ignore(&path, 0, None, false, &errors, true, "hc-internal");
         fs::remove_dir_all(&dir).unwrap();
     }
 

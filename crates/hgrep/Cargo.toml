@@ -1,0 +1,24 @@
+[package]
+name = "hgrep"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Parallel grep-compatible line matcher"
+autobins = false
+
+[[bin]]
+name = "hgrep"
+path = "src/main.rs"
+
+[[bin]]
+name = "hg"
+path = "src/main.rs"
+
+[dependencies]
+clap.workspace = true
+hc-internal.workspace = true
+memchr.workspace = true
+memmap2.workspace = true
+rayon.workspace = true
+regex.workspace = true

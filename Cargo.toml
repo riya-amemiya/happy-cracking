@@ -1,12 +1,32 @@
-[package]
+[workspace]
+members = ["crates/hc-internal", "crates/hgrep", "crates/hfind"]
+resolver = "3"
+
+[workspace.package]
 edition = "2024"
-name = "happy-cracking"
 version = "0.9.0"
+license = "MIT"
+repository = "https://github.com/riya-amemiya/happy-cracking"
+
+[workspace.dependencies]
+clap = { version = "4.6.4", features = ["derive"] }
+hc-internal = { path = "crates/hc-internal" }
+memchr = "2.8.3"
+memmap2 = "0.9.11"
+rayon = "1.12.0"
+regex = "1.12.3"
+rustix = { version = "1.1.4", features = ["fs"] }
+unicode-normalization = "0.1"
+
+[package]
+edition.workspace = true
+name = "happy-cracking"
+version.workspace = true
 default-run = "happy-cracking"
 autobins = false
 description = "A fast, comprehensive CTF toolkit for cryptographic encoding/decoding, classic ciphers, hash operations, and analysis tools"
-license = "MIT"
-repository = "https://github.com/riya-amemiya/happy-cracking"
+license.workspace = true
+repository.workspace = true
 keywords = ["ctf", "cryptography", "cipher", "encoding", "security"]
 categories = ["command-line-utilities", "cryptography"]
 
@@ -14,34 +34,16 @@ categories = ["command-line-utilities", "cryptography"]
 name = "happy-cracking"
 path = "src/main.rs"
 
-[[bin]]
-name = "hgrep"
-path = "src/bin/hgrep/main.rs"
-
-[[bin]]
-name = "hg"
-path = "src/bin/hgrep/main.rs"
-
-[[bin]]
-name = "hfind"
-path = "src/bin/hfind/main.rs"
-
-[[bin]]
-name = "hfd"
-path = "src/bin/hfind/main.rs"
-
 [dependencies]
 aes = "0.9.2"
 anyhow = "1.0.104"
 base64 = "0.23.0"
 cipher = { version = "0.5.2", features = ["block-padding"] }
-clap = {version = "4.6.4", features = ["derive"]}
+clap.workspace = true
 des = "0.9.0"
 hex = "0.4.3"
 md-5 = "0.11.0"
 md4 = "0.11.0"
-memchr = "2.8.3"
-regex = "1.12.3"
 sha1 = "0.11.0"
 sha2 = "0.11.0"
 num-bigint = "0.5.1"
@@ -51,13 +53,8 @@ umt_rust = "0.6.0"
 urlencoding = "2.1.3"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
-rayon = "1.12.0"
+rayon.workspace = true
 zip = { version = "8.6.0", default-features = false, features = ["aes-crypto", "deflate"] }
-rustix = { version = "1.1.4", features = ["fs"] }
-memmap2 = "0.9.11"
-
-[target.'cfg(target_os = "macos")'.dependencies]
-unicode-normalization = "0.1"
 
 [profile.release]
 lto = "fat"

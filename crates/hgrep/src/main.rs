@@ -1,17 +1,8 @@
 mod cli;
-mod gitconfig;
-mod ignore;
 mod matcher;
 mod search;
 mod source;
 mod walk;
-
-#[cfg(all(unix, not(test)))]
-#[path = "../unixdir.rs"]
-mod unixdir;
-
-#[path = "../outbuf.rs"]
-mod outbuf;
 
 use std::cell::RefCell;
 use std::fs::{self, File};
@@ -23,6 +14,7 @@ use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use clap::Parser;
+use hc_internal::outbuf;
 
 use cli::Cli;
 use matcher::build_matcher;

@@ -1,0 +1,21 @@
+[package]
+name = "hfind"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Parallel find-compatible walker"
+autobins = false
+
+[[bin]]
+name = "hfind"
+path = "src/main.rs"
+
+[[bin]]
+name = "hfd"
+path = "src/main.rs"
+
+[dependencies]
+hc-internal.workspace = true
+rayon.workspace = true
+regex.workspace = true
