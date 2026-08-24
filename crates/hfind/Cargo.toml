@@ -5,6 +5,7 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 description = "Parallel find-compatible walker"
+default-run = "hfind"
 autobins = false
 
 [[bin]]

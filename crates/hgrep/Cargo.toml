@@ -5,6 +5,7 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 description = "Parallel grep-compatible line matcher"
+default-run = "hgrep"
 autobins = false
 
 [[bin]]
