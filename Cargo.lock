@@ -429,7 +429,7 @@ dependencies = [
 
 [[package]]
 name = "happy-cracking"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "aes",
  "anyhow",
@@ -461,7 +461,7 @@ checksum = "ed5909b6e89a2db4456e54cd5f673791d7eca6732202bbf2a9cc504fe2f9b84a"
 
 [[package]]
 name = "hc-internal"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "memchr",
  "rayon",
@@ -484,7 +484,7 @@ checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
 
 [[package]]
 name = "hfind"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "hc-internal",
  "rayon",
@@ -493,7 +493,7 @@ dependencies = [
 
 [[package]]
 name = "hgrep"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "clap",
  "hc-internal",
