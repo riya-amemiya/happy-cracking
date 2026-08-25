@@ -5,9 +5,7 @@ A fast, comprehensive CTF (Capture The Flag) toolkit written in Rust. Provides 7
 ## Installation
 
 ```bash
-git clone https://github.com/riya-amemiya/happy-cracking.git
-cd happy-cracking
-cargo build --release
+cargo install happy-cracking
 ```
 
 This produces `target/release/happy-cracking` and the companion binaries `target/release/hgrep`, `target/release/hg`, `target/release/hfind`, and `target/release/hfd`.
