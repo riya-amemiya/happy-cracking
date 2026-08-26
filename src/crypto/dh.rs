@@ -76,7 +76,6 @@ pub fn run(action: DhAction) -> Result<()> {
     Ok(())
 }
 
-// Compute Diffie-Hellman public key: g^a mod p.
 pub fn compute_pubkey(g: &BigUint, a: &BigUint, p: &BigUint) -> Result<BigUint> {
     if p.is_zero() {
         anyhow::bail!("Modulus p must be non-zero");
@@ -84,7 +83,6 @@ pub fn compute_pubkey(g: &BigUint, a: &BigUint, p: &BigUint) -> Result<BigUint> 
     Ok(g.modpow(a, p))
 }
 
-// Compute Diffie-Hellman shared secret: public_key^a mod p.
 pub fn compute_shared_secret(public_key: &BigUint, a: &BigUint, p: &BigUint) -> Result<BigUint> {
     if p.is_zero() {
         anyhow::bail!("Modulus p must be non-zero");
@@ -97,9 +95,6 @@ pub fn compute_shared_secret(public_key: &BigUint, a: &BigUint, p: &BigUint) -> 
 // 2^22 = 4,194,304.
 const MAX_BSGS_ITERATIONS: u64 = 1 << 22;
 
-// Baby-step Giant-step algorithm for computing discrete logarithm.
-// Finds x such that g^x ≡ target (mod p), where g has the given order.
-// Time and space complexity: O(sqrt(order)).
 pub fn baby_step_giant_step(
     g: &BigUint,
     target: &BigUint,
@@ -122,9 +117,8 @@ pub fn baby_step_giant_step(
         );
     }
 
-    // Baby step: build table of j -> g^j mod p for j in [0, m)
     let mut table: HashMap<BigUint, BigUint> = HashMap::new();
-    let mut g_j = BigUint::one(); // g^0 = 1
+    let mut g_j = BigUint::one();
     let mut j = BigUint::zero();
     while j < m {
         table.insert(g_j.clone(), j.clone());
@@ -137,7 +131,6 @@ pub fn baby_step_giant_step(
     let g_inv = g.modpow(&(order - BigUint::one()), p);
     let g_neg_m = g_inv.modpow(&m, p);
 
-    // Giant step: compute target * (g^(-m))^i for i in [0, m)
     let mut gamma = target % p;
     let mut i = BigUint::zero();
     while i < m {

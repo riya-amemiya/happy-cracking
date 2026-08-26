@@ -78,8 +78,6 @@ pub fn pkcs7_unpad(data: &[u8], block_size: usize) -> Result<Vec<u8>> {
         anyhow::bail!("Input length is not a multiple of block size");
     }
 
-    // Defense-in-depth: use ok_or_else instead of unwrap to avoid a panic
-    // if the empty-check guard above is ever refactored away.
     let pad_byte = *data
         .last()
         .ok_or_else(|| anyhow::anyhow!("Input data is empty"))?;

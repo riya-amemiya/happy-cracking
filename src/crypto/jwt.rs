@@ -153,7 +153,6 @@ pub fn extract_algorithm(header_json: &str) -> String {
 pub fn find_vulnerabilities(header_json: &str) -> Vec<String> {
     let mut warnings = Vec::new();
 
-    // Parse JSON safely using serde_json
     let v: serde_json::Value = match serde_json::from_str(header_json) {
         Ok(val) => val,
         Err(_) => return vec!["Invalid JSON header - parsing failed".to_string()],
@@ -233,7 +232,6 @@ pub fn verify_hs(token: &str, secret: &[u8]) -> Result<bool> {
             hex::decode(hex).context("internal hex decode")?
         }
         "HS384" => {
-            // SHA-384 via sha2
             use sha2::Sha384;
             hmac_digest::<Sha384>(secret, msg.as_bytes(), 128)
         }
@@ -296,7 +294,6 @@ pub fn crack_hmac_secret(token: &str, wordlist: &PathBuf) -> Result<Option<Strin
         if line.is_empty() {
             continue;
         }
-        // Try raw bytes and UTF-8 lossy form
         if verify_hs(token, line)? {
             return Ok(Some(String::from_utf8_lossy(line).into_owned()));
         }
@@ -306,7 +303,6 @@ pub fn crack_hmac_secret(token: &str, wordlist: &PathBuf) -> Result<Option<Strin
 
 /// Forge alg=none token (header with none + given payload + empty signature).
 pub fn forge_none(payload_json: &str) -> Result<String> {
-    // Validate payload is JSON object-ish
     let _: serde_json::Value =
         serde_json::from_str(payload_json).context("Payload is not valid JSON")?;
     let header = r#"{"alg":"none","typ":"JWT"}"#;

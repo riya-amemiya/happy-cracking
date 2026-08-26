@@ -22,7 +22,6 @@ pub fn run(action: EntropyAction) -> Result<()> {
     Ok(())
 }
 
-// Calculate Shannon entropy in bits per byte.
 // H = -Σ p(x) * log2(p(x)), maximum is 8.0 bits/byte.
 pub fn calculate(input: &str) -> f64 {
     if input.is_empty() {
@@ -32,8 +31,6 @@ pub fn calculate(input: &str) -> f64 {
     let bytes = input.as_bytes();
     let len = bytes.len() as f64;
 
-    // Optimization: Use array instead of HashMap for pure byte counting
-    // Avoids hashing overhead and memory allocation
     let mut counts = [0usize; 256];
     for &b in bytes {
         counts[b as usize] += 1;
@@ -50,7 +47,6 @@ pub fn calculate(input: &str) -> f64 {
     entropy
 }
 
-// Classify the entropy value into a human-readable category.
 pub fn classify(entropy: f64) -> &'static str {
     if entropy >= 7.5 {
         "High (likely encrypted/compressed)"

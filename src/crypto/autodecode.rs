@@ -95,7 +95,6 @@ pub fn detect_and_decode(input: &str) -> Vec<(&'static str, String)> {
     let input = input.trim();
     let mut results = Vec::new();
 
-    // Try Base64
     if looks_like_base64(input)
         && let Ok(decoded) = base64::decode(input)
         && is_printable(&decoded)
@@ -103,7 +102,6 @@ pub fn detect_and_decode(input: &str) -> Vec<(&'static str, String)> {
         results.push(("Base64", decoded));
     }
 
-    // Try Base32
     if looks_like_base32(input)
         && let Ok(decoded) = base32::decode(input)
         && is_printable(&decoded)
@@ -111,7 +109,6 @@ pub fn detect_and_decode(input: &str) -> Vec<(&'static str, String)> {
         results.push(("Base32", decoded));
     }
 
-    // Try Base58
     if looks_like_base58(input)
         && let Ok(decoded) = base58::decode(input)
         && is_printable(&decoded)
@@ -119,7 +116,6 @@ pub fn detect_and_decode(input: &str) -> Vec<(&'static str, String)> {
         results.push(("Base58", decoded));
     }
 
-    // Try Hex
     if looks_like_hex(input)
         && let Ok(decoded) = hex::decode(input)
         && is_printable(&decoded)
@@ -127,7 +123,6 @@ pub fn detect_and_decode(input: &str) -> Vec<(&'static str, String)> {
         results.push(("Hex", decoded));
     }
 
-    // Try URL encoding
     if input.contains('%')
         && let Ok(decoded) = url::decode(input)
         && decoded != input
@@ -135,7 +130,6 @@ pub fn detect_and_decode(input: &str) -> Vec<(&'static str, String)> {
         results.push(("URL", decoded));
     }
 
-    // Try Binary
     if looks_like_binary(input)
         && let Ok(decoded) = binary::decode(input)
         && is_printable(&decoded)
@@ -143,7 +137,6 @@ pub fn detect_and_decode(input: &str) -> Vec<(&'static str, String)> {
         results.push(("Binary", decoded));
     }
 
-    // Try Morse
     if looks_like_morse(input)
         && let Ok(decoded) = morse::decode(input)
     {
@@ -173,7 +166,6 @@ fn decode_recursive(input: &str, depth: usize, max_depth: usize) {
     for (encoding, decoded) in results {
         println!("{}[{}] {}", indent, encoding, decoded);
 
-        // Try to decode further
         if decoded != input && !decoded.is_empty() {
             decode_recursive(&decoded, depth + 1, max_depth);
         }
@@ -207,11 +199,9 @@ pub fn score_decode_candidate(s: &str) -> f64 {
         .filter(|c| !c.is_control() || *c == '\n' || *c == '\t' || *c == '\r')
         .count();
     score += (printable as f64 / s.len() as f64) * 40.0;
-    // Prefer shorter expansions (decoding usually shrinks encoded text ratio-wise, but not always)
     if s.is_ascii() {
         score += 5.0;
     }
-    // Mild preference for spaces (English)
     let spaces = s.chars().filter(|c| *c == ' ').count() as f64;
     score += (spaces / s.len() as f64 * 30.0).min(10.0);
     score
@@ -293,7 +283,6 @@ pub fn decode_tree(input: &str, max_depth: usize, max_nodes: usize) -> Vec<(Stri
             .then_with(|| a.0.cmp(&b.0))
     });
 
-    // Deduplicate by decoded text, keep best path
     let mut best: Vec<(String, String)> = Vec::new();
     let mut seen_text: HashSet<String> = HashSet::new();
     for (path, text, _) in leaves {
