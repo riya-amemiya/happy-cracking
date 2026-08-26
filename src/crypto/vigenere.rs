@@ -150,7 +150,6 @@ fn kasiski_examination(input: &str, max_key_len: usize) -> HashMap<usize, usize>
     let letters = extract_alpha(input);
     let mut distances: Vec<usize> = Vec::new();
 
-    // Find repeated trigrams and record distances
     for trigram_len in 3..=5 {
         if letters.len() < trigram_len {
             break;
@@ -216,7 +215,6 @@ pub fn estimate_key_length(input: &str, max_length: usize) -> Vec<(usize, f64)> 
     let mut results: Vec<(usize, f64)> = Vec::new();
 
     for key_len in 1..=max_length.min(letters.len() / 2) {
-        // Split into columns and compute average IoC.
         let mut total_ioc = 0.0;
         let mut count = 0;
         for col in 0..key_len {
@@ -241,16 +239,13 @@ pub fn estimate_key_length(input: &str, max_length: usize) -> Vec<(usize, f64)> 
         }
     }
 
-    // Use Kasiski to boost scores for lengths supported by repeated ngrams
     let kasiski = kasiski_examination(input, max_length);
 
-    // Sort by how close IoC is to English IoC, with Kasiski as tiebreaker
     results.sort_by(|a, b| {
         let a_diff = (a.1 - ENGLISH_IOC).abs();
         let b_diff = (b.1 - ENGLISH_IOC).abs();
         let a_kasiski = *kasiski.get(&a.0).unwrap_or(&0) as f64;
         let b_kasiski = *kasiski.get(&b.0).unwrap_or(&0) as f64;
-        // Use unwrap_or to prevent panic on NaN values
         a_diff
             .partial_cmp(&b_diff)
             .unwrap_or(std::cmp::Ordering::Equal)
@@ -293,7 +288,6 @@ fn find_best_shift(counts: &[usize; 26], n: usize) -> u8 {
 
     let n_f = n as f64;
 
-    // Use chi-squared statistic to find the best shift
     let mut best_shift = 0u8;
     let mut best_chi2 = f64::MAX;
 

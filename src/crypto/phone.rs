@@ -101,7 +101,6 @@ pub fn encode(input: &str) -> String {
                 result.push(' ');
             }
             result.push('0');
-            // Mark that we have content so the next letter group gets a space separator
             group_has_content = true;
             prev_key = None;
             continue;
@@ -113,7 +112,6 @@ pub fn encode(input: &str) -> String {
 
         let idx = (c as u8 - b'A') as usize;
         let presses = PHONE_PRESS_TABLE[idx];
-        // First byte of the press string is the keypad digit.
         let cur_key = Some(presses.as_bytes()[0]);
 
         if prev_key == cur_key {

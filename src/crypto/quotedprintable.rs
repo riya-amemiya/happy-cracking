@@ -51,7 +51,6 @@ fn push_char(out: &mut String, line_len: &mut usize, c: char) {
     *line_len += 1;
 }
 
-/// Append `=XX` hex escape.
 fn push_hex_encoded(out: &mut String, line_len: &mut usize, b: u8) {
     maybe_soft_break(out, line_len, 3);
     out.push('=');

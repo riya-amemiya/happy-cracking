@@ -32,7 +32,6 @@ fn detect_key_length_returns_sorted() {
     let encrypted = xor::xor_bytes(plaintext, key);
 
     let results = xor::detect_key_length(&encrypted, 30);
-    // Results should be sorted by normalized distance (ascending)
     for window in results.windows(2) {
         assert!(window[0].1 <= window[1].1);
     }
@@ -45,6 +44,5 @@ fn detect_key_length_single_byte_key() {
     let encrypted = xor::xor_bytes(plaintext, &[0x42]);
 
     let results = xor::detect_key_length(&encrypted, 10);
-    // Should return results (min key length is 2)
     assert!(!results.is_empty());
 }

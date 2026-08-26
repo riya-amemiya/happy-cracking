@@ -435,7 +435,6 @@ pub fn crib_drag(ciphertext: &[u8], crib: &[u8]) -> Vec<CribHit> {
             if abs >= offset && abs < offset + crib.len() {
                 plain_window.push(b ^ key_fragment[abs - offset]);
             } else if !key_fragment.is_empty() {
-                // Speculative cyclic extension from the recovered fragment
                 let k = key_fragment[(abs.wrapping_sub(offset)) % key_fragment.len()];
                 plain_window.push(b ^ k);
             } else {

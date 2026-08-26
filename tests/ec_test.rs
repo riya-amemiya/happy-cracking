@@ -66,7 +66,6 @@ fn test_point_doubling() {
     // Verify point is on curve: 6^2 = 36, 3^3 + 2*3 + 3 = 27 + 6 + 3 = 36 mod 97. Good.
     let result = ec::point_add(&pt, &pt, &a, &p).unwrap();
     if let ec::ECPoint::Affine { x, y } = &result {
-        // Verify on curve: y^2 = x^3 + 2x + 3 mod 97
         let lhs = (y * y) % &p;
         let rhs = ((x * x * x) + &a * x + BigInt::from(3)) % &p;
         let lhs_pos = ((lhs % &p) + &p) % &p;

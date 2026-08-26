@@ -37,7 +37,6 @@ fn test_roundtrip_no_doubles() {
 fn test_double_letter_insert_x() {
     // "BALLOON" has double L -> should insert X between them
     let encrypted = playfair::encrypt("BALLOON", "KEY").unwrap();
-    // Must produce even-length output
     assert_eq!(encrypted.len() % 2, 0);
 }
 

@@ -60,10 +60,8 @@ pub fn sha256_extend(
         ]);
     }
 
-    // Compute the padding that would have been applied to the original message
     let glue_padding = sha256_padding(original_len)?;
 
-    // The total length processed so far (must be a multiple of 64)
     let total_processed = original_len
         .checked_add(glue_padding.len() as u64)
         .context("Padded original length overflow")?;
@@ -125,8 +123,6 @@ fn sha256_padding(message_len: u64) -> Result<Vec<u8>> {
     Ok(padding)
 }
 
-// Computes padding for the appended data block, using the total accumulated
-// bit length (including the original message + glue padding + append data).
 fn sha256_finish_padding(append_len: u64, total_bit_len: u64) -> Vec<u8> {
     let remainder = (append_len % 64) as usize;
     let padding_len = if remainder < 56 {

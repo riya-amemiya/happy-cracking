@@ -291,7 +291,6 @@ fn ntlm_digest(input: &str) -> impl AsRef<[u8]> {
     hasher.finalize()
 }
 
-/// Compare a candidate against a pre-decoded digest.
 fn digest_matches(algo: HashAlgo, input: &str, target: &[u8]) -> bool {
     match algo {
         HashAlgo::Md5 => hash_digest::<Md5>(input.as_bytes()).as_ref() == target,
@@ -307,7 +306,6 @@ fn decode_target_digest(target: &str) -> Option<Vec<u8>> {
     hex::decode(normalize_hash(target)).ok()
 }
 
-/// Hash `word`, applying salt only when one is present.
 fn candidate_matches(
     algo: HashAlgo,
     word: &str,
@@ -452,7 +450,6 @@ pub fn brute_force(
         return Ok(None);
     };
 
-    // ASCII charsets fill a stack buffer and only allocate a String on a hit.
     let ascii_charset: Option<Vec<u8>> = if chars.iter().all(|c| c.is_ascii()) {
         Some(chars.iter().map(|&c| c as u8).collect())
     } else {
@@ -795,7 +792,6 @@ pub fn mask_attack(target: &str, algo: HashAlgo, mask: &str) -> Result<Option<St
             .context("Mask place-value overflowed")?;
     }
 
-    // ASCII masks fill a stack buffer and only allocate a String on a hit.
     let stack_ok = npos <= MAX_STACK_MASK && positions.iter().flatten().all(|c| c.is_ascii());
 
     let found = if stack_ok {
@@ -918,7 +914,6 @@ fn append_zero_padded(buf: &mut String, mut n: u32, width: u32) {
     }
 }
 
-/// Built-in mutations used by rule mode (exported for tests).
 pub fn builtin_rules() -> Vec<&'static str> {
     BUILTIN_RULES.to_vec()
 }

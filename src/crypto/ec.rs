@@ -500,8 +500,6 @@ mod tests {
 
     #[test]
     fn test_factor_biguint_large_prime() {
-        // Test with a large 64-bit prime: 18446744073709551557 (largest u64 prime)
-        // This would take very long with trial division but should be instant with Pollard's Rho.
         let n = BigUint::from(18446744073709551557u64);
         let factors = factor_biguint(&n).unwrap();
         assert_eq!(factors.len(), 1);

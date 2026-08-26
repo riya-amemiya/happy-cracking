@@ -14,7 +14,6 @@ fn verify_extension(secret: &[u8], message: &[u8], append: &[u8]) {
 
     let result = hash_ext::sha256_extend(&original_hash, original_len, append).unwrap();
 
-    // Build the full forged message: secret || message || forged_suffix
     let mut full_message = Vec::new();
     full_message.extend_from_slice(secret);
     full_message.extend_from_slice(message);
@@ -33,7 +32,6 @@ fn verify_extension(secret: &[u8], message: &[u8], append: &[u8]) {
     assert!(suffix_len > append.len());
     assert_eq!(&result.forged_suffix[suffix_len - append.len()..], append);
 
-    // Verify padding starts with 0x80
     assert_eq!(result.forged_suffix[0], 0x80);
 }
 

@@ -1,5 +1,3 @@
-// Shared Polybius square builder used by playfair, bifid, and foursquare ciphers.
-
 pub fn build_polybius_square(key: &str) -> Vec<char> {
     let mut seen = [false; 26];
     // I/J merged: J is treated as I

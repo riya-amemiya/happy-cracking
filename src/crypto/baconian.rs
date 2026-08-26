@@ -28,9 +28,6 @@ pub fn run(action: BaconianAction) -> Result<()> {
 }
 
 // Bacon's alphabet: I/J share index 8, U/V share index 20
-// A=0, B=1, C=2, D=3, E=4, F=5, G=6, H=7, I/J=8, K=9, L=10,
-// M=11, N=12, O=13, P=14, Q=15, R=16, S=17, T=18, U/V=19, W=20,
-// X=21, Y=22, Z=23
 fn char_to_bacon_index(c: char) -> Option<u8> {
     match c.to_ascii_uppercase() {
         'A' => Some(0),

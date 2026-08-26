@@ -59,7 +59,6 @@ fn test_estimate_key_length_short_input() {
 
 #[test]
 fn test_recover_key_two_char() {
-    // Test with simple key on text with natural-like distribution
     let plaintext = "ETAOINSHRDLUETAOINSHRDLUETAOINSHRDLU\
                      ETAOINSHRDLUETAOINSHRDLUETAOINSHRDLU";
     let key = "AB";

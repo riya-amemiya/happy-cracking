@@ -14,12 +14,9 @@ mod tests {
         let result = railfence::encrypt(input, rails);
         let duration = start.elapsed();
 
-        // If it runs successfully without OOM, we want to see what happens.
-        // If we implement clamping, result should be "Hello, World!" (identity).
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), "Hello, World!");
 
-        // Ensure it runs quickly (DoS check)
         assert!(
             duration.as_millis() < 100,
             "Encrypt took too long: {:?}",
@@ -41,7 +38,6 @@ mod tests {
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), "Hello, World!");
 
-        // Ensure it runs quickly (DoS check)
         assert!(
             duration.as_millis() < 100,
             "Decrypt took too long: {:?}",

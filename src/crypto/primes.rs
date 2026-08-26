@@ -134,7 +134,6 @@ fn miller_rabin(n: u128) -> bool {
         2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71,
     ];
 
-    // Find d, s such that n - 1 = d * 2^s
     let mut d = n - 1;
     let mut s = 0;
     while d % 2 == 0 {
@@ -427,7 +426,6 @@ fn pollard_rho_u64(n: u64) -> u64 {
     n
 }
 
-// Format factorization result as "2^2 × 3 × 7".
 pub fn format_factors(factors: &[(u128, u32)]) -> String {
     if factors.is_empty() {
         return "1".to_string();
@@ -503,13 +501,11 @@ fn factor_recursive_biguint(n: BigUint, factors: &mut Vec<BigUint>) {
             factor_recursive_biguint(q, factors);
         }
         Err(_) => {
-            // Failed to factor. Treat as prime/indivisible.
             factors.push(n);
         }
     }
 }
 
-// Pollard's Rho for BigUint using Brent's cycle detection variant.
 pub fn pollard_rho_biguint(n: &BigUint) -> Result<(BigUint, BigUint)> {
     if n <= &BigUint::one() {
         anyhow::bail!("Cannot factorize n <= 1");
@@ -545,7 +541,6 @@ pub fn pollard_rho_biguint(n: &BigUint) -> Result<(BigUint, BigUint)> {
     anyhow::bail!("Pollard's Rho failed to factor n")
 }
 
-// Brent's variant of Pollard's Rho for BigUint. Returns a non-trivial factor or None.
 fn pollard_rho_brent(n: &BigUint, c: &BigUint) -> Option<BigUint> {
     let f = |x: &BigUint| -> BigUint { (x * x + c) % n };
 
@@ -581,14 +576,12 @@ fn pollard_rho_brent(n: &BigUint, c: &BigUint) -> Option<BigUint> {
 
         r *= 2;
 
-        // Safety limit
         if r > 1_000_000 {
             return None;
         }
     }
 
     if &g == n {
-        // Backtrack
         loop {
             ys = f(&ys);
             let diff = if x > ys { &x - &ys } else { &ys - &x };

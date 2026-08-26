@@ -396,7 +396,6 @@ pub fn big_modpow(base: &BigUint, exp: &BigUint, modulus: &BigUint) -> Result<Bi
     Ok(base.modpow(exp, modulus))
 }
 
-// Returns the largest x such that x^k <= n.
 pub fn integer_nth_root(n: &BigUint, k: u32) -> BigUint {
     if k == 0 {
         return BigUint::zero();
@@ -451,7 +450,6 @@ pub fn fermat_factor(n: &BigUint, max_iter: u64) -> Result<(BigUint, BigUint)> {
     anyhow::bail!("Fermat factorization failed after {} iterations", max_iter)
 }
 
-// Uses continued fraction expansion of e/n to find candidate d values.
 pub fn wiener_attack(e: &BigUint, n: &BigUint) -> Result<BigUint> {
     if n.is_zero() {
         anyhow::bail!("Modulus must be non-zero");
@@ -478,9 +476,7 @@ pub fn wiener_attack(e: &BigUint, n: &BigUint) -> Result<BigUint> {
             continue;
         }
 
-        // Check that phi makes sense: n - phi + 1 should have discriminant that is a perfect square
-        // s = n - phi + 1 (= p + q)
-        // discriminant = s^2 - 4n = (p - q)^2
+        // s = n - phi + 1 (= p + q); discriminant = s^2 - 4n = (p - q)^2
         let n_plus_1 = n + &one;
         if phi_candidate >= n_plus_1 {
             continue;
@@ -683,7 +679,6 @@ fn mod_pow_bigint(base: &BigInt, exp: &BigInt, modulus: &BigInt) -> Result<BigIn
 // Maximum allowed smoothness bound B to prevent CPU Exhaustion DoS attacks.
 pub const MAX_POLLARD_P1_BOUND: u64 = 10_000_000;
 
-// Finds a factor of n when p-1 is B-smooth (all prime factors ≤ B).
 pub fn pollard_p1(n: &BigUint, b: u64) -> Result<(BigUint, BigUint)> {
     if b > MAX_POLLARD_P1_BOUND {
         anyhow::bail!(
