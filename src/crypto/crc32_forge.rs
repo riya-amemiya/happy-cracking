@@ -82,7 +82,6 @@ static INV_TABLE: LazyLock<[u8; 256]> = LazyLock::new(|| {
     inv
 });
 
-// Compute CRC32 checksum of a byte slice (IEEE 802.3 / ISO 3309).
 pub fn crc32_compute(data: &[u8]) -> u32 {
     let table = &*CRC32_TABLE;
     let mut crc = 0xFFFF_FFFFu32;
@@ -93,8 +92,6 @@ pub fn crc32_compute(data: &[u8]) -> u32 {
     crc ^ 0xFFFF_FFFF
 }
 
-// Forge 4 bytes to append to data so that crc32(data || forge_bytes) == target_crc.
-//
 // Uses reverse CRC32 computation. The CRC32 update is:
 //   state_{i+1} = (state_i >> 8) ^ table[(state_i ^ byte_i) & 0xFF]
 //

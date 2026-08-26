@@ -70,7 +70,6 @@ pub fn identify(input: &str) -> Vec<&'static str> {
         }
     }
 
-    // Check for bcrypt
     if input.starts_with("$2a$")
         || input.starts_with("$2b$")
         || input.starts_with("$2y$")
@@ -79,12 +78,10 @@ pub fn identify(input: &str) -> Vec<&'static str> {
         results.push("bcrypt");
     }
 
-    // Check for Argon2
     if input.starts_with("$argon2") {
         results.push("Argon2");
     }
 
-    // Check for Unix crypt formats
     if input.starts_with("$1$") {
         results.push("MD5 Crypt (Unix)");
     }
@@ -95,7 +92,6 @@ pub fn identify(input: &str) -> Vec<&'static str> {
         results.push("SHA-512 Crypt (Unix)");
     }
 
-    // Check for Base64-encoded hashes
     if is_base64 && !is_hex {
         match len {
             24 => {
@@ -114,7 +110,6 @@ pub fn identify(input: &str) -> Vec<&'static str> {
         }
     }
 
-    // MySQL
     if len == 16 && is_hex {
         results.push("MySQL (old)");
     }

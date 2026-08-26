@@ -66,7 +66,6 @@ pub fn run(action: MathAction) -> Result<()> {
     Ok(())
 }
 
-// Euclidean algorithm for greatest common divisor.
 pub fn gcd(mut a: u128, mut b: u128) -> u128 {
     while b != 0 {
         let t = b;
@@ -76,7 +75,6 @@ pub fn gcd(mut a: u128, mut b: u128) -> u128 {
     a
 }
 
-// Least common multiple via GCD.
 pub fn lcm(a: u128, b: u128) -> Result<u128> {
     if a == 0 || b == 0 {
         return Ok(0);
@@ -87,7 +85,6 @@ pub fn lcm(a: u128, b: u128) -> Result<u128> {
         .ok_or_else(|| anyhow::anyhow!("LCM overflow"))
 }
 
-// Extended Euclidean algorithm for modular inverse.
 // Returns a^-1 mod m such that (a * result) mod m == 1.
 pub fn modinv(a: u128, m: u128) -> Result<u128> {
     if m == 0 {
@@ -120,8 +117,6 @@ pub fn modinv(a: u128, m: u128) -> Result<u128> {
     Ok(res.try_into().unwrap())
 }
 
-// Binary exponentiation for modular power.
-// Computes base^exp mod m.
 pub fn modpow(base: u128, exp: u128, m: u128) -> Result<u128> {
     if m == 0 {
         anyhow::bail!("Modulus must be non-zero");
@@ -130,14 +125,11 @@ pub fn modpow(base: u128, exp: u128, m: u128) -> Result<u128> {
         return Ok(0);
     }
 
-    // Optimization: if m fits in u64, use u128 for intermediate calculations
-    // to avoid BigUint allocation overhead.
     if m <= u64::MAX as u128 {
         return Ok(modpow_u64(base, exp, m as u64) as u128);
     }
 
-    // Optimization: if m is odd and fits in u128 (but > u64::MAX), use Montgomery
-    // to avoid BigUint allocation overhead.
+    // Montgomery reduction requires an odd modulus.
     if m % 2 != 0 {
         let mont = Montgomery::new(m)?;
         let base_mont = mont.transform(base);
@@ -157,12 +149,10 @@ pub fn modpow(base: u128, exp: u128, m: u128) -> Result<u128> {
     Ok(res.try_into().unwrap())
 }
 
-// Optimized modular exponentiation for u64 modulus using u128 arithmetic.
 fn modpow_u64(base: u128, mut exp: u128, m: u64) -> u64 {
-    // If m is odd, use Montgomery multiplication to avoid slow division in the loop
+    // Montgomery reduction requires an odd modulus.
     if m % 2 != 0 {
         let mont = Montgomery64::new(m).expect("m is odd");
-        // We need base mod m first
         let base_val = (base % (m as u128)) as u64;
         let base_mont = mont.transform(base_val);
         let res_mont = mont.pow(base_mont, exp);
@@ -268,8 +258,6 @@ impl Montgomery64 {
     #[allow(dead_code)]
     pub fn reduce_from(&self, a: u64) -> u64 {
         // To reduce from Montgomery form X*R, we compute X*R * R^-1 = X.
-        // reduce takes u128 T.
-        // We pass a as u128.
         self.reduce(a as u128)
     }
 
@@ -286,11 +274,7 @@ impl Montgomery64 {
     }
 }
 
-// Helper for 128-bit widening multiplication: (a * b) -> (lo, hi)
 fn widening_mul_u128(a: u128, b: u128) -> (u128, u128) {
-    // Optimized for u64 decomposition to leverage hardware MUL if possible.
-    // This explicitly uses 64-bit multiplications extended to 128-bit,
-    // avoiding potential full 128-bit multiplication overheads in the compiler.
     let al = a as u64;
     let ah = (a >> 64) as u64;
     let bl = b as u64;
@@ -344,7 +328,6 @@ impl Montgomery {
         let mut r2 = (u128::MAX % m + 1) % m; // R mod m
 
         for _ in 0..128 {
-            // r2 = (r2 * 2) % m
             let (mut val, overflow) = r2.overflowing_shl(1);
             if overflow {
                 // val = (r2 * 2) - 2^128

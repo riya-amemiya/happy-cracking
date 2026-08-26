@@ -11,10 +11,8 @@ const MAX_BRUTE_SPACE: u128 = 1_000_000_000;
 
 const MAX_CHARSET_LEN: usize = 256;
 
-/// Stack buffer for mask/brute candidates. Standard mask classes (`?l`/`?u`/`?d`/`?s`/`?a`/`?h`)
-/// and typical brute charsets are ASCII; 32 bytes covers CTF masks, literal prefixes,
-/// and brute lengths without a heap allocation on the miss path. Longer / non-ASCII
-/// inputs fall back to `String`.
+/// Stack buffer for ASCII mask/brute candidates (`?l`/`?u`/`?d`/`?s`/`?a`/`?h`).
+/// 32 bytes covers typical CTF masks; longer or non-ASCII inputs fall back to `String`.
 const MAX_STACK_MASK: usize = 32;
 
 #[derive(Clone, Copy, ValueEnum)]
@@ -294,10 +292,6 @@ fn ntlm_digest(input: &str) -> impl AsRef<[u8]> {
 }
 
 /// Compare a candidate against a pre-decoded digest.
-///
-/// Crack loops used to `hex::encode` every hash into a new `String` and then
-/// compare hex text. On short passwords that allocation dominates: ~1.7x slower
-/// for MD5 and ~3.7x for SHA-256 (`release`, 500k iters of "password123").
 fn digest_matches(algo: HashAlgo, input: &str, target: &[u8]) -> bool {
     match algo {
         HashAlgo::Md5 => hash_digest::<Md5>(input.as_bytes()).as_ref() == target,
@@ -313,8 +307,7 @@ fn decode_target_digest(target: &str) -> Option<Vec<u8>> {
     hex::decode(normalize_hash(target)).ok()
 }
 
-/// Hash `word`, applying salt only when one is present so the unsalted hot path
-/// does not allocate a copy of every candidate.
+/// Hash `word`, applying salt only when one is present.
 fn candidate_matches(
     algo: HashAlgo,
     word: &str,
@@ -460,11 +453,6 @@ pub fn brute_force(
     };
 
     // ASCII charsets fill a stack buffer and only allocate a String on a hit.
-    // The miss path used to malloc a `Vec<char>` plus a `String` on every
-    // candidate via `index_to_word` — the same allocation tax mask_attack had.
-    //
-    // Measured (`release`, lto=fat, 456_976-candidate lowercase len=4 miss, 5 runs):
-    // ~1.13x MD5 (16.05→14.21 ms) and ~1.16x SHA-256 (9.78→8.44 ms).
     let ascii_charset: Option<Vec<u8>> = if chars.iter().all(|c| c.is_ascii()) {
         Some(chars.iter().map(|&c| c as u8).collect())
     } else {
@@ -799,8 +787,7 @@ pub fn mask_attack(target: &str, algo: HashAlgo, mask: &str) -> Result<Option<St
     };
 
     let npos = positions.len();
-    // Place value of position i = product of bases to its right. Lets the hot
-    // loop emit MSD-first without a per-candidate `Vec` of mixed-radix digits.
+    // Place value of position i = product of bases to its right.
     let mut places = vec![1u128; npos];
     for i in (0..npos.saturating_sub(1)).rev() {
         places[i] = places[i + 1]
@@ -808,12 +795,7 @@ pub fn mask_attack(target: &str, algo: HashAlgo, mask: &str) -> Result<Option<St
             .context("Mask place-value overflowed")?;
     }
 
-    // ASCII masks (all charset classes and typical literals) fill a stack
-    // buffer and only allocate a String on a hit. Miss path used to malloc a
-    // digits `Vec` plus a `String` on every candidate.
-    //
-    // Measured (`release`, lto=fat, 456_976-candidate `?l?l?l?l` miss, 5 runs):
-    // ~1.26x MD5 (18.7→14.8 ms) and ~1.48x SHA-256 (12.9→8.7 ms).
+    // ASCII masks fill a stack buffer and only allocate a String on a hit.
     let stack_ok = npos <= MAX_STACK_MASK && positions.iter().flatten().all(|c| c.is_ascii());
 
     let found = if stack_ok {
@@ -866,7 +848,6 @@ pub fn hybrid_attack(
         anyhow::bail!("--min-digits must be <= --max-digits");
     }
 
-    // Estimate space
     let mut total: u128 = 0;
     for d in min_digits..=max_digits {
         let count = 10u128.pow(d);
@@ -894,9 +875,6 @@ pub fn hybrid_attack(
     };
 
     let found = words.par_iter().find_map_any(|word| {
-        // Reuse one buffer per word instead of `format!("{:0width$}")` plus a
-        // second `format!("{}{}", word, suffix)` on every numeric candidate.
-        // At max_digits=6 that is up to 1e6 suffixes per word.
         let mut buf = String::with_capacity(word.len() + max_digits as usize);
         for digits in min_digits..=max_digits {
             let max_n = 10u32.pow(digits);
@@ -923,10 +901,7 @@ pub fn hybrid_attack(
 }
 
 /// Append `n` as a `width`-digit decimal with leading zeros (`width == 0` is a
-/// no-op). Avoids heap `format!` in the hybrid hot loop.
-///
-/// Measured (`release`, 500k miss iters of `"password"` + 4 digits):
-/// ~1.3x MD5 (160→120 ns/op) and ~1.6x SHA-256 (99→62 ns/op) vs two `format!`s.
+/// no-op).
 fn append_zero_padded(buf: &mut String, mut n: u32, width: u32) {
     if width == 0 {
         return;

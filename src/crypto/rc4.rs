@@ -60,7 +60,6 @@ fn ksa(key: &[u8]) -> [u8; 256] {
     let mut key_idx = 0;
     let key_len = key.len();
 
-    // Optimization: Use a manual counter instead of expensive modulo operator
     for i in 0..256 {
         j = j.wrapping_add(s[i]).wrapping_add(key[key_idx]);
         s.swap(i, j as usize);
@@ -79,7 +78,6 @@ pub fn rc4(data: &[u8], key: &[u8]) -> Result<Vec<u8>> {
     }
     let mut s = ksa(key);
 
-    // Optimization: Stream processing to avoid intermediate allocation of keystream vector
     let mut i: u8 = 0;
     let mut j: u8 = 0;
     let mut result = Vec::with_capacity(data.len());

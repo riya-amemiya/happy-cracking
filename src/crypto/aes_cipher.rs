@@ -187,8 +187,6 @@ pub fn ecb_detect(hex_input: &str) -> Result<(bool, usize)> {
         return Ok((false, 0));
     }
 
-    // Perf: Use HashSet for O(n) duplicate detection instead of clone + sort + dedup (O(n log n)),
-    // also avoiding the unnecessary vector clone and its extra allocation.
     let blocks: Vec<&[u8]> = bytes.chunks(16).collect();
     let unique: HashSet<&[u8]> = blocks.iter().copied().collect();
 
