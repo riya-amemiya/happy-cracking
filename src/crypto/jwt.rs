@@ -110,28 +110,45 @@ pub struct JwtParts {
     pub signature_hex: String,
 }
 
-pub fn decode(token: &str) -> Result<JwtParts> {
+/// Maximum encoded JWT length in bytes.
+///
+/// SECURITY: Unbounded tokens are a memory/CPU DoS. `split('.')` can allocate
+/// a slice per delimiter, and base64-decoding header/payload/signature grows
+/// with input. Typical JWTs are a few kilobytes; 64 KiB still covers oversized
+/// CTF tokens (embedded certs, large claims).
+pub const MAX_JWT_LEN: usize = 64 * 1024;
+
+fn split_jwt(token: &str) -> Result<[&str; 3]> {
     let token = token.trim();
-    let segments: Vec<&str> = token.split('.').collect();
-    if segments.len() != 3 {
+    if token.len() > MAX_JWT_LEN {
         anyhow::bail!(
-            "Invalid JWT format: expected 3 dot-separated parts, got {}",
-            segments.len()
+            "JWT exceeds maximum length of {} bytes to prevent Denial of Service",
+            MAX_JWT_LEN
         );
     }
+    // splitn(4) bounds allocation even if the token is packed with dots.
+    let mut parts = token.splitn(4, '.');
+    match (parts.next(), parts.next(), parts.next(), parts.next()) {
+        (Some(header), Some(payload), Some(signature), None) => Ok([header, payload, signature]),
+        _ => anyhow::bail!("Invalid JWT format: expected 3 dot-separated parts"),
+    }
+}
+
+pub fn decode(token: &str) -> Result<JwtParts> {
+    let [header_b64, payload_b64, sig_b64] = split_jwt(token)?;
 
     let header_bytes = URL_SAFE_NO_PAD
-        .decode(segments[0])
+        .decode(header_b64)
         .context("Failed to decode JWT header (invalid base64url)")?;
     let header = String::from_utf8(header_bytes).context("JWT header is not valid UTF-8")?;
 
     let payload_bytes = URL_SAFE_NO_PAD
-        .decode(segments[1])
+        .decode(payload_b64)
         .context("Failed to decode JWT payload (invalid base64url)")?;
     let payload = String::from_utf8(payload_bytes).context("JWT payload is not valid UTF-8")?;
 
     let sig_bytes = URL_SAFE_NO_PAD
-        .decode(segments[2])
+        .decode(sig_b64)
         .context("Failed to decode JWT signature (invalid base64url)")?;
     let signature_hex = hex::encode(&sig_bytes);
 
@@ -202,22 +219,14 @@ pub fn find_vulnerabilities(header_json: &str) -> Vec<String> {
 }
 
 fn signing_input(token: &str) -> Result<String> {
-    let token = token.trim();
-    let segments: Vec<&str> = token.split('.').collect();
-    if segments.len() < 2 {
-        anyhow::bail!("Invalid JWT format");
-    }
-    Ok(format!("{}.{}", segments[0], segments[1]))
+    let [header, payload, _] = split_jwt(token)?;
+    Ok(format!("{}.{}", header, payload))
 }
 
 fn signature_bytes(token: &str) -> Result<Vec<u8>> {
-    let token = token.trim();
-    let segments: Vec<&str> = token.split('.').collect();
-    if segments.len() != 3 {
-        anyhow::bail!("Invalid JWT format: expected 3 parts");
-    }
+    let [_, _, signature] = split_jwt(token)?;
     URL_SAFE_NO_PAD
-        .decode(segments[2])
+        .decode(signature)
         .context("Failed to decode JWT signature")
 }
 

@@ -1,4 +1,5 @@
 use happy_cracking::crypto::jwt;
+use std::time::Instant;
 
 // Test token: {"alg":"HS256","typ":"JWT"}.{"sub":"1234567890","name":"John Doe","iat":1516239022}.signature
 // Generated from jwt.io with secret "secret"
@@ -131,6 +132,52 @@ fn decode_ctf_token() {
     let parts = jwt::decode(token).unwrap();
     assert!(parts.payload.contains("flag{jwt_d3c0d3d}"));
     assert_eq!(jwt::extract_algorithm(&parts.header), "none");
+}
+
+#[test]
+fn decode_rejects_oversized_token() {
+    let start = Instant::now();
+    // Middle segment alone is MAX_JWT_LEN bytes, so the full token is over the cap.
+    let token = format!("a.{}.c", "B".repeat(jwt::MAX_JWT_LEN));
+    let err = jwt::decode(&token)
+        .err()
+        .expect("oversized JWT should fail")
+        .to_string();
+    assert!(
+        err.contains("maximum length"),
+        "expected length rejection, got: {err}"
+    );
+    assert!(
+        start.elapsed().as_millis() < 100,
+        "oversized JWT must be rejected before decode work"
+    );
+}
+
+#[test]
+fn decode_accepts_token_at_size_limit() {
+    // "a." + pad + ".b" is 4 + pad chars; pad the middle segment to land exactly on MAX_JWT_LEN.
+    let pad = jwt::MAX_JWT_LEN - 4;
+    let token = format!("a.{}.b", "x".repeat(pad));
+    assert_eq!(token.len(), jwt::MAX_JWT_LEN);
+    let err = jwt::decode(&token)
+        .err()
+        .expect("token at size limit should fail base64, not the length check")
+        .to_string();
+    assert!(
+        !err.contains("maximum length"),
+        "exact size limit should pass the length check, got: {err}"
+    );
+}
+
+#[test]
+fn decode_rejects_dot_bomb_without_scanning_all_segments() {
+    let start = Instant::now();
+    let dots = ".".repeat(jwt::MAX_JWT_LEN);
+    assert!(jwt::decode(&dots).is_err());
+    assert!(
+        start.elapsed().as_millis() < 100,
+        "dot-packed JWT must not allocate a slice per delimiter"
+    );
 }
 
 #[test]
