@@ -51,8 +51,7 @@ fn push_char(out: &mut String, line_len: &mut usize, c: char) {
     *line_len += 1;
 }
 
-/// Append `=XX` without `format!` / heap allocation. HEX is ASCII so these
-/// `push` calls write single bytes.
+/// Append `=XX` hex escape.
 fn push_hex_encoded(out: &mut String, line_len: &mut usize, b: u8) {
     maybe_soft_break(out, line_len, 3);
     out.push('=');
@@ -61,12 +60,6 @@ fn push_hex_encoded(out: &mut String, line_len: &mut usize, b: u8) {
     *line_len += 3;
 }
 
-// Performance: the previous encoder allocated a `String` on every input byte —
-// `(b as char).to_string()` for printable ASCII and `format!("={}{}", ...)` for
-// escaped bytes — then joined them through `push_str`. On 10k mixed/binary
-// inputs that was ~9–12x slower than pushing chars into one pre-sized buffer
-// (`release`, 1.83). ASCII-only mail is ~1.1–1.7x because it skips `format!`
-// but still avoids the per-byte `to_string()`.
 pub fn encode(data: &[u8]) -> String {
     // Worst case is `=XX` (3 chars) per byte, plus occasional `=\n` soft breaks.
     let mut out = String::with_capacity(data.len().saturating_mul(3));

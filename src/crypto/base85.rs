@@ -53,7 +53,6 @@ pub fn encode(input: &str) -> String {
                 }
             }
         } else {
-            // Pad with zeros to 4 bytes
             let mut padded = [0u8; 4];
             padded[..chunk.len()].copy_from_slice(chunk);
             let value = u32::from_be_bytes(padded);
