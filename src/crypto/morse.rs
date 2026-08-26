@@ -1,18 +1,5 @@
 use anyhow::{Context, Result};
 use clap::Subcommand;
-use std::collections::HashMap;
-use std::sync::LazyLock;
-
-static ENCODE_LUT: LazyLock<[Option<&'static str>; 128]> = LazyLock::new(|| {
-    let mut table: [Option<&'static str>; 128] = [None; 128];
-    for &(ch, morse) in MORSE_TABLE {
-        let idx = ch as usize;
-        if idx < 128 {
-            table[idx] = Some(morse);
-        }
-    }
-    table
-});
 
 #[derive(Subcommand)]
 pub enum MorseAction {
@@ -97,11 +84,67 @@ const MORSE_TABLE: &[(char, &str)] = &[
     ('@', ".--.-."),
 ];
 
-static MORSE_TO_CHAR: LazyLock<HashMap<&'static str, char>> =
-    LazyLock::new(|| MORSE_TABLE.iter().map(|&(c, m)| (m, c)).collect());
+/// Pack Morse `.`/`-` into a small integer: start at 1, shift left per symbol,
+/// set the low bit for `-`. Starting at 1 encodes length, so `.` and `..` land
+/// in different slots. International Morse is at most 7 symbols (`$`), so the
+/// index always fits in `0..256`.
+const fn pack_morse(code: &[u8]) -> usize {
+    let mut idx = 1usize;
+    let mut i = 0;
+    while i < code.len() {
+        idx <<= 1;
+        if code[i] == b'-' {
+            idx |= 1;
+        }
+        i += 1;
+    }
+    idx
+}
+
+const ENCODE_LUT: [Option<&str>; 128] = {
+    let mut table: [Option<&str>; 128] = [None; 128];
+    let mut i = 0;
+    while i < MORSE_TABLE.len() {
+        let (ch, morse) = MORSE_TABLE[i];
+        let idx = ch as usize;
+        if idx < 128 {
+            table[idx] = Some(morse);
+        }
+        i += 1;
+    }
+    table
+};
+
+/// Packed Morse token → character.
+const DECODE_LUT: [Option<char>; 256] = {
+    let mut table = [None; 256];
+    let mut i = 0;
+    while i < MORSE_TABLE.len() {
+        let (ch, code) = MORSE_TABLE[i];
+        table[pack_morse(code.as_bytes())] = Some(ch);
+        i += 1;
+    }
+    table
+};
+
+fn lookup_morse(token: &str) -> Option<char> {
+    // `$` is the longest table entry (7 symbols); longer tokens cannot hit the LUT.
+    if token.is_empty() || token.len() > 7 {
+        return None;
+    }
+    let mut idx = 1usize;
+    for b in token.bytes() {
+        idx <<= 1;
+        match b {
+            b'.' => {}
+            b'-' => idx |= 1,
+            _ => return None,
+        }
+    }
+    DECODE_LUT[idx]
+}
 
 pub fn encode(input: &str) -> String {
-    let lut = &*ENCODE_LUT;
     let mut result = String::with_capacity(input.len() * 4);
     let mut first_word = true;
 
@@ -118,7 +161,7 @@ pub fn encode(input: &str) -> String {
                 c
             };
             let idx = upper as usize;
-            if let Some(morse) = if idx < 128 { lut[idx] } else { None } {
+            if let Some(morse) = if idx < 128 { ENCODE_LUT[idx] } else { None } {
                 if !first_char {
                     result.push(' ');
                 }
@@ -132,18 +175,20 @@ pub fn encode(input: &str) -> String {
 }
 
 pub fn decode(input: &str) -> Result<String> {
-    input
-        .split(" / ")
-        .map(|word| {
-            word.split_whitespace()
-                .map(|morse| {
-                    MORSE_TO_CHAR
-                        .get(morse)
-                        .copied()
-                        .with_context(|| format!("Unknown Morse code: {}", morse))
-                })
-                .collect::<Result<String>>()
-        })
-        .collect::<Result<Vec<_>>>()
-        .map(|words| words.join(" "))
+    let mut result = String::with_capacity(input.len());
+    let mut first_word = true;
+
+    for word in input.split(" / ") {
+        if !first_word {
+            result.push(' ');
+        }
+        first_word = false;
+        for morse in word.split_whitespace() {
+            result.push(
+                lookup_morse(morse).with_context(|| format!("Unknown Morse code: {}", morse))?,
+            );
+        }
+    }
+
+    Ok(result)
 }
