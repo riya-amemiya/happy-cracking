@@ -89,8 +89,6 @@ pub fn encode(input: &str, alphabet: &str) -> Result<String> {
             *b = mapping[(*b - b'a') as usize] - b'A' + b'a';
         }
     }
-    // Security: use safe String::from_utf8 instead of unsafe from_utf8_unchecked to prevent
-    // undefined behavior if a future refactor introduces non-ASCII byte mutations.
     Ok(String::from_utf8(bytes).expect("substitution of ASCII alphabetic bytes preserves UTF-8"))
 }
 
@@ -108,8 +106,6 @@ pub fn decode(input: &str, alphabet: &str) -> Result<String> {
             *b = reverse[(*b - b'a') as usize] - b'A' + b'a';
         }
     }
-    // Security: use safe String::from_utf8 instead of unsafe from_utf8_unchecked to prevent
-    // undefined behavior if a future refactor introduces non-ASCII byte mutations.
     Ok(String::from_utf8(bytes).expect("substitution of ASCII alphabetic bytes preserves UTF-8"))
 }
 
@@ -119,11 +115,7 @@ const ENGLISH_FREQ: [f64; 26] = [
     6.3, 9.1, 2.8, 1.0, 2.4, 0.15, 2.0, 0.07,
 ];
 
-// English bigram log-frequencies for scoring. Stored as a dense [[f64; 26]; 26]
-// table keyed by (first_letter - b'A', second_letter - b'A') so the hot path in
-// `solve` can look up scores with two integer indexes instead of hashing a
-// (u8, u8) tuple. Missing bigrams stay 0.0 which matches the old HashMap
-// "no entry = no score contribution" behavior.
+// English bigram log-frequencies for scoring.
 static BIGRAM_TABLE: LazyLock<[[f64; 26]; 26]> = LazyLock::new(|| {
     let common_bigrams = [
         ("TH", 3.56),
@@ -179,10 +171,6 @@ static BIGRAM_TABLE: LazyLock<[[f64; 26]; 26]> = LazyLock::new(|| {
     table
 });
 
-// Compact representation of `input`: one u8 per alphabetic character in the
-// range 0..=25 (uppercased). Non-alphabetic characters are dropped. This is
-// computed once per `solve` call and reused across every iteration of the
-// hill climb.
 fn extract_alpha_indices(input: &str) -> Vec<u8> {
     input
         .chars()
@@ -191,10 +179,6 @@ fn extract_alpha_indices(input: &str) -> Vec<u8> {
         .collect()
 }
 
-// Average bigram score of `input` after the `key` permutation is applied,
-// computed directly from the precomputed `indices` without materializing the
-// decrypted plaintext. `key[i]` is an uppercase ASCII byte in b'A'..=b'Z',
-// so `key[i] - b'A'` maps cleanly to a BIGRAM_TABLE row/column index.
 fn score_with_key(indices: &[u8], key: &[u8; 26], table: &[[f64; 26]; 26]) -> f64 {
     if indices.len() < 2 {
         return 0.0;
@@ -217,8 +201,6 @@ fn apply_key(input: &str, key: &[u8; 26]) -> String {
             *b = key[(*b - b'a') as usize] - b'A' + b'a';
         }
     }
-    // Security: use safe String::from_utf8 instead of unsafe from_utf8_unchecked to prevent
-    // undefined behavior if a future refactor introduces non-ASCII byte mutations.
     String::from_utf8(bytes).expect("substitution of ASCII alphabetic bytes preserves UTF-8")
 }
 
@@ -285,9 +267,6 @@ pub fn check_solve_iterations(iterations: usize) -> Result<()> {
 pub fn solve(input: &str, iterations: usize) -> Result<(String, String, f64)> {
     check_solve_iterations(iterations)?;
 
-    // Performance: preprocess the input once into compact 0..=25 indices and
-    // cache a reference to the bigram table so the hot loop below is a pure
-    // numeric scan with no allocations or hashing.
     let indices = extract_alpha_indices(input);
     let table = &*BIGRAM_TABLE;
 
@@ -315,8 +294,6 @@ pub fn solve(input: &str, iterations: usize) -> Result<(String, String, f64)> {
         }
     }
 
-    // Rebuild the decrypted plaintext once, outside the hot loop. The old
-    // implementation did this on every improving iteration.
     let best_text = apply_key(input, &best_key);
     let key_str: String = best_key.iter().map(|&b| b as char).collect();
     Ok((key_str, best_text, best_score))

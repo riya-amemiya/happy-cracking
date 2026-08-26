@@ -1,5 +1,3 @@
-// Shared utility functions used by multiple cipher modules.
-
 // Compute column ordering from a keyword for columnar transposition.
 // Returns a vector where order[i] is the rank of column i.
 pub fn column_order(key: &str) -> Vec<usize> {

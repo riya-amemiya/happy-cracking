@@ -57,7 +57,6 @@ pub fn encrypt(input: &str, key: &str) -> Result<String> {
     let key_len = key.len();
     let order = column_order(key);
 
-    // Pad input with 'X' to fill the grid
     let mut padded: Vec<char> = input.chars().collect();
     while !padded.len().is_multiple_of(key_len) {
         padded.push('X');
@@ -70,9 +69,6 @@ pub fn encrypt(input: &str, key: &str) -> Result<String> {
         col_at_rank[rank] = col;
     }
 
-    // Read columns in key order by indexing directly into the padded buffer.
-    // Skipping the Vec<Vec<char>> grid removes `total_len` char copies and
-    // `key_len + 1` heap allocations per encrypt call.
     let mut result = String::with_capacity(padded.len());
     for &col in &col_at_rank {
         for row in 0..num_rows {
@@ -112,8 +108,6 @@ pub fn decrypt(input: &str, key: &str) -> Result<String> {
 
     // `order[col]` is the rank at which column `col` appears in the ciphertext,
     // so its data occupies `chars[order[col] * num_rows .. (order[col]+1) * num_rows]`.
-    // Indexing straight into `chars` avoids the `Vec<Vec<char>>` column buffer
-    // and saves `total_len` char copies plus `key_len + 1` allocations.
     let mut result = String::with_capacity(total_len);
     for row in 0..num_rows {
         for col in 0..key_len {

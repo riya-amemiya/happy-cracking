@@ -12,8 +12,6 @@ pub fn rot47(input: &str) -> String {
         }
     }
 
-    // Security: avoid unsafe – use safe conversion to prevent undefined behavior
-    // if a future refactor accidentally produces invalid UTF-8 bytes.
     String::from_utf8(bytes).expect("rot47: only ASCII bytes were modified")
 }
 
@@ -27,7 +25,5 @@ pub fn rotate(input: &str, shift: u8) -> String {
         }
     }
 
-    // Security: avoid unsafe – use safe conversion to prevent undefined behavior
-    // if a future refactor accidentally produces invalid UTF-8 bytes.
     String::from_utf8(bytes).expect("rotate: only ASCII bytes were modified")
 }

@@ -139,9 +139,6 @@ pub fn xor_bytes(data: &[u8], key: &[u8]) -> Vec<u8> {
     if key.is_empty() {
         return data.to_vec();
     }
-    // Optimization: Process data in full chunks of key length to avoid
-    // expensive modulo operations per byte (i % key_len) and enable
-    // better compiler vectorization/unrolling.
     let mut out = Vec::with_capacity(data.len());
     let key_len = key.len();
 
@@ -171,9 +168,6 @@ fn hamming_distance(a: &[u8], b: &[u8]) -> u32 {
         .sum()
 }
 
-// Detect likely XOR key length using normalized Hamming distance.
-// Returns a sorted list of (key_length, normalized_distance) pairs,
-// with the most likely key lengths first (lowest distance).
 pub fn detect_key_length(data: &[u8], max_len: usize) -> Vec<(usize, f64)> {
     let max_key_len = max_len.min(data.len() / 2);
     if max_key_len < 2 {
@@ -182,7 +176,6 @@ pub fn detect_key_length(data: &[u8], max_len: usize) -> Vec<(usize, f64)> {
 
     let mut results: Vec<(usize, f64)> = (2..=max_key_len)
         .filter_map(|key_len| {
-            // Use as many blocks as possible for better accuracy
             let num_blocks = data.len() / key_len;
             if num_blocks < 2 {
                 return None;
@@ -371,7 +364,6 @@ pub fn crack_repeating_key(
         }
         vec![k.min(data.len())]
     } else if data.len() < 4 {
-        // Fall back to single-byte
         vec![1]
     } else {
         let mut lens: Vec<usize> = detect_key_length(data, max_len)
@@ -432,7 +424,6 @@ pub fn crib_drag(ciphertext: &[u8], crib: &[u8]) -> Vec<CribHit> {
             .map(|(c, p)| c ^ p)
             .collect();
 
-        // Expand key fragment cyclically across a local window for context
         let win_start = offset.saturating_sub(8);
         let win_end = (offset + crib.len() + 8).min(ciphertext.len());
         let window = &ciphertext[win_start..win_end];
