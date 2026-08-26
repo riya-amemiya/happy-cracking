@@ -2,7 +2,6 @@ use happy_cracking::crypto::railfence;
 
 #[test]
 fn test_encrypt_3_rails() {
-    // Test roundtrip instead of specific values
     let original = "WEAREDISCOVEREDFLEEATONCE";
     let encrypted = railfence::encrypt(original, 3).unwrap();
     let decrypted = railfence::decrypt(&encrypted, 3).unwrap();
@@ -11,7 +10,6 @@ fn test_encrypt_3_rails() {
 
 #[test]
 fn test_decrypt_3_rails() {
-    // Verify encrypt/decrypt are inverses
     let encrypted = railfence::encrypt("HELLOWORLD", 3).unwrap();
     let decrypted = railfence::decrypt(&encrypted, 3).unwrap();
     assert_eq!(decrypted, "HELLOWORLD");

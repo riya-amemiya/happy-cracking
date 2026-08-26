@@ -5,7 +5,6 @@ use sha2::{Digest, Sha256};
 // directly: SHA-256(secret || message || padding || append) must equal the
 // hash produced by the extension function.
 fn verify_extension(secret: &[u8], message: &[u8], append: &[u8]) {
-    // Compute H(secret || message)
     let mut hasher = Sha256::new();
     hasher.update(secret);
     hasher.update(message);
@@ -13,7 +12,6 @@ fn verify_extension(secret: &[u8], message: &[u8], append: &[u8]) {
 
     let original_len = (secret.len() + message.len()) as u64;
 
-    // Perform the extension attack
     let result = hash_ext::sha256_extend(&original_hash, original_len, append).unwrap();
 
     // Build the full forged message: secret || message || forged_suffix
@@ -22,7 +20,6 @@ fn verify_extension(secret: &[u8], message: &[u8], append: &[u8]) {
     full_message.extend_from_slice(message);
     full_message.extend_from_slice(&result.forged_suffix);
 
-    // Compute the expected hash directly
     let mut expected_hasher = Sha256::new();
     expected_hasher.update(&full_message);
     let expected_hash = hex::encode(expected_hasher.finalize());
@@ -32,7 +29,6 @@ fn verify_extension(secret: &[u8], message: &[u8], append: &[u8]) {
         "Extension hash does not match direct SHA-256 computation"
     );
 
-    // Verify the forged suffix starts with padding and ends with append data
     let suffix_len = result.forged_suffix.len();
     assert!(suffix_len > append.len());
     assert_eq!(&result.forged_suffix[suffix_len - append.len()..], append);

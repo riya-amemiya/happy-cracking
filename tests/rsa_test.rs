@@ -128,7 +128,6 @@ fn test_wiener_attack() {
 
     let recovered_d = rsa::wiener_attack(&e, &n).unwrap();
 
-    // Verify the recovered d works for encryption/decryption
     let m = BigUint::from(42u32);
     let c = rsa::big_modpow(&m, &e, &n).unwrap();
     let decrypted = rsa::big_modpow(&c, &recovered_d, &n).unwrap();
@@ -197,8 +196,6 @@ fn test_integer_nth_root_imperfect() {
 
 #[test]
 fn test_full_rsa_ctf_scenario() {
-    // Simulate a CTF scenario:
-    // Given n, e, and c; factor n (close primes), compute d, decrypt
     let p = BigUint::from(127u32);
     let q = BigUint::from(131u32);
     let n = &p * &q; // 16637
@@ -206,20 +203,16 @@ fn test_full_rsa_ctf_scenario() {
     let phi = (&p - BigUint::one()) * (&q - BigUint::one());
     let d = rsa::big_modinv(&e, &phi).unwrap();
 
-    // Encrypt a message
     let m = BigUint::from(9999u32);
     let c = rsa::big_modpow(&m, &e, &n).unwrap();
 
-    // Factor n (close primes)
     let (fp, fq) = rsa::fermat_factor(&n, 1_000_000).unwrap();
     assert_eq!(&fp * &fq, n);
 
-    // Compute d from factors
     let recovered_phi = (&fp - BigUint::one()) * (&fq - BigUint::one());
     let recovered_d = rsa::big_modinv(&e, &recovered_phi).unwrap();
     assert_eq!(recovered_d, d);
 
-    // Decrypt
     let decrypted = rsa::big_modpow(&c, &recovered_d, &n).unwrap();
     assert_eq!(decrypted, m);
 }

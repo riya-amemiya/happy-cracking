@@ -11,7 +11,6 @@ fn test_des_roundtrip() {
 
 #[test]
 fn test_des_known_vector() {
-    // DES known answer test
     let key = "0123456789abcdef";
     let plaintext = "4e6f772069732074";
     let encrypted = des_cipher::des_encrypt(plaintext, key).unwrap();

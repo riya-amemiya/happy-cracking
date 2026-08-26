@@ -26,7 +26,6 @@ fn test_pubkey_larger() {
 
 #[test]
 fn test_shared_secret_agreement() {
-    // Classic DH key exchange: both parties compute the same shared secret.
     let g = BigUint::from(5u32);
     let p = BigUint::from(23u32);
     let a = BigUint::from(6u32);
@@ -68,7 +67,6 @@ fn test_bsgs_basic() {
     let order = BigUint::from(28u32);
 
     let x = dh::baby_step_giant_step(&g, &target, &p, &order).unwrap();
-    // Verify: g^x mod p = target
     assert_eq!(g.modpow(&x, &p), target);
 }
 
@@ -98,7 +96,6 @@ fn test_bsgs_dlog_generator() {
 
 #[test]
 fn test_bsgs_ctf_scenario() {
-    // Simulate CTF: given public key, recover private key via BSGS.
     // g=2, p=101, order=100
     let g = BigUint::from(2u32);
     let p = BigUint::from(101u32);
@@ -115,7 +112,6 @@ fn test_bsgs_ctf_scenario() {
 
 #[test]
 fn test_full_dh_exchange_and_break() {
-    // Full scenario: DH exchange, then break using BSGS.
     let g = BigUint::from(5u32);
     let p = BigUint::from(23u32);
     let order = BigUint::from(22u32);
@@ -125,13 +121,10 @@ fn test_full_dh_exchange_and_break() {
     let a_pub = dh::compute_pubkey(&g, &a_priv, &p).unwrap();
     let b_pub = dh::compute_pubkey(&g, &b_priv, &p).unwrap();
 
-    // Shared secret via normal exchange
     let shared = dh::compute_shared_secret(&b_pub, &a_priv, &p).unwrap();
 
-    // Attacker uses BSGS to recover a's private key from a_pub
     let recovered_a = dh::baby_step_giant_step(&g, &a_pub, &p, &order).unwrap();
 
-    // Attacker computes shared secret using recovered key
     let broken_secret = dh::compute_shared_secret(&b_pub, &recovered_a, &p).unwrap();
     assert_eq!(shared, broken_secret);
 }

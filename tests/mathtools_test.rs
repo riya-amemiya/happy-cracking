@@ -87,7 +87,6 @@ fn test_modpow_mod_one() {
 
 #[test]
 fn test_modpow_rsa_style() {
-    // Simulating RSA: m^e mod n, then c^d mod n
     // Small example: p=61, q=53, n=3233, e=17, d=2753
     let n = 3233_u128;
     let e = 17_u128;
@@ -120,7 +119,6 @@ fn test_modinv_large_inputs() {
     let m = u128::MAX;
     let a = u128::MAX - 2;
 
-    // Inverse exists.
     let res = mathtools::modinv(a, m).unwrap();
     // 170141183460469231731687303715884105727
     assert_eq!(res, 170141183460469231731687303715884105727);

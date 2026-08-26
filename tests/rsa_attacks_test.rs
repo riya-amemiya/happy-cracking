@@ -45,7 +45,6 @@ fn test_hastad_broadcast_e3_flag() {
 fn test_hastad_broadcast_insufficient_ciphertexts() {
     let c1 = BigUint::from(100u32);
     let n1 = BigUint::from(1000u32);
-    // e=3 but only 1 pair provided
     assert!(rsa::hastad_broadcast(&[c1], &[n1], 3).is_err());
 }
 
@@ -154,7 +153,6 @@ fn test_pollard_p1_even() {
 
 #[test]
 fn test_pollard_p1_full_ctf_scenario() {
-    // Factor n, compute d, decrypt
     let p = BigUint::from(1049u32);
     let q = BigUint::from(1061u32);
     let n = &p * &q;
@@ -228,7 +226,6 @@ fn test_pollard_rho_full_ctf_scenario() {
 
 #[test]
 fn test_hastad_then_verify_roundtrip() {
-    // Encrypt m=99 under 3 different RSA keys with e=3, then recover via Hastad
     let m = BigUint::from(99u32);
     let e = 3u32;
 

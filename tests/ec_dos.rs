@@ -25,7 +25,6 @@ fn test_factor_large_composite_dos_protection() {
     // Note: factorize_biguint is available in primes module.
     let factors = happy_cracking::crypto::primes::factorize_biguint(n.clone());
 
-    // Verify factors: P and Q.
     assert_eq!(factors.len(), 2);
     // Factors are sorted
     assert_eq!(factors[0].0, p);
@@ -55,7 +54,6 @@ fn test_pohlig_hellman_dos_large_order() {
 
     let result = ec::run(action);
 
-    // We expect an error.
     assert!(result.is_err());
 
     let err_msg = result.unwrap_err().to_string();
@@ -80,7 +78,6 @@ fn test_point_order_dos_large_p() {
 
     let result = ec::run(action);
 
-    // We expect an error due to iteration limit.
     assert!(result.is_err());
 
     let err_msg = result.unwrap_err().to_string();

@@ -106,7 +106,6 @@ fn test_key_length_estimation_returns_sorted() {
     let key = "ABC";
     let ciphertext = vigenere::encrypt(plaintext, key).unwrap();
     let candidates = vigenere::estimate_key_length(&ciphertext, 15);
-    // Verify we get results and they have IoC values
     for &(len, ioc) in &candidates {
         assert!(len >= 1);
         assert!(ioc >= 0.0);

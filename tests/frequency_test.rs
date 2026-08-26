@@ -47,11 +47,9 @@ fn test_analyze_sort_order() {
     assert_eq!(result.frequencies[0].0, 'A');
     assert_eq!(result.frequencies[0].1, 3);
 
-    // Check B and C have count 2
     assert_eq!(result.frequencies[1].1, 2);
     assert_eq!(result.frequencies[2].1, 2);
 
-    // Check stability (alphabetical for ties)
     assert_eq!(result.frequencies[1].0, 'B');
     assert_eq!(result.frequencies[2].0, 'C');
 
