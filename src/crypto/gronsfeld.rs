@@ -41,9 +41,6 @@ fn validate_key(key: &str) -> Result<Vec<u8>> {
     Ok(key.bytes().map(|b| b - b'0').collect())
 }
 
-// Direct byte mutation avoids UTF-8 char boundary decoding and per-character
-// allocation overhead from chars().map().collect(). Safe because Gronsfeld only
-// transforms ASCII alphabetic bytes to other ASCII alphabetic bytes.
 pub fn encrypt(input: &str, key: &str) -> Result<String> {
     let shifts = validate_key(key)?;
     let mut bytes = input.as_bytes().to_vec();
@@ -58,10 +55,6 @@ pub fn encrypt(input: &str, key: &str) -> Result<String> {
         }
     }
 
-    // Security: use safe String::from_utf8 instead of unsafe from_utf8_unchecked.
-    // While current logic only mutates ASCII alphabetic bytes, a future refactoring
-    // mistake could break the UTF-8 invariant, causing undefined behavior.
-    // The safe version returns a clear error instead of silently producing invalid strings.
     String::from_utf8(bytes).map_err(|e| anyhow::anyhow!("Invalid UTF-8 after encryption: {}", e))
 }
 
@@ -79,9 +72,5 @@ pub fn decrypt(input: &str, key: &str) -> Result<String> {
         }
     }
 
-    // Security: use safe String::from_utf8 instead of unsafe from_utf8_unchecked.
-    // Defense in depth: even though the current byte manipulation preserves UTF-8
-    // validity, using the safe API prevents undefined behavior if the logic is
-    // ever modified to handle non-ASCII bytes incorrectly.
     String::from_utf8(bytes).map_err(|e| anyhow::anyhow!("Invalid UTF-8 after decryption: {}", e))
 }

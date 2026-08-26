@@ -82,13 +82,9 @@ pub fn run(action: VigenereAction) -> Result<()> {
     Ok(())
 }
 
-// Performance: iterate bytes (not chars) and mutate in place to avoid
-// UTF-8 decode + char->String re-encode + intermediate Vec<u8> for the key.
 // Non-ASCII UTF-8 continuation bytes have the high bit set, so
 // `is_ascii_alphabetic()` returns false for them and they pass through
 // unchanged — preserving the original char-based semantics exactly.
-// Key bytes are validated as ASCII alphabetic; `| 0x20` lowercases an
-// ASCII letter without allocating a separate uppercase Vec.
 pub fn encrypt(input: &str, key: &str) -> Result<String> {
     let key_bytes = key.as_bytes();
     if key_bytes.is_empty() || !key_bytes.iter().all(u8::is_ascii_alphabetic) {
@@ -108,8 +104,6 @@ pub fn encrypt(input: &str, key: &str) -> Result<String> {
         }
     }
 
-    // Security: avoid unsafe – use safe conversion to prevent undefined behavior
-    // if a future refactor accidentally produces invalid UTF-8 bytes.
     String::from_utf8(bytes).context("vigenere encrypt: produced invalid UTF-8")
 }
 
@@ -132,8 +126,6 @@ pub fn decrypt(input: &str, key: &str) -> Result<String> {
         }
     }
 
-    // Security: avoid unsafe – use safe conversion to prevent undefined behavior
-    // if a future refactor accidentally produces invalid UTF-8 bytes.
     String::from_utf8(bytes).context("vigenere decrypt: produced invalid UTF-8")
 }
 
@@ -173,8 +165,6 @@ fn kasiski_examination(input: &str, max_key_len: usize) -> HashMap<usize, usize>
         }
         for pos_list in positions.values() {
             if pos_list.len() >= 2 {
-                // Optimization: only consider adjacent occurrences.
-                // This reduces complexity from O(N^2) to O(N).
                 for i in 0..pos_list.len() - 1 {
                     distances.push(pos_list[i + 1] - pos_list[i]);
                 }
@@ -182,11 +172,8 @@ fn kasiski_examination(input: &str, max_key_len: usize) -> HashMap<usize, usize>
         }
     }
 
-    // Count factor occurrences
     let mut factor_counts: HashMap<usize, usize> = HashMap::new();
     for d in &distances {
-        // Optimization: only check factors up to max_key_len.
-        // We only care about factors that are plausible key lengths.
         let limit = (*d).min(max_key_len);
         for f in 2..=limit {
             if d % f == 0 {
@@ -230,11 +217,6 @@ pub fn estimate_key_length(input: &str, max_length: usize) -> Vec<(usize, f64)> 
 
     for key_len in 1..=max_length.min(letters.len() / 2) {
         // Split into columns and compute average IoC.
-        // Performance: stride through `letters` in place instead of allocating a
-        // fresh Vec<u8> for every column. The previous code allocated `key_len`
-        // Vecs per candidate (up to ~210 Vecs total for max_length=20). Counting
-        // directly into a stack-resident [usize; 26] also fuses the column build
-        // with the IoC tally so we only touch each letter once.
         let mut total_ioc = 0.0;
         let mut count = 0;
         for col in 0..key_len {
@@ -288,10 +270,6 @@ pub fn recover_key(input: &str, key_length: usize) -> Result<String> {
     let letters = extract_alpha(input);
     let mut key = String::with_capacity(key_length);
 
-    // Performance: count each column's letters directly into a stack-allocated
-    // [usize; 26] via stride iteration. The previous version allocated a
-    // Vec<u8> per column purely to be re-counted inside find_best_shift, doing
-    // two passes over the same data and leaking the heap allocation.
     for col in 0..key_length {
         let mut counts = [0usize; 26];
         let mut n: usize = 0;

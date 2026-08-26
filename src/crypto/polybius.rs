@@ -34,7 +34,6 @@ const GRID: [char; 25] = [
 ];
 
 pub fn encrypt(input: &str) -> Result<String> {
-    // Optimization: Avoid `format!` overhead in hot loop and `Vec<String>::join`
     let mut bytes = Vec::with_capacity(input.len() * 3);
 
     for b in input.bytes() {
@@ -68,7 +67,6 @@ pub fn encrypt(input: &str) -> Result<String> {
         anyhow::bail!("Failed to encrypt input");
     }
 
-    // ASCII digits and spaces only; validate instead of from_utf8_unchecked.
     Ok(String::from_utf8(bytes).expect("polybius encrypt produces ASCII digits and spaces"))
 }
 
@@ -77,7 +75,6 @@ pub fn decrypt(input: &str) -> Result<String> {
         return Ok(String::new());
     }
 
-    // Optimization: Avoid dynamic allocations in loop by working with bytes directly
     let mut result = String::with_capacity(input.len() / 3);
     for token in input.split_whitespace() {
         let bytes = token.as_bytes();

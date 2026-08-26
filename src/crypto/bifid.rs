@@ -53,10 +53,8 @@ pub fn encrypt(input: &str, key: &str) -> Result<String> {
     }
 
     let square = build_polybius_square(key);
-    // Performance: precompute reverse lookup for O(1) char-to-index mapping
     let reverse = build_reverse_lookup(&square);
 
-    // Step 1: get row and column coordinates
     let mut rows = Vec::with_capacity(letters.len());
     let mut cols = Vec::with_capacity(letters.len());
     for &c in &letters {
@@ -71,7 +69,6 @@ pub fn encrypt(input: &str, key: &str) -> Result<String> {
     combined.extend_from_slice(&rows);
     combined.extend_from_slice(&cols);
 
-    // Step 3: read pairs and convert back
     let result: String = combined
         .chunks(2)
         .map(|pair| square[pair[0] * 5 + pair[1]])
@@ -91,10 +88,8 @@ pub fn decrypt(input: &str, key: &str) -> Result<String> {
     }
 
     let square = build_polybius_square(key);
-    // Performance: precompute reverse lookup for O(1) char-to-index mapping
     let reverse = build_reverse_lookup(&square);
 
-    // Step 1: convert each ciphertext letter to row/col pair
     let mut coords = Vec::with_capacity(letters.len() * 2);
     for &c in &letters {
         let (r, col) = find_in_square_fast(&reverse, c)
@@ -108,7 +103,6 @@ pub fn decrypt(input: &str, key: &str) -> Result<String> {
     let rows = &coords[..half];
     let cols = &coords[half..];
 
-    // Step 3: pair up row[i] and col[i] to get original letters
     let result: String = rows
         .iter()
         .zip(cols.iter())

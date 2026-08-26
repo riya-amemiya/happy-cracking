@@ -74,7 +74,6 @@ pub fn encrypt(input: &str, key: &str) -> Result<String> {
     }
 
     let matrix = build_polybius_square(key);
-    // Performance: precompute reverse lookup for O(1) char-to-index mapping
     let reverse = build_reverse_lookup(&matrix);
     let digraphs = prepare_digraphs(input);
 
@@ -124,7 +123,6 @@ pub fn decrypt(input: &str, key: &str) -> Result<String> {
     }
 
     let matrix = build_polybius_square(key);
-    // Performance: precompute reverse lookup for O(1) char-to-index mapping
     let reverse = build_reverse_lookup(&matrix);
 
     let mut result = String::new();

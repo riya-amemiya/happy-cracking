@@ -68,7 +68,6 @@ fn build_grid(key: &str) -> Result<Vec<char>> {
         anyhow::bail!("Grid key must be exactly 36 characters (A-Z and 0-9)");
     }
 
-    // Verify all characters are alphanumeric
     for &c in &grid {
         if !c.is_ascii_alphanumeric() {
             anyhow::bail!("Grid key must contain only letters A-Z and digits 0-9");
@@ -91,7 +90,6 @@ pub fn encrypt(input: &str, key: &str, transposition_key: &str) -> Result<String
 
     let grid = build_grid(key)?;
 
-    // Step 1: substitute each character with ADFGVX pair
     let mut fractionated = String::new();
     for c in input.to_uppercase().chars() {
         if !c.is_ascii_alphanumeric() {
@@ -107,12 +105,10 @@ pub fn encrypt(input: &str, key: &str, transposition_key: &str) -> Result<String
         return Ok(String::new());
     }
 
-    // Step 2: columnar transposition
     let tk_len = transposition_key.len();
     let order = column_order(transposition_key);
     let chars: Vec<char> = fractionated.chars().collect();
 
-    // Fill grid row by row into columns
     let num_rows = chars.len().div_ceil(tk_len);
     let mut columns: Vec<Vec<char>> = vec![Vec::with_capacity(num_rows); tk_len];
     for row in 0..num_rows {
@@ -124,7 +120,6 @@ pub fn encrypt(input: &str, key: &str, transposition_key: &str) -> Result<String
         }
     }
 
-    // Read columns in key order
     let mut sorted_cols: Vec<usize> = (0..tk_len).collect();
     sorted_cols.sort_by_key(|&col| order[col]);
 
@@ -154,7 +149,6 @@ pub fn decrypt(input: &str, key: &str, transposition_key: &str) -> Result<String
         return Ok(String::new());
     }
 
-    // Step 1: reverse columnar transposition
     let tk_len = transposition_key.len();
     let total = adfgvx_chars.len();
     let num_rows = total.div_ceil(tk_len);
@@ -164,7 +158,6 @@ pub fn decrypt(input: &str, key: &str, transposition_key: &str) -> Result<String
 
     let order = column_order(transposition_key);
 
-    // Determine the length of each column in sorted order
     let mut sorted_cols: Vec<usize> = (0..tk_len).collect();
     sorted_cols.sort_by_key(|&col| order[col]);
 
@@ -180,7 +173,6 @@ pub fn decrypt(input: &str, key: &str, transposition_key: &str) -> Result<String
         pos += col_len;
     }
 
-    // Read row by row to get the fractionated string
     let mut fractionated = String::new();
     for row in 0..num_rows {
         for column in &columns {
@@ -190,7 +182,6 @@ pub fn decrypt(input: &str, key: &str, transposition_key: &str) -> Result<String
         }
     }
 
-    // Step 2: convert ADFGVX pairs back to characters
     let frac_chars: Vec<char> = fractionated.chars().collect();
     if !frac_chars.len().is_multiple_of(2) {
         anyhow::bail!("Invalid ciphertext: fractionated text has odd length");

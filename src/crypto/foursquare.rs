@@ -68,14 +68,12 @@ pub fn encrypt(input: &str, key1: &str, key2: &str) -> Result<String> {
         return Ok(String::new());
     }
 
-    // Pad with X if odd length
     if !letters.len().is_multiple_of(2) {
         letters.push('X');
     }
 
     let top_right = build_polybius_square(key1);
     let bottom_left = build_polybius_square(key2);
-    // Performance: precompute reverse lookup for O(1) char-to-index mapping
     let std_reverse = build_reverse_lookup(&STANDARD_SQUARE);
 
     let mut result = String::new();
@@ -112,7 +110,6 @@ pub fn decrypt(input: &str, key1: &str, key2: &str) -> Result<String> {
 
     let top_right = build_polybius_square(key1);
     let bottom_left = build_polybius_square(key2);
-    // Performance: precompute reverse lookups for O(1) char-to-index mapping
     let tr_reverse = build_reverse_lookup(&top_right);
     let bl_reverse = build_reverse_lookup(&bottom_left);
 
@@ -124,7 +121,6 @@ pub fn decrypt(input: &str, key1: &str, key2: &str) -> Result<String> {
         let (row_b, col_a) = find_in_square_fast(&bl_reverse, pair[1])
             .ok_or_else(|| anyhow::anyhow!("Character {} not in square", pair[1]))?;
 
-        // Look up in standard squares
         result.push(STANDARD_SQUARE[row_a * 5 + col_a]);
         result.push(STANDARD_SQUARE[row_b * 5 + col_b]);
     }
