@@ -1,6 +1,49 @@
 use happy_cracking::crypto::xor;
 
 #[test]
+fn detect_key_length_caps_excessive_max() {
+    // SECURITY: `--max-len` is a user-controlled loop bound. Without a hard cap,
+    // `detect_key_length` is O(n * max_len) Hamming-distance work and can hang.
+    let data = vec![0x41u8; 600];
+    let results = xor::detect_key_length(&data, usize::MAX);
+    assert!(
+        results.iter().all(|&(len, _)| len <= xor::MAX_KEY_LENGTH),
+        "key lengths must be capped at {}, got {:?}",
+        xor::MAX_KEY_LENGTH,
+        results.iter().map(|&(len, _)| len).collect::<Vec<_>>()
+    );
+}
+
+#[test]
+fn check_key_length_rejects_zero() {
+    let err = xor::check_key_length(0).unwrap_err();
+    assert!(err.to_string().contains("at least 1"));
+}
+
+#[test]
+fn check_key_length_rejects_excessive() {
+    let err = xor::check_key_length(xor::MAX_KEY_LENGTH + 1).unwrap_err();
+    assert!(err.to_string().contains("Denial of Service"));
+}
+
+#[test]
+fn check_key_length_accepts_limit() {
+    xor::check_key_length(xor::MAX_KEY_LENGTH).unwrap();
+}
+
+#[test]
+fn keylength_run_rejects_excessive_max_len() {
+    let input = hex::encode(b"HELLO WORLD HELLO WORLD HELLO WORLD HELLO WORLD");
+    let err = xor::run(xor::XorAction::Keylength {
+        input,
+        max_len: xor::MAX_KEY_LENGTH + 1,
+        top: 5,
+    })
+    .unwrap_err();
+    assert!(err.to_string().contains("Denial of Service"));
+}
+
+#[test]
 fn detect_key_length_repeating_key() {
     let plaintext = b"HELLO WORLD HELLO WORLD HELLO WORLD HELLO WORLD";
     let key = b"ABC";
