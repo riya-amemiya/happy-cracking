@@ -40,10 +40,6 @@ const KEYPAD: &[(char, &[char])] = &[
 ];
 
 /// `DECODE_LUT[digit][press_count - 1]` → letter for T9 keys 2–9.
-///
-/// A `[Option<char>; 4]` per digit 0–9 replaces `HashMap<(char, usize), char>`.
-/// T9 is ASCII digits 2–9 with 1–4 presses, so decode is two array indexes
-/// instead of hashing a tuple. Built at compile time (no `LazyLock`).
 const fn build_decode_lut() -> [[Option<char>; 4]; 10] {
     let mut lut = [[None; 4]; 10];
     let mut i = 0;
@@ -62,11 +58,7 @@ const fn build_decode_lut() -> [[Option<char>; 4]; 10] {
 
 const DECODE_LUT: [[Option<char>; 4]; 10] = build_decode_lut();
 
-// Pre-computed lookup table mapping each uppercase letter (A-Z) to its phone
-// keypad multi-tap string. This eliminates runtime string allocation from
-// `digit.to_string().repeat(pos + 1)` which previously created intermediate
-// String objects on every call. The first byte of each entry is the keypad
-// digit, so encode can group same-key letters without a HashMap.
+// First byte of each entry is the keypad digit.
 const PHONE_PRESS_TABLE: [&str; 26] = [
     "2",    // A
     "22",   // B
@@ -98,7 +90,7 @@ const PHONE_PRESS_TABLE: [&str; 26] = [
 
 pub fn encode(input: &str) -> String {
     let upper = input.to_uppercase();
-    // Pre-allocate output assuming ~3 chars per input char (press digits + separators)
+    // ~3 chars per input char (press digits + separators).
     let mut result = String::with_capacity(upper.len() * 4);
     let mut prev_key: Option<u8> = None;
     let mut group_has_content = false;
@@ -121,14 +113,12 @@ pub fn encode(input: &str) -> String {
 
         let idx = (c as u8 - b'A') as usize;
         let presses = PHONE_PRESS_TABLE[idx];
-        // First byte of the press string IS the keypad digit — no HashMap.
+        // First byte of the press string is the keypad digit.
         let cur_key = Some(presses.as_bytes()[0]);
 
         if prev_key == cur_key {
-            // Same key group, separate with dash
             result.push('-');
         } else {
-            // Different key group, separate with space
             if group_has_content {
                 result.push(' ');
             }

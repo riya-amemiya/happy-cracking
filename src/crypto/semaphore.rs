@@ -59,9 +59,6 @@ const SEMAPHORE_MAP: &[(char, &str)] = &[
     ('Z', "6-5"),
 ];
 
-// Performance: [Option<&str>; 26] array indexed by (letter - 'A') replaces
-// HashMap<char, &str> for encoding. Eliminates hashing overhead, bucket chasing,
-// and key comparison — a direct O(1) array index vs amortized O(1) HashMap lookup.
 const ENCODE_LUT: [Option<&str>; 26] = {
     let mut table: [Option<&str>; 26] = [None; 26];
     let mut i = 0;
@@ -76,9 +73,6 @@ const ENCODE_LUT: [Option<&str>; 26] = {
 static SEMAPHORE_TO_CHAR: LazyLock<HashMap<&'static str, char>> =
     LazyLock::new(|| SEMAPHORE_MAP.iter().map(|&(c, code)| (code, c)).collect());
 
-// Performance: build output directly into a pre-allocated String instead of
-// collecting into Vec<&str> and joining. This avoids the intermediate Vec
-// allocation and the second pass that join() performs to concatenate.
 pub fn encode(input: &str) -> Result<String> {
     if input.is_empty() {
         return Ok(String::new());

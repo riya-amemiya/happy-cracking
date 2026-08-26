@@ -32,8 +32,7 @@ pub fn encode(input: &str) -> String {
         return String::new();
     }
 
-    // Optimization: Avoid intermediate Vec<String> and .join() overhead.
-    // Pre-allocate assuming max 3 chars per letter (e.g., "26-").
+    // Max 3 chars per letter (e.g. "26-").
     let mut out = String::with_capacity(input.len() * 3);
     let mut in_number_seq = false;
 
