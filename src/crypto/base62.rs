@@ -34,7 +34,6 @@ const ALPHABET: &[u8] = b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqr
 const BASE: u32 = 62;
 
 // Reverse lookup table: maps byte value -> alphabet index (0..61), or 0xFF for invalid.
-// This replaces O(62) linear scan per character with O(1) array indexing.
 static DECODE_TABLE: LazyLock<[u8; 256]> = LazyLock::new(|| {
     let mut table = [0xFFu8; 256];
     for (i, &c) in ALPHABET.iter().enumerate() {
