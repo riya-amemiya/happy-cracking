@@ -4,7 +4,6 @@ use num_traits::One;
 use happy_cracking::crypto::ec;
 
 // Test curve: y^2 = x^3 + x + 6 mod 11
-// This small curve has known points for verification.
 
 fn small_curve_a() -> BigInt {
     BigInt::from(1)
@@ -66,9 +65,7 @@ fn test_point_doubling() {
     };
     // Verify point is on curve: 6^2 = 36, 3^3 + 2*3 + 3 = 27 + 6 + 3 = 36 mod 97. Good.
     let result = ec::point_add(&pt, &pt, &a, &p).unwrap();
-    // 2P should be another valid point on the curve
     if let ec::ECPoint::Affine { x, y } = &result {
-        // Verify on curve: y^2 = x^3 + 2x + 3 mod 97
         let lhs = (y * y) % &p;
         let rhs = ((x * x * x) + &a * x + BigInt::from(3)) % &p;
         let lhs_pos = ((lhs % &p) + &p) % &p;
@@ -139,9 +136,7 @@ fn test_point_order_basic() {
         y: BigInt::from(6),
     };
     let order = ec::point_order(&pt, &a, &p).unwrap();
-    // Order must be > 1 for a non-infinity point
     assert!(order > BigUint::one());
-    // n*P should be infinity
     let result = ec::scalar_multiply(&pt, &order, &a, &p).unwrap();
     assert_eq!(result, ec::ECPoint::Infinity);
 }
@@ -200,14 +195,11 @@ fn test_pohlig_hellman_simple() {
     };
     let order = ec::point_order(&generator, &a, &p).unwrap();
 
-    // Pick a known scalar and compute Q = n*G
     let n_secret = BigUint::from(42u32);
     let target = ec::scalar_multiply(&generator, &n_secret, &a, &p).unwrap();
 
-    // Solve ECDLP using Pohlig-Hellman
     let recovered = ec::pohlig_hellman(&generator, &target, &a, &p, &order).unwrap();
 
-    // Verify: recovered * G should equal target
     let check = ec::scalar_multiply(&generator, &recovered, &a, &p).unwrap();
     assert_eq!(check, target);
 }

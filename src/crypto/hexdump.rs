@@ -38,9 +38,6 @@ pub fn dump_bytes(data: &[u8]) -> String {
         return String::new();
     }
 
-    // Optimization: Avoid `format!` overhead in hot loop and preallocate
-    // Each line has a fixed maximum length of 68 chars. Build as bytes then
-    // convert once so the hot path stays allocation-light without unsafe UTF-8.
     let num_lines = data.len().div_ceil(16);
     let mut output = Vec::with_capacity(num_lines * 68);
     let hex_chars = b"0123456789abcdef";
@@ -48,9 +45,8 @@ pub fn dump_bytes(data: &[u8]) -> String {
     for (line_idx, chunk) in data.chunks(16).enumerate() {
         let offset = line_idx * 16;
 
-        // Offset: at least 8 hex chars, more if needed (> 4GB)
         let mut offset_hex = offset;
-        let mut buf = [b'0'; 16]; // Max 64-bit hex is 16 chars
+        let mut buf = [b'0'; 16];
         let mut start_idx = 16;
 
         loop {
@@ -61,7 +57,6 @@ pub fn dump_bytes(data: &[u8]) -> String {
                 break;
             }
         }
-        // Ensure at least 8 chars width
         while start_idx > 8 {
             start_idx -= 1;
             buf[start_idx] = b'0';
@@ -70,7 +65,6 @@ pub fn dump_bytes(data: &[u8]) -> String {
         output.extend_from_slice(&buf[start_idx..]);
         output.extend_from_slice(b": ");
 
-        // Hex pairs
         for pair_idx in 0..8 {
             let byte_offset = pair_idx * 2;
             if byte_offset < chunk.len() {
@@ -93,10 +87,8 @@ pub fn dump_bytes(data: &[u8]) -> String {
             }
         }
 
-        // Pad if less than 16 bytes
         output.extend_from_slice(b"  ");
 
-        // ASCII column
         for &byte in chunk {
             if byte.is_ascii_graphic() || byte == b' ' {
                 output.push(byte);
@@ -113,7 +105,6 @@ pub fn dump_bytes(data: &[u8]) -> String {
 pub fn reverse(hex_dump: &str) -> Result<Vec<u8>> {
     let mut result = Vec::new();
     for line in hex_dump.lines() {
-        // Skip empty lines
         let line = line.trim();
         if line.is_empty() {
             continue;
@@ -134,7 +125,6 @@ pub fn reverse(hex_dump: &str) -> Result<Vec<u8>> {
             after_colon
         };
 
-        // Extract hex characters
         let hex_chars: String = hex_part.chars().filter(|c| c.is_ascii_hexdigit()).collect();
         let bytes = hex::decode(&hex_chars).context("Failed to decode hex in dump")?;
         result.extend_from_slice(&bytes);

@@ -28,9 +28,6 @@ pub fn run(action: BaconianAction) -> Result<()> {
 }
 
 // Bacon's alphabet: I/J share index 8, U/V share index 20
-// A=0, B=1, C=2, D=3, E=4, F=5, G=6, H=7, I/J=8, K=9, L=10,
-// M=11, N=12, O=13, P=14, Q=15, R=16, S=17, T=18, U/V=19, W=20,
-// X=21, Y=22, Z=23
 fn char_to_bacon_index(c: char) -> Option<u8> {
     match c.to_ascii_uppercase() {
         'A' => Some(0),
@@ -91,9 +88,6 @@ fn bacon_index_to_char(idx: u8) -> Option<char> {
     }
 }
 
-// Pre-computed lookup table mapping Bacon index (0-23) to its 5-char A/B pattern.
-// Eliminates per-character String allocation from the iterator-based `index_to_pattern`
-// which previously created a new String on every call via `.collect()`.
 const BACON_PATTERNS: [&str; 24] = [
     "AAAAA", // 0  = A
     "AAAAB", // 1  = B
@@ -141,9 +135,6 @@ fn pattern_to_index(pattern: &str) -> Option<u8> {
 }
 
 pub fn encode(input: &str) -> Result<String> {
-    // Optimization: Build output directly instead of collecting into Vec<String>
-    // and joining. This avoids N+1 String allocations (one per pattern + the join result).
-    // Each pattern is 5 chars plus a space separator.
     let mut out = String::with_capacity(input.len() * 6);
     let mut has_content = false;
 

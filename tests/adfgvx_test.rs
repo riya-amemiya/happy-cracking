@@ -2,10 +2,8 @@ use happy_cracking::crypto::adfgvx;
 
 #[test]
 fn test_encrypt_basic() {
-    // Using default grid and a simple transposition key
     let result = adfgvx::encrypt("HELLO", "default", "KEY").unwrap();
     assert!(!result.is_empty());
-    // Result should contain only ADFGVX characters
     assert!(result.chars().all(|c| "ADFGVX".contains(c)));
 }
 

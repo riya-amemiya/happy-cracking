@@ -42,7 +42,6 @@ fn test_pollard_p1_zero_modulus_no_panic() {
 #[test]
 fn test_pollard_rho_factor_zero_modulus_no_panic() {
     let n = BigUint::zero();
-    // pollard_rho_factor was moved to primes::pollard_rho_biguint
     let res = happy_cracking::crypto::primes::pollard_rho_biguint(&n);
     assert!(res.is_err());
 }

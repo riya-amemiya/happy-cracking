@@ -32,7 +32,6 @@ fn test_roundtrip() {
     let encoded = baconian::encode(original).unwrap();
     let decoded = baconian::decode(&encoded).unwrap();
     // I/J and U/V are merged, so we compare with that in mind
-    // T, H, E, Q, U->U, I->I, C, K, B, R, O, W, N, F, O, X
     assert_eq!(decoded, original);
 }
 

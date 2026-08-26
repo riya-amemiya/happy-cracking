@@ -101,9 +101,6 @@ const fn pack_morse(code: &[u8]) -> usize {
     idx
 }
 
-/// Performance: `[Option<&str>; 128]` indexed by ASCII code point replaces a
-/// `HashMap<char, &str>` on the encode path. Built at compile time (no
-/// `LazyLock` first-call cost).
 const ENCODE_LUT: [Option<&str>; 128] = {
     let mut table: [Option<&str>; 128] = [None; 128];
     let mut i = 0;
@@ -119,11 +116,6 @@ const ENCODE_LUT: [Option<&str>; 128] = {
 };
 
 /// Packed Morse token → character.
-///
-/// Performance: a `[Option<char>; 256]` indexed by `pack_morse` replaces
-/// `HashMap<&str, char>` on decode. Each letter is a few bit shifts and an
-/// array index instead of hashing, bucket chasing, and string compare. Built
-/// at compile time (no `LazyLock`).
 const DECODE_LUT: [Option<char>; 256] = {
     let mut table = [None; 256];
     let mut i = 0;
@@ -183,8 +175,6 @@ pub fn encode(input: &str) -> String {
 }
 
 pub fn decode(input: &str) -> Result<String> {
-    // One output buffer instead of a String per word plus Vec+join. Morse
-    // letters become one char each, so input.len() is a cheap overestimate.
     let mut result = String::with_capacity(input.len());
     let mut first_word = true;
 

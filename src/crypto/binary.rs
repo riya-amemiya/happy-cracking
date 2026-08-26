@@ -32,32 +32,23 @@ pub fn encode(input: &str) -> String {
         return String::new();
     }
 
-    // Optimization: Pre-allocate the exact string capacity needed to avoid multiple allocations.
-    // Length is (8 bits + 1 space) per byte, minus the trailing space.
+    // 8 bits + 1 space per byte, minus the trailing space.
     let mut out = String::with_capacity(input.len() * 9 - 1);
     for (i, b) in input.bytes().enumerate() {
         if i > 0 {
             out.push(' ');
         }
 
-        // Optimization: Manually compute bits instead of using format!("{:08b}", b)
-        // which introduces dynamic formatting overhead.
         let mut bits = [0u8; 8];
         for j in 0..8 {
             bits[7 - j] = b'0' + ((b >> j) & 1);
         }
-        // Security: use safe std::str::from_utf8 instead of unsafe from_utf8_unchecked.
-        // While the current logic only produces b'0' and b'1' (valid ASCII/UTF-8),
-        // using unsafe here is unnecessary and risks undefined behavior if a future
-        // refactor breaks this invariant.
         out.push_str(std::str::from_utf8(&bits).expect("bits are ASCII digits"));
     }
     out
 }
 
 pub fn decode(input: &str) -> Result<String> {
-    // Optimization: Filter at the byte level directly into a pre-allocated Vec<u8>
-    // to bypass `char` conversion overhead and intermediate String allocation.
     let mut cleaned_bytes = Vec::with_capacity(input.len());
     for b in input.bytes() {
         if b == b'0' || b == b'1' {
@@ -72,8 +63,6 @@ pub fn decode(input: &str) -> Result<String> {
     let bytes: Result<Vec<u8>, _> = cleaned_bytes
         .chunks(8)
         .map(|chunk| {
-            // Security: use safe std::str::from_utf8 instead of unsafe from_utf8_unchecked
-            // to prevent undefined behavior if the invariant is ever broken by refactoring.
             let s = std::str::from_utf8(chunk).expect("cleaned_bytes are ASCII digits");
             u8::from_str_radix(s, 2)
         })

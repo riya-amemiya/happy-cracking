@@ -59,7 +59,6 @@ fn test_estimate_key_length_short_input() {
 
 #[test]
 fn test_recover_key_two_char() {
-    // Test with simple key on text with natural-like distribution
     let plaintext = "ETAOINSHRDLUETAOINSHRDLUETAOINSHRDLU\
                      ETAOINSHRDLUETAOINSHRDLUETAOINSHRDLU";
     let key = "AB";
@@ -106,7 +105,6 @@ fn test_key_length_estimation_returns_sorted() {
     let key = "ABC";
     let ciphertext = vigenere::encrypt(plaintext, key).unwrap();
     let candidates = vigenere::estimate_key_length(&ciphertext, 15);
-    // Verify we get results and they have IoC values
     for &(len, ioc) in &candidates {
         assert!(len >= 1);
         assert!(ioc >= 0.0);

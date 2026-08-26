@@ -138,7 +138,6 @@ pub fn solve(input: &str, options: SolveOptions) -> Vec<SolveCandidate> {
 
     try_classic_ciphers(trimmed, &options, &mut out, &mut seen);
 
-    // Also attack decoded layers that look like cipher text
     let decoded_layers: Vec<String> = out
         .iter()
         .filter(|c| c.method.starts_with("decode:") || c.method.starts_with("aggressive:"))
@@ -294,7 +293,6 @@ pub fn score_plaintext(text: &str) -> f64 {
         score += (spaces / letters * 20.0).min(15.0);
     }
 
-    // Penalize high-entropy binary-looking strings
     let non_print = text.len() - printable;
     score -= non_print as f64 * 5.0;
 

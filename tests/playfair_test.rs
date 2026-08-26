@@ -10,7 +10,6 @@ fn test_encrypt_basic() {
 
 #[test]
 fn test_encrypt_known_vector() {
-    // "PLAYFAIR" with key "KEYWORD"
     let encrypted = playfair::encrypt("PLAYFAIR", "KEYWORD").unwrap();
     let decrypted = playfair::decrypt(&encrypted, "KEYWORD").unwrap();
     // Playfair cannot perfectly roundtrip due to I/J merge and X padding,
@@ -28,7 +27,6 @@ fn test_decrypt_basic() {
 
 #[test]
 fn test_roundtrip_no_doubles() {
-    // Text without repeated letters roundtrips cleanly
     let original = "ABCDEF";
     let encrypted = playfair::encrypt(original, "SECRET").unwrap();
     let decrypted = playfair::decrypt(&encrypted, "SECRET").unwrap();
@@ -39,7 +37,6 @@ fn test_roundtrip_no_doubles() {
 fn test_double_letter_insert_x() {
     // "BALLOON" has double L -> should insert X between them
     let encrypted = playfair::encrypt("BALLOON", "KEY").unwrap();
-    // Must produce even-length output
     assert_eq!(encrypted.len() % 2, 0);
 }
 

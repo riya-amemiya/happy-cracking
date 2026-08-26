@@ -36,20 +36,15 @@ pub fn run(action: StrToolsAction) -> Result<()> {
     Ok(())
 }
 
-// Reverse a string by Unicode grapheme.
 pub fn reverse(input: &str) -> String {
     umt_reverse_string(input)
 }
 
-// Return each character with its code point in "A=65 B=66" format.
 pub fn ord(input: &str) -> String {
     if input.is_empty() {
         return String::new();
     }
 
-    // Optimization: avoid format! and collect overhead by pre-allocating
-    // and manually formatting the numbers into a buffer.
-    // Each entry is max 1 char + 1 '=' + 7 digits (max u32 for char is 1114111) + 1 space = 10 chars.
     let mut out = String::with_capacity(input.len() * 10);
     let mut first = true;
 
@@ -82,7 +77,6 @@ pub fn ord(input: &str) -> String {
     out
 }
 
-// Convert space-separated numeric values to a string.
 pub fn chr(input: &str) -> Result<String> {
     if input.is_empty() {
         return Ok(String::new());

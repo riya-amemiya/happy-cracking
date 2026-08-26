@@ -34,8 +34,6 @@ pub struct ExtensionResult {
     pub forged_suffix: Vec<u8>,
 }
 
-// Performs a SHA-256 hash length extension attack.
-//
 // Given H(secret || message) and the total length of (secret || message),
 // computes H(secret || message || padding || append) without knowing the secret.
 pub fn sha256_extend(
@@ -52,7 +50,6 @@ pub fn sha256_extend(
         );
     }
 
-    // Recover the SHA-256 internal state from the hash output
     let mut state = [0u32; 8];
     for i in 0..8 {
         state[i] = u32::from_be_bytes([
@@ -63,15 +60,12 @@ pub fn sha256_extend(
         ]);
     }
 
-    // Compute the padding that would have been applied to the original message
     let glue_padding = sha256_padding(original_len)?;
 
-    // The total length processed so far (must be a multiple of 64)
     let total_processed = original_len
         .checked_add(glue_padding.len() as u64)
         .context("Padded original length overflow")?;
 
-    // Build the message blocks for the appended data and process them
     let mut buffer = append.to_vec();
     let total_bytes = total_processed
         .checked_add(append.len() as u64)
@@ -80,20 +74,17 @@ pub fn sha256_extend(
     let append_padding = sha256_finish_padding(append.len() as u64, final_bit_len);
     buffer.extend_from_slice(&append_padding);
 
-    // Process each 64-byte block through SHA-256 compression
     for chunk in buffer.chunks(64) {
         let mut block = [0u8; 64];
         block[..chunk.len()].copy_from_slice(chunk);
         sha256_compress(&mut state, &block);
     }
 
-    // Produce the new hash
     let mut new_hash_bytes = Vec::with_capacity(32);
     for &word in &state {
         new_hash_bytes.extend_from_slice(&word.to_be_bytes());
     }
 
-    // The forged suffix is the original padding + appended data
     let mut forged_suffix = glue_padding;
     forged_suffix.extend_from_slice(append);
 
@@ -113,12 +104,10 @@ fn sha256_bit_len(byte_len: u64) -> Result<u64> {
         .context("Message length exceeds SHA-256's 64-bit bit-length field")
 }
 
-// Computes the SHA-256 padding for a message of the given byte length.
 // Padding is: 0x80, then zeros, then 8-byte big-endian bit length,
 // such that the total padded length is a multiple of 64 bytes.
 fn sha256_padding(message_len: u64) -> Result<Vec<u8>> {
     let bit_len = sha256_bit_len(message_len)?;
-    // Number of bytes in the last incomplete block
     let remainder = (message_len % 64) as usize;
     // We need at least 1 + 8 bytes (0x80 + length), padded to 64
     let padding_len = if remainder < 56 {
@@ -134,8 +123,6 @@ fn sha256_padding(message_len: u64) -> Result<Vec<u8>> {
     Ok(padding)
 }
 
-// Computes padding for the appended data block, using the total accumulated
-// bit length (including the original message + glue padding + append data).
 fn sha256_finish_padding(append_len: u64, total_bit_len: u64) -> Vec<u8> {
     let remainder = (append_len % 64) as usize;
     let padding_len = if remainder < 56 {
@@ -151,7 +138,6 @@ fn sha256_finish_padding(append_len: u64, total_bit_len: u64) -> Vec<u8> {
     padding
 }
 
-// SHA-256 round constants
 const K: [u32; 64] = [
     0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
     0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
@@ -163,10 +149,7 @@ const K: [u32; 64] = [
     0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2,
 ];
 
-// SHA-256 compression function.
-// Processes one 64-byte block and updates the state in-place.
 fn sha256_compress(state: &mut [u32; 8], block: &[u8; 64]) {
-    // Prepare message schedule
     let mut w = [0u32; 64];
     for i in 0..16 {
         w[i] = u32::from_be_bytes([

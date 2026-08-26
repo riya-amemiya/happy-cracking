@@ -146,14 +146,12 @@ pub fn run(action: EcAction) -> Result<()> {
     Ok(())
 }
 
-// A point on an elliptic curve, or the point at infinity.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ECPoint {
     Infinity,
     Affine { x: BigInt, y: BigInt },
 }
 
-// Parse a point from a string. "inf" for the point at infinity, "x,y" for an affine point.
 pub fn parse_point(s: &str) -> Result<ECPoint> {
     let s = s.trim();
     if s.eq_ignore_ascii_case("inf") || s.eq_ignore_ascii_case("infinity") || s == "O" {
@@ -174,7 +172,6 @@ pub fn parse_point(s: &str) -> Result<ECPoint> {
     Ok(ECPoint::Affine { x, y })
 }
 
-// Format a point for display.
 pub fn format_point(point: &ECPoint) -> String {
     match point {
         ECPoint::Infinity => "inf".to_string(),
@@ -182,7 +179,6 @@ pub fn format_point(point: &ECPoint) -> String {
     }
 }
 
-// Check whether a point lies on the curve y^2 = x^3 + ax + b (mod p).
 pub fn is_on_curve(point: &ECPoint, a: &BigInt, b: &BigInt, p: &BigInt) -> bool {
     if p.is_zero() {
         return false;
@@ -210,7 +206,6 @@ fn validate_point_on_curve(point: &ECPoint, a: &BigInt, b: &BigInt, p: &BigInt) 
     Ok(())
 }
 
-// Modular inverse for BigInt. Returns a^-1 mod p.
 fn mod_inverse(a: &BigInt, p: &BigInt) -> Result<BigInt> {
     let ext = a.extended_gcd(p);
     if ext.gcd != BigInt::one() {
@@ -219,13 +214,10 @@ fn mod_inverse(a: &BigInt, p: &BigInt) -> Result<BigInt> {
     Ok(((ext.x % p) + p) % p)
 }
 
-// Reduce a BigInt modulo p into the range [0, p).
 fn modp(a: &BigInt, p: &BigInt) -> BigInt {
     ((a % p) + p) % p
 }
 
-// Add two points on the elliptic curve y^2 = x^3 + ax + b (mod p).
-// Parameter b is not needed for point addition.
 pub fn point_add(p1: &ECPoint, p2: &ECPoint, a: &BigInt, p: &BigInt) -> Result<ECPoint> {
     if p.is_zero() {
         anyhow::bail!("Modulus p must be non-zero");
@@ -268,7 +260,6 @@ pub fn point_add(p1: &ECPoint, p2: &ECPoint, a: &BigInt, p: &BigInt) -> Result<E
     }
 }
 
-// Scalar multiplication using double-and-add (left-to-right binary method).
 pub fn scalar_multiply(point: &ECPoint, n: &BigUint, a: &BigInt, p: &BigInt) -> Result<ECPoint> {
     if p.is_zero() {
         anyhow::bail!("Modulus p must be non-zero");
@@ -292,8 +283,6 @@ pub fn scalar_multiply(point: &ECPoint, n: &BigUint, a: &BigInt, p: &BigInt) -> 
     Ok(result)
 }
 
-// Find the order of a point on the curve by brute force.
-// Iterates from 1 until n*P = O. Only practical for small orders.
 pub fn point_order(point: &ECPoint, a: &BigInt, p: &BigInt) -> Result<BigUint> {
     if p.is_zero() {
         anyhow::bail!("Modulus p must be non-zero");
@@ -329,8 +318,6 @@ pub fn point_order(point: &ECPoint, a: &BigInt, p: &BigInt) -> Result<BigUint> {
     }
 }
 
-// Baby-step Giant-step algorithm for ECDLP in a subgroup of known prime order.
-// Solves Q = k*P for k, where P has order `order`.
 fn bsgs_ecdlp(
     generator: &ECPoint,
     target: &ECPoint,
@@ -347,7 +334,6 @@ fn bsgs_ecdlp(
         );
     }
 
-    // Baby step: store j -> j*G for j in [0, m)
     let mut table: HashMap<String, BigUint> = HashMap::new();
     let mut baby = ECPoint::Infinity;
     let mut j = BigUint::zero();
@@ -357,10 +343,7 @@ fn bsgs_ecdlp(
         j += BigUint::one();
     }
 
-    // Giant step: compute Q - i*m*G for i in [0, m)
-    // m*G precomputed
     let mg = scalar_multiply(generator, &m_val, a, p)?;
-    // Negate m*G for subtraction
     let neg_mg = negate_point(&mg, p);
 
     let mut gamma = target.clone();
@@ -378,7 +361,7 @@ fn bsgs_ecdlp(
     anyhow::bail!("BSGS failed to find discrete log");
 }
 
-// Negate a point: -(x, y) = (x, -y mod p).
+// -(x, y) = (x, -y mod p).
 fn negate_point(point: &ECPoint, p: &BigInt) -> ECPoint {
     match point {
         ECPoint::Infinity => ECPoint::Infinity,
@@ -389,8 +372,6 @@ fn negate_point(point: &ECPoint, p: &BigInt) -> ECPoint {
     }
 }
 
-// Pohlig-Hellman attack for solving ECDLP when the group order is smooth.
-// Given Q = n*P with P having the given order, finds n.
 pub fn pohlig_hellman(
     generator: &ECPoint,
     target: &ECPoint,
@@ -412,25 +393,19 @@ pub fn pohlig_hellman(
 
     for (prime, exp) in &factors {
         let prime_power = prime.pow(*exp);
-        // Compute cofactor = order / prime_power
         let cofactor = order / &prime_power;
 
-        // Project to subgroup of order prime_power
         let gen_sub = scalar_multiply(generator, &cofactor, a, p)?;
         let target_sub = scalar_multiply(target, &cofactor, a, p)?;
 
-        // Solve in subgroup of order prime^exp
-        // For prime powers, solve digit by digit
         let sub_log = solve_prime_power_ecdlp(&gen_sub, &target_sub, a, p, prime, *exp)?;
         residues.push(sub_log);
         moduli.push(prime_power);
     }
 
-    // Combine using CRT
     crt(&residues, &moduli)
 }
 
-// Solve ECDLP in a subgroup of order prime^exp using successive refinement.
 fn solve_prime_power_ecdlp(
     generator: &ECPoint,
     target: &ECPoint,
@@ -443,7 +418,6 @@ fn solve_prime_power_ecdlp(
         return bsgs_ecdlp(generator, target, a, p, prime);
     }
 
-    // For prime^exp, solve one digit at a time.
     // k = d0 + d1*prime + d2*prime^2 + ... + d_{exp-1}*prime^{exp-1}
     let prime_power = prime.pow(exp);
     let mut k = BigUint::zero();
@@ -454,19 +428,15 @@ fn solve_prime_power_ecdlp(
     let g_base = scalar_multiply(generator, &base_cofactor, a, p)?;
 
     for i in 0..exp {
-        // cofactor = prime^(exp-1-i)
         let cofactor = prime.pow(exp - 1 - i);
-        // Project remainder to subgroup of order prime
         let projected = scalar_multiply(&remainder, &cofactor, a, p)?;
 
-        // Solve projected = d_i * g_base in subgroup of order prime
         let d_i = bsgs_ecdlp(&g_base, &projected, a, p, prime)?;
 
-        // k += d_i * prime^i
         let contrib = &d_i * &prime.pow(i);
         k = (&k + &contrib) % &prime_power;
 
-        // Update remainder: remainder = target - k*gen
+        // remainder = target - k*gen
         let neg_k_gen = negate_point(&scalar_multiply(generator, &k, a, p)?, p);
         remainder = point_add(target, &neg_k_gen, a, p)?;
     }
@@ -474,16 +444,10 @@ fn solve_prime_power_ecdlp(
     Ok(k)
 }
 
-// Factor a BigUint into prime factors with exponents.
-// Uses recursive Pollard's Rho algorithm.
 fn factor_biguint(n: &BigUint) -> Result<Vec<(BigUint, u32)>> {
-    // Delegate to the comprehensive implementation in primes module
     Ok(primes::factorize_biguint(n.clone()))
 }
 
-// Chinese Remainder Theorem for BigUint.
-// Given residues[i] and pairwise coprime moduli[i], finds x such that
-// x ≡ residues[i] (mod moduli[i]) for all i.
 fn crt(residues: &[BigUint], moduli: &[BigUint]) -> Result<BigUint> {
     if residues.is_empty() {
         anyhow::bail!("CRT requires at least one congruence");
@@ -536,8 +500,6 @@ mod tests {
 
     #[test]
     fn test_factor_biguint_large_prime() {
-        // Test with a large 64-bit prime: 18446744073709551557 (largest u64 prime)
-        // This would take very long with trial division but should be instant with Pollard's Rho.
         let n = BigUint::from(18446744073709551557u64);
         let factors = factor_biguint(&n).unwrap();
         assert_eq!(factors.len(), 1);

@@ -20,14 +20,10 @@ fn test_factor_large_composite_dos_protection() {
     // Ensure n > u128::MAX to trigger BigUint path
     assert!(n.to_u128().is_none(), "n should be larger than u128");
 
-    // This call should finish quickly (< 1s in release, < 10s in debug)
     // If it used trial division, it would take ~10^12 iterations (hours/days).
-    // Note: factorize_biguint is available in primes module.
     let factors = happy_cracking::crypto::primes::factorize_biguint(n.clone());
 
-    // Verify factors: P and Q.
     assert_eq!(factors.len(), 2);
-    // Factors are sorted
     assert_eq!(factors[0].0, p);
     assert_eq!(factors[0].1, 1);
     assert_eq!(factors[1].0, q);
@@ -55,7 +51,6 @@ fn test_pohlig_hellman_dos_large_order() {
 
     let result = ec::run(action);
 
-    // We expect an error.
     assert!(result.is_err());
 
     let err_msg = result.unwrap_err().to_string();
@@ -80,7 +75,6 @@ fn test_point_order_dos_large_p() {
 
     let result = ec::run(action);
 
-    // We expect an error due to iteration limit.
     assert!(result.is_err());
 
     let err_msg = result.unwrap_err().to_string();

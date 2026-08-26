@@ -73,7 +73,6 @@ fn roundtrip() {
 
 #[test]
 fn roundtrip_flag() {
-    // encode "FLAG" and verify roundtrip
     let original = "FLAG";
     let encoded = a1z26::encode(original);
     assert_eq!(encoded, "6-12-1-7");

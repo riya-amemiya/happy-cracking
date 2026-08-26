@@ -5,9 +5,6 @@ use std::sync::LazyLock;
 const ALPHABET: &[u8] =
     b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!#$%&()*+,./:;<=>?@[]^_`{|}~\"";
 
-// Optimization: Pre-compute the reverse lookup table once using LazyLock instead
-// of rebuilding a [u8; 256] decode table on every call to decode(). This avoids
-// redundant O(91) initialization work per invocation and makes decoding pure O(n).
 static DECODE_TABLE: LazyLock<[u8; 256]> = LazyLock::new(|| {
     let mut table = [255u8; 256];
     for (i, &c) in ALPHABET.iter().enumerate() {
@@ -78,7 +75,6 @@ pub fn encode(input: &str) -> Result<String> {
         }
     }
 
-    // Use proper error handling instead of unwrap to prevent panics
     String::from_utf8(result).context("Encoded data is not valid UTF-8")
 }
 

@@ -55,7 +55,7 @@ pub fn encrypt(input: &str, rails: usize) -> Result<String> {
         return Ok(String::new());
     }
 
-    // Optimization: If rails >= length, it's just the identity transformation
+    // If rails >= length, it's just the identity transformation
     // This prevents DoS via massive allocation (e.g. 100M rails for 10 chars)
     if rails >= chars.len() {
         return Ok(input.to_string());
@@ -88,13 +88,12 @@ pub fn decrypt(input: &str, rails: usize) -> Result<String> {
         return Ok(String::new());
     }
 
-    // Optimization: If rails >= length, it's just the identity transformation
+    // If rails >= length, it's just the identity transformation
     // This prevents DoS via massive allocation (e.g. 100M rails for 10 chars)
     if rails >= len {
         return Ok(input.to_string());
     }
 
-    // Calculate the length of each rail
     let mut rail_lengths = vec![0usize; rails];
     let mut rail = 0;
     let mut direction = 1i32;
@@ -107,7 +106,6 @@ pub fn decrypt(input: &str, rails: usize) -> Result<String> {
         }
     }
 
-    // Split input into rails
     let mut fence: Vec<Vec<char>> = Vec::new();
     let mut pos = 0;
     for &length in &rail_lengths {
@@ -115,7 +113,6 @@ pub fn decrypt(input: &str, rails: usize) -> Result<String> {
         pos += length;
     }
 
-    // Read off the fence
     let mut result = String::new();
     let mut rail_indices = vec![0usize; rails];
     rail = 0;

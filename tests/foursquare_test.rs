@@ -73,7 +73,6 @@ fn test_lowercase_input() {
 
 #[test]
 fn test_known_vector() {
-    // Four-square with keys "EXAMPLE" and "KEYWORD"
     // Standard squares: ABCDEFGHIKLMNOPQRSTUVWXYZ
     // "HE" -> H at (1,2), E at (0,4) -> top-right(1,4), bottom-left(0,2) -> rectangle lookup
     let encrypted = foursquare::encrypt("HELPMEOBIWANKENOBI", "EXAMPLE", "KEYWORD").unwrap();

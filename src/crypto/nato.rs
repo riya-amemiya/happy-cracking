@@ -3,9 +3,6 @@ use clap::Subcommand;
 use std::collections::HashMap;
 use std::sync::LazyLock;
 
-// Performance: direct ASCII-indexed lookup table avoids HashMap hashing overhead
-// for the encode hot path. O(1) array index vs O(1) amortized but with hash
-// computation, cache-unfriendly bucket chasing, and key comparison.
 static ENCODE_LUT: LazyLock<[Option<&'static str>; 128]> = LazyLock::new(|| {
     let mut table: [Option<&'static str>; 128] = [None; 128];
     for &(ch, word) in NATO_TABLE {
@@ -87,7 +84,7 @@ static NATO_TO_CHAR: LazyLock<HashMap<&'static str, char>> =
 
 pub fn encode(input: &str) -> String {
     let lut = &*ENCODE_LUT;
-    // Pre-allocate: average NATO word is ~5 chars + 1 space separator
+    // Average NATO word is ~5 chars + 1 space.
     let mut result = String::with_capacity(input.len() * 6);
     let mut first = true;
 

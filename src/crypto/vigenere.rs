@@ -82,13 +82,9 @@ pub fn run(action: VigenereAction) -> Result<()> {
     Ok(())
 }
 
-// Performance: iterate bytes (not chars) and mutate in place to avoid
-// UTF-8 decode + char->String re-encode + intermediate Vec<u8> for the key.
 // Non-ASCII UTF-8 continuation bytes have the high bit set, so
 // `is_ascii_alphabetic()` returns false for them and they pass through
 // unchanged — preserving the original char-based semantics exactly.
-// Key bytes are validated as ASCII alphabetic; `| 0x20` lowercases an
-// ASCII letter without allocating a separate uppercase Vec.
 pub fn encrypt(input: &str, key: &str) -> Result<String> {
     let key_bytes = key.as_bytes();
     if key_bytes.is_empty() || !key_bytes.iter().all(u8::is_ascii_alphabetic) {
@@ -108,8 +104,6 @@ pub fn encrypt(input: &str, key: &str) -> Result<String> {
         }
     }
 
-    // Security: avoid unsafe – use safe conversion to prevent undefined behavior
-    // if a future refactor accidentally produces invalid UTF-8 bytes.
     String::from_utf8(bytes).context("vigenere encrypt: produced invalid UTF-8")
 }
 
@@ -132,8 +126,6 @@ pub fn decrypt(input: &str, key: &str) -> Result<String> {
         }
     }
 
-    // Security: avoid unsafe – use safe conversion to prevent undefined behavior
-    // if a future refactor accidentally produces invalid UTF-8 bytes.
     String::from_utf8(bytes).context("vigenere decrypt: produced invalid UTF-8")
 }
 
@@ -158,7 +150,6 @@ fn kasiski_examination(input: &str, max_key_len: usize) -> HashMap<usize, usize>
     let letters = extract_alpha(input);
     let mut distances: Vec<usize> = Vec::new();
 
-    // Find repeated trigrams and record distances
     for trigram_len in 3..=5 {
         if letters.len() < trigram_len {
             break;
@@ -173,8 +164,6 @@ fn kasiski_examination(input: &str, max_key_len: usize) -> HashMap<usize, usize>
         }
         for pos_list in positions.values() {
             if pos_list.len() >= 2 {
-                // Optimization: only consider adjacent occurrences.
-                // This reduces complexity from O(N^2) to O(N).
                 for i in 0..pos_list.len() - 1 {
                     distances.push(pos_list[i + 1] - pos_list[i]);
                 }
@@ -182,11 +171,8 @@ fn kasiski_examination(input: &str, max_key_len: usize) -> HashMap<usize, usize>
         }
     }
 
-    // Count factor occurrences
     let mut factor_counts: HashMap<usize, usize> = HashMap::new();
     for d in &distances {
-        // Optimization: only check factors up to max_key_len.
-        // We only care about factors that are plausible key lengths.
         let limit = (*d).min(max_key_len);
         for f in 2..=limit {
             if d % f == 0 {
@@ -229,12 +215,6 @@ pub fn estimate_key_length(input: &str, max_length: usize) -> Vec<(usize, f64)> 
     let mut results: Vec<(usize, f64)> = Vec::new();
 
     for key_len in 1..=max_length.min(letters.len() / 2) {
-        // Split into columns and compute average IoC.
-        // Performance: stride through `letters` in place instead of allocating a
-        // fresh Vec<u8> for every column. The previous code allocated `key_len`
-        // Vecs per candidate (up to ~210 Vecs total for max_length=20). Counting
-        // directly into a stack-resident [usize; 26] also fuses the column build
-        // with the IoC tally so we only touch each letter once.
         let mut total_ioc = 0.0;
         let mut count = 0;
         for col in 0..key_len {
@@ -259,16 +239,13 @@ pub fn estimate_key_length(input: &str, max_length: usize) -> Vec<(usize, f64)> 
         }
     }
 
-    // Use Kasiski to boost scores for lengths supported by repeated ngrams
     let kasiski = kasiski_examination(input, max_length);
 
-    // Sort by how close IoC is to English IoC, with Kasiski as tiebreaker
     results.sort_by(|a, b| {
         let a_diff = (a.1 - ENGLISH_IOC).abs();
         let b_diff = (b.1 - ENGLISH_IOC).abs();
         let a_kasiski = *kasiski.get(&a.0).unwrap_or(&0) as f64;
         let b_kasiski = *kasiski.get(&b.0).unwrap_or(&0) as f64;
-        // Use unwrap_or to prevent panic on NaN values
         a_diff
             .partial_cmp(&b_diff)
             .unwrap_or(std::cmp::Ordering::Equal)
@@ -288,10 +265,6 @@ pub fn recover_key(input: &str, key_length: usize) -> Result<String> {
     let letters = extract_alpha(input);
     let mut key = String::with_capacity(key_length);
 
-    // Performance: count each column's letters directly into a stack-allocated
-    // [usize; 26] via stride iteration. The previous version allocated a
-    // Vec<u8> per column purely to be re-counted inside find_best_shift, doing
-    // two passes over the same data and leaking the heap allocation.
     for col in 0..key_length {
         let mut counts = [0usize; 26];
         let mut n: usize = 0;
@@ -315,7 +288,6 @@ fn find_best_shift(counts: &[usize; 26], n: usize) -> u8 {
 
     let n_f = n as f64;
 
-    // Use chi-squared statistic to find the best shift
     let mut best_shift = 0u8;
     let mut best_chi2 = f64::MAX;
 

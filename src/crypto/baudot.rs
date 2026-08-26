@@ -67,7 +67,6 @@ const ITA2_TABLE: &[(char, char)] = &[
 const FIGS_SHIFT: u8 = 0b11011;
 const LTRS_SHIFT: u8 = 0b11111;
 
-// Pre-computed 5-bit binary string representations of ITA2 codes
 const ITA2_BIN_TABLE: &[&str; 32] = &[
     "00000", "00001", "00010", "00011", "00100", "00101", "00110", "00111", "01000", "01001",
     "01010", "01011", "01100", "01101", "01110", "01111", "10000", "10001", "10010", "10011",
@@ -76,14 +75,6 @@ const ITA2_BIN_TABLE: &[&str; 32] = &[
 ];
 
 /// Maps ASCII character → `(ITA2 code, is_figure)`.
-///
-/// Performance: a `[Option<(u8, bool)>; 128]` indexed by code point replaces
-/// `HashMap<char, (u8, bool)>`. ITA2 is an ASCII telegraph alphabet, so encode
-/// is a direct O(1) array index instead of hashing, bucket chasing, and key
-/// compare. Built at compile time (no `LazyLock` first-call cost).
-///
-/// Measured (`release`, lto=fat, 1 KiB mixed letters+figures, 2000 iters):
-/// ~3.0x vs HashMap (8131→2706 ns/op).
 const fn build_char_to_code() -> [Option<(u8, bool)>; 128] {
     let mut lut = [None; 128];
     let mut i = 0;

@@ -280,7 +280,6 @@ pub fn auto_attack(
         anyhow::bail!("Exponent e must be non-zero");
     }
 
-    // 1. Small-e: m^e == c with no modular reduction (c given, small e)
     if let Some(ct) = c
         && let Ok(eu) = e.to_string().parse::<u32>()
         && (2..=32).contains(&eu)
@@ -297,7 +296,6 @@ pub fn auto_attack(
         }
     }
 
-    // 2. Wiener
     if let Ok(d) = wiener_attack(e, n) {
         let m = match c {
             Some(ct) => Some(big_modpow(ct, &d, n)?),
@@ -312,17 +310,14 @@ pub fn auto_attack(
         });
     }
 
-    // 3. Fermat (close primes)
     if let Ok((p, q)) = fermat_factor(n, fermat_iters.min(MAX_FERMAT_ITERS)) {
         return finish_with_factors("fermat", n, e, c, p, q);
     }
 
-    // 4. Pollard p-1
     if let Ok((p, q)) = pollard_p1(n, pollard_b.min(MAX_POLLARD_P1_BOUND)) {
         return finish_with_factors("pollard-p1", n, e, c, p, q);
     }
 
-    // 5. Pollard rho
     if let Ok((p, q)) = crate::crypto::primes::pollard_rho_biguint(n) {
         return finish_with_factors("pollard-rho", n, e, c, p, q);
     }
@@ -352,7 +347,6 @@ fn finish_with_factors(
     })
 }
 
-// Computes the RSA private exponent d from primes p, q and public exponent e.
 // Rejects p == 0 or q == 0 because BigUint subtraction would panic on the
 // resulting negative intermediate.
 pub fn compute_d(p: &BigUint, q: &BigUint, e: &BigUint) -> Result<BigUint> {
@@ -363,7 +357,6 @@ pub fn compute_d(p: &BigUint, q: &BigUint, e: &BigUint) -> Result<BigUint> {
     big_modinv(e, &phi)
 }
 
-// Modular inverse for BigUint using extended Euclidean algorithm.
 pub fn big_modinv(a: &BigUint, m: &BigUint) -> Result<BigUint> {
     if m.is_zero() {
         anyhow::bail!("Modulus must be non-zero");
@@ -396,7 +389,6 @@ pub fn big_modinv(a: &BigUint, m: &BigUint) -> Result<BigUint> {
     Ok(result.to_biguint().unwrap())
 }
 
-// Modular exponentiation using num-bigint's built-in modpow.
 pub fn big_modpow(base: &BigUint, exp: &BigUint, modulus: &BigUint) -> Result<BigUint> {
     if modulus.is_zero() {
         anyhow::bail!("Modulus must be non-zero");
@@ -404,8 +396,6 @@ pub fn big_modpow(base: &BigUint, exp: &BigUint, modulus: &BigUint) -> Result<Bi
     Ok(base.modpow(exp, modulus))
 }
 
-// Integer nth root using the optimized library implementation.
-// Returns the largest x such that x^k <= n.
 pub fn integer_nth_root(n: &BigUint, k: u32) -> BigUint {
     if k == 0 {
         return BigUint::zero();
@@ -416,7 +406,6 @@ pub fn integer_nth_root(n: &BigUint, k: u32) -> BigUint {
 /// Maximum Fermat iterations allowed (DoS guard, same order as Pollard p-1).
 pub const MAX_FERMAT_ITERS: u64 = 10_000_000;
 
-// Fermat's factorization method for N with close prime factors.
 pub fn fermat_factor(n: &BigUint, max_iter: u64) -> Result<(BigUint, BigUint)> {
     if max_iter > MAX_FERMAT_ITERS {
         anyhow::bail!(
@@ -461,8 +450,6 @@ pub fn fermat_factor(n: &BigUint, max_iter: u64) -> Result<(BigUint, BigUint)> {
     anyhow::bail!("Fermat factorization failed after {} iterations", max_iter)
 }
 
-// Wiener's attack on RSA when d is small (e is large relative to n).
-// Uses continued fraction expansion of e/n to find candidate d values.
 pub fn wiener_attack(e: &BigUint, n: &BigUint) -> Result<BigUint> {
     if n.is_zero() {
         anyhow::bail!("Modulus must be non-zero");
@@ -489,9 +476,7 @@ pub fn wiener_attack(e: &BigUint, n: &BigUint) -> Result<BigUint> {
             continue;
         }
 
-        // Check that phi makes sense: n - phi + 1 should have discriminant that is a perfect square
-        // s = n - phi + 1 (= p + q)
-        // discriminant = s^2 - 4n = (p - q)^2
+        // s = n - phi + 1 (= p + q); discriminant = s^2 - 4n = (p - q)^2
         let n_plus_1 = n + &one;
         if phi_candidate >= n_plus_1 {
             continue;
@@ -510,7 +495,6 @@ pub fn wiener_attack(e: &BigUint, n: &BigUint) -> Result<BigUint> {
         let discriminant = &s_sq - &four_n;
         let sqrt_disc = discriminant.sqrt();
         if &sqrt_disc * &sqrt_disc == discriminant {
-            // Verify: encrypt and decrypt a test message
             let test_m = BigUint::from(2u32);
             let test_c = big_modpow(&test_m, e, n)?;
             let test_dec = big_modpow(&test_c, &d, n)?;
@@ -523,7 +507,6 @@ pub fn wiener_attack(e: &BigUint, n: &BigUint) -> Result<BigUint> {
     anyhow::bail!("Wiener's attack failed to recover d")
 }
 
-// Compute convergents of the continued fraction expansion of a/b.
 fn continued_fraction_convergents(a: &BigUint, b: &BigUint) -> Vec<(BigUint, BigUint)> {
     let mut convergents = Vec::new();
     let mut x = a.clone();
@@ -534,7 +517,6 @@ fn continued_fraction_convergents(a: &BigUint, b: &BigUint) -> Vec<(BigUint, Big
     let mut q_prev = BigUint::zero();
     let mut q_curr = BigUint::one();
 
-    // First partial quotient
     if y.is_zero() {
         return convergents;
     }
@@ -564,7 +546,6 @@ fn continued_fraction_convergents(a: &BigUint, b: &BigUint) -> Vec<(BigUint, Big
     convergents
 }
 
-// Hastad's Broadcast Attack.
 // When the same message m is encrypted with the same small exponent e
 // under e different moduli n_i, use CRT to recover m^e, then take the e-th root.
 pub fn hastad_broadcast(ciphertexts: &[BigUint], moduli: &[BigUint], e: u32) -> Result<BigUint> {
@@ -586,7 +567,6 @@ pub fn hastad_broadcast(ciphertexts: &[BigUint], moduli: &[BigUint], e: u32) -> 
         anyhow::bail!("All moduli must be non-zero");
     }
 
-    // CRT: find x such that x ≡ c_i (mod n_i) for all i
     let big_n: BigUint = ns.iter().product();
     let mut x = BigUint::zero();
 
@@ -599,7 +579,6 @@ pub fn hastad_broadcast(ciphertexts: &[BigUint], moduli: &[BigUint], e: u32) -> 
 
     let m = me.nth_root(e);
 
-    // Verify
     if m.pow(e) != me {
         anyhow::bail!("Hastad's attack failed: e-th root is not exact");
     }
@@ -607,9 +586,6 @@ pub fn hastad_broadcast(ciphertexts: &[BigUint], moduli: &[BigUint], e: u32) -> 
     Ok(m)
 }
 
-// Common Modulus Attack.
-// When the same message m is encrypted under the same modulus n with two
-// coprime exponents e1, e2, recover m using extended GCD.
 // m = c1^s * c2^t mod n where e1*s + e2*t = 1
 pub fn common_modulus_attack(
     n: &BigUint,
@@ -625,7 +601,6 @@ pub fn common_modulus_attack(
     let e1_int = e1.to_bigint().unwrap();
     let e2_int = e2.to_bigint().unwrap();
 
-    // Extended GCD to find s, t such that e1*s + e2*t = gcd(e1, e2)
     let (g, s, t) = extended_gcd_bigint(&e1_int, &e2_int);
 
     if g != BigInt::one() {
@@ -657,7 +632,7 @@ pub fn common_modulus_attack(
     Ok(m_int.to_biguint().unwrap())
 }
 
-// Extended GCD for BigInt. Returns (gcd, s, t) where a*s + b*t = gcd.
+// Returns (gcd, s, t) where a*s + b*t = gcd.
 fn extended_gcd_bigint(a: &BigInt, b: &BigInt) -> (BigInt, BigInt, BigInt) {
     let mut old_r = a.clone();
     let mut r = b.clone();
@@ -682,7 +657,6 @@ fn extended_gcd_bigint(a: &BigInt, b: &BigInt) -> (BigInt, BigInt, BigInt) {
     (old_r, old_s, old_t)
 }
 
-// Modular inverse for BigInt (signed).
 fn big_modinv_signed(a: &BigInt, m: &BigInt) -> Result<BigInt> {
     let (g, x, _) = extended_gcd_bigint(a, m);
     if g != BigInt::one() && g != -BigInt::one() {
@@ -691,7 +665,6 @@ fn big_modinv_signed(a: &BigInt, m: &BigInt) -> Result<BigInt> {
     Ok(((x % m) + m) % m)
 }
 
-// Modular exponentiation for BigInt.
 fn mod_pow_bigint(base: &BigInt, exp: &BigInt, modulus: &BigInt) -> Result<BigInt> {
     if modulus.is_zero() {
         anyhow::bail!("Modulus must be non-zero");
@@ -706,8 +679,6 @@ fn mod_pow_bigint(base: &BigInt, exp: &BigInt, modulus: &BigInt) -> Result<BigIn
 // Maximum allowed smoothness bound B to prevent CPU Exhaustion DoS attacks.
 pub const MAX_POLLARD_P1_BOUND: u64 = 10_000_000;
 
-// Pollard's p-1 factorization.
-// Finds a factor of n when p-1 is B-smooth (all prime factors ≤ B).
 pub fn pollard_p1(n: &BigUint, b: u64) -> Result<(BigUint, BigUint)> {
     if b > MAX_POLLARD_P1_BOUND {
         anyhow::bail!(
@@ -748,7 +719,6 @@ pub fn pollard_p1(n: &BigUint, b: u64) -> Result<(BigUint, BigUint)> {
         }
     }
 
-    // Final GCD check
     if a > BigUint::one() {
         let a_minus_1 = &a - BigUint::one();
         let g = a_minus_1.gcd(n);
@@ -761,7 +731,6 @@ pub fn pollard_p1(n: &BigUint, b: u64) -> Result<(BigUint, BigUint)> {
     anyhow::bail!("Pollard p-1 failed to factor n with bound B={}", b)
 }
 
-// Convert a BigUint to an ASCII string by interpreting its bytes.
 pub fn bigint_to_ascii(n: &BigUint) -> String {
     if n.is_zero() {
         return String::new();

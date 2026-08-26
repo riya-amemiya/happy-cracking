@@ -393,7 +393,6 @@ fn main() -> Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
-        // Encoding
         Commands::Base64 { action } => crypto::base64::run(action)?,
         Commands::Base32 { action } => crypto::base32::run(action)?,
         Commands::Base58 { action } => crypto::base58::run(action)?,
@@ -415,7 +414,6 @@ fn main() -> Result<()> {
         Commands::Uuencode { action } => crypto::uuencode::run(action)?,
         Commands::Qp { action } => crypto::quotedprintable::run(action)?,
 
-        // Classic Ciphers
         Commands::Rot13 { input } => {
             println!("{}", crypto::rot::rot13(&input));
         }
@@ -445,7 +443,6 @@ fn main() -> Result<()> {
         Commands::Rc4 { action } => crypto::rc4::run(action)?,
         Commands::Substitution { action } => crypto::substitution::run(action)?,
 
-        // Hash / Crypto
         Commands::Hash { action } => crypto::hash::run(action)?,
         Commands::Hashid { action } => crypto::hashid::run(action)?,
         Commands::Hmac { action } => crypto::hmac::run(action)?,
@@ -460,11 +457,9 @@ fn main() -> Result<()> {
         Commands::Solve { action } => crypto::solve::run(action)?,
         Commands::Portscan { action } => crypto::portscan::run(action)?,
 
-        // Advanced Crypto
         Commands::Ec { action } => crypto::ec::run(action)?,
         Commands::Dh { action } => crypto::dh::run(action)?,
 
-        // Utilities
         Commands::Frequency { action } => crypto::frequency::run(action)?,
         Commands::Auto { action } => crypto::autodecode::run(action)?,
         Commands::Entropy { action } => crypto::entropy::run(action)?,

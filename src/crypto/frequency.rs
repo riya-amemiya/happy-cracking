@@ -96,7 +96,6 @@ pub fn analyze(input: &str, alpha_only: bool) -> FrequencyResult {
     let mut total = 0usize;
 
     if alpha_only {
-        // Optimization: Use array instead of HashMap for pure alphabetic analysis
         let mut counts = [0usize; 26];
 
         for c in input.chars() {
@@ -136,7 +135,6 @@ pub fn analyze(input: &str, alpha_only: bool) -> FrequencyResult {
             .collect();
     }
 
-    // Sort by count descending
     frequencies.sort_by_key(|b| std::cmp::Reverse(b.1));
 
     FrequencyResult {
@@ -145,7 +143,6 @@ pub fn analyze(input: &str, alpha_only: bool) -> FrequencyResult {
     }
 }
 
-// Chi-squared test comparing input letter frequencies against English.
 // Lower score means closer to English distribution.
 pub fn chi_squared(input: &str) -> f64 {
     let mut counts = [0u32; 26];
@@ -177,7 +174,6 @@ pub fn chi_squared(input: &str) -> f64 {
         .sum()
 }
 
-// Index of Coincidence (IoC) for the alphabetic characters in input.
 // English text has IoC ~0.0667, random text ~0.0385 (1/26).
 pub fn index_of_coincidence(input: &str) -> f64 {
     let mut counts = [0u64; 26];

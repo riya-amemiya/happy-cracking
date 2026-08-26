@@ -49,7 +49,6 @@ fn test_forge_empty_data() {
 
 #[test]
 fn test_forge_preserves_original_crc() {
-    // Forge bytes that make the CRC equal to the CRC of the original data
     let data = b"hello";
     let original_crc = crc32_forge::crc32_compute(data);
     let forge_bytes = crc32_forge::forge_crc32(data, original_crc);
@@ -60,7 +59,6 @@ fn test_forge_preserves_original_crc() {
 
 #[test]
 fn test_forge_different_data_same_target() {
-    // Two different inputs forged to the same target CRC
     let target = 0xCAFEBABE_u32;
 
     let data1 = b"Alice";
@@ -79,7 +77,6 @@ fn test_forge_different_data_same_target() {
 
 #[test]
 fn test_forge_ctf_scenario() {
-    // CTF scenario: forge a message with a specific CRC32
     let flag = b"flag{crc32_is_not_secure}";
     let target = 0x13371337_u32;
     let forge_bytes = crc32_forge::forge_crc32(flag, target);

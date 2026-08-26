@@ -85,7 +85,6 @@ fn inverse_matrix_2x2(m: &[i64]) -> Result<Vec<i64>> {
 }
 
 fn cofactor_3x3(m: &[i64], row: usize, col: usize) -> i64 {
-    // Use fixed-size array to avoid heap allocation
     let mut sub = [0i64; 4];
     let mut idx = 0;
     for r in 0..3 {
@@ -143,7 +142,6 @@ fn prepare_input(input: &str, n: usize) -> Vec<i64> {
         .map(|c| (c as u8 - b'A') as i64)
         .collect();
 
-    // Pad with 'X' (23) if needed
     while !values.len().is_multiple_of(n) {
         values.push(23); // 'X'
     }

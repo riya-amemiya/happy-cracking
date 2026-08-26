@@ -40,8 +40,6 @@ pub fn run(action: PrimesAction) -> Result<()> {
     Ok(())
 }
 
-// Factorize a number into prime factors.
-// Uses a hybrid approach: trial division for small factors + Pollard's Rho for large composites.
 pub fn factorize(mut n: u128) -> Vec<(u128, u32)> {
     let mut factors_list = Vec::new();
 
@@ -49,8 +47,6 @@ pub fn factorize(mut n: u128) -> Vec<(u128, u32)> {
         return Vec::new();
     }
 
-    // 1. Remove small factors (2, 3, 5, 7, 11, 13) using trial division
-    // This is cheap and effective, and helps Pollard's Rho.
     for &p in &[2, 3, 5, 7, 11, 13] {
         while n % p == 0 {
             factors_list.push(p);
@@ -58,14 +54,12 @@ pub fn factorize(mut n: u128) -> Vec<(u128, u32)> {
         }
     }
 
-    // 2. Recursively factorize the rest
     if n > 1 {
         factor_recursive(n, &mut factors_list);
     }
 
     factors_list.sort();
 
-    // 3. Group by prime to count exponents
     let mut result = Vec::new();
     if factors_list.is_empty() {
         return result;
@@ -93,7 +87,6 @@ fn factor_recursive(n: u128, factors: &mut Vec<u128>) {
         return;
     }
 
-    // For very small numbers, trial division is faster than Miller-Rabin + Pollard's Rho
     if n < 1_000 {
         let mut temp_n = n;
         let mut d = 2;
@@ -125,7 +118,6 @@ fn factor_recursive(n: u128, factors: &mut Vec<u128>) {
     }
 }
 
-// Deterministic Miller-Rabin primality test for u128.
 // Bases: 2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71.
 fn miller_rabin(n: u128) -> bool {
     if n < 2 {
@@ -142,7 +134,6 @@ fn miller_rabin(n: u128) -> bool {
         2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71,
     ];
 
-    // Find d, s such that n - 1 = d * 2^s
     let mut d = n - 1;
     let mut s = 0;
     while d % 2 == 0 {
@@ -179,7 +170,6 @@ fn miller_rabin(n: u128) -> bool {
     true
 }
 
-// Optimized Miller-Rabin for u64 using u128 arithmetic.
 // Bases: 2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37.
 fn miller_rabin_u64(n: u64) -> bool {
     if n < 2 {
@@ -237,7 +227,6 @@ pub fn is_prime(n: u128) -> bool {
     }
 }
 
-// Binary GCD algorithm for u128
 fn binary_gcd(mut u: u128, mut v: u128) -> u128 {
     if u == 0 {
         return v;
@@ -260,7 +249,6 @@ fn binary_gcd(mut u: u128, mut v: u128) -> u128 {
     u << shift
 }
 
-// Binary GCD algorithm for u64
 fn binary_gcd_u64(mut u: u64, mut v: u64) -> u64 {
     if u == 0 {
         return v;
@@ -283,7 +271,7 @@ fn binary_gcd_u64(mut u: u64, mut v: u64) -> u64 {
     u << shift
 }
 
-// Pollard's Rho algorithm using Brent's cycle detection variant with batch GCD.
+// Pollard's Rho using Brent's cycle detection variant with batch GCD.
 pub fn pollard_rho(n: u128) -> u128 {
     if n <= u64::MAX as u128 {
         return pollard_rho_u64(n as u64) as u128;
@@ -296,13 +284,11 @@ pub fn pollard_rho(n: u128) -> u128 {
     let mont = Montgomery::new(n).expect("n is odd");
     let one = mont.transform(1);
 
-    // Try different constants c if the first one fails
     for c_val in [1, 3, 5, 7, 2, 4, 6, 8] {
         let c = mont.transform(c_val);
 
         let f = |x: u128| -> u128 {
             let x2 = mont.mul(x, x);
-            // x^2 + c
             let (sum, carry) = x2.overflowing_add(c);
             if carry || sum >= n {
                 sum.wrapping_sub(n)
@@ -362,11 +348,9 @@ pub fn pollard_rho(n: u128) -> u128 {
         }
     }
 
-    // If all fail, return n (factorization failed)
     n
 }
 
-// Optimized Pollard's Rho for u64 using u64 arithmetic (Montgomery64).
 fn pollard_rho_u64(n: u64) -> u64 {
     if n % 2 == 0 {
         return 2;
@@ -375,13 +359,11 @@ fn pollard_rho_u64(n: u64) -> u64 {
     let mont = Montgomery64::new(n).expect("n is odd");
     let one = mont.transform(1);
 
-    // Try different constants c if the first one fails
     for c_val in [1, 3, 5, 7, 2, 4, 6, 8] {
         let c = mont.transform(c_val);
 
         let f = |x: u64| -> u64 {
             let x2 = mont.mul(x, x);
-            // x^2 + c
             let (sum, carry) = x2.overflowing_add(c);
             if carry || sum >= n {
                 sum.wrapping_sub(n)
@@ -441,11 +423,9 @@ fn pollard_rho_u64(n: u64) -> u64 {
         }
     }
 
-    // If all fail, return n (factorization failed)
     n
 }
 
-// Format factorization result as "2^2 × 3 × 7".
 pub fn format_factors(factors: &[(u128, u32)]) -> String {
     if factors.is_empty() {
         return "1".to_string();
@@ -464,15 +444,12 @@ pub fn format_factors(factors: &[(u128, u32)]) -> String {
         .join(" × ")
 }
 
-// Factorize a BigUint into prime factors.
-// Uses optimized Pollard's Rho for numbers fitting in u128, and Pollard's Rho for BigUint for larger.
 pub fn factorize_biguint(n: BigUint) -> Vec<(BigUint, u32)> {
     let mut factors_list = Vec::new();
     if n <= BigUint::one() {
         return Vec::new();
     }
 
-    // Optimization: u128
     if let Some(n_u128) = n.to_u128() {
         let factors = factorize(n_u128);
         return factors
@@ -481,11 +458,9 @@ pub fn factorize_biguint(n: BigUint) -> Vec<(BigUint, u32)> {
             .collect();
     }
 
-    // Recursive BigUint factorization
     factor_recursive_biguint(n, &mut factors_list);
     factors_list.sort();
 
-    // Group by prime
     let mut result = Vec::new();
     if factors_list.is_empty() {
         return result;
@@ -510,7 +485,6 @@ fn factor_recursive_biguint(n: BigUint, factors: &mut Vec<BigUint>) {
         return;
     }
 
-    // Fallback to u128 if small enough
     if let Some(n_u128) = n.to_u128() {
         let sub_factors = factorize(n_u128);
         for (p, e) in sub_factors {
@@ -521,21 +495,17 @@ fn factor_recursive_biguint(n: BigUint, factors: &mut Vec<BigUint>) {
         return;
     }
 
-    // Try Pollard's Rho
     match pollard_rho_biguint(&n) {
         Ok((d, q)) => {
-            // Found a factor d. Recurse on d and n/d (q).
             factor_recursive_biguint(d, factors);
             factor_recursive_biguint(q, factors);
         }
         Err(_) => {
-            // Failed to factor. Treat as prime/indivisible.
             factors.push(n);
         }
     }
 }
 
-// Pollard's Rho factorization for BigUint using Brent's cycle detection variant.
 pub fn pollard_rho_biguint(n: &BigUint) -> Result<(BigUint, BigUint)> {
     if n <= &BigUint::one() {
         anyhow::bail!("Cannot factorize n <= 1");
@@ -547,7 +517,6 @@ pub fn pollard_rho_biguint(n: &BigUint) -> Result<(BigUint, BigUint)> {
         return Ok((two, other));
     }
 
-    // Optimization: Use u128 implementation if n fits
     if let Some(n_u128) = n.to_u128() {
         let factor = pollard_rho(n_u128);
         if factor == n_u128 || factor == 1 {
@@ -558,7 +527,6 @@ pub fn pollard_rho_biguint(n: &BigUint) -> Result<(BigUint, BigUint)> {
         return Ok((d, q));
     }
 
-    // Try multiple starting values
     for c_val in 1u64..20 {
         let c = BigUint::from(c_val);
         if let Some(d) = pollard_rho_brent(n, &c)
@@ -573,7 +541,6 @@ pub fn pollard_rho_biguint(n: &BigUint) -> Result<(BigUint, BigUint)> {
     anyhow::bail!("Pollard's Rho failed to factor n")
 }
 
-// Brent's variant of Pollard's Rho for BigUint. Returns a non-trivial factor or None.
 fn pollard_rho_brent(n: &BigUint, c: &BigUint) -> Option<BigUint> {
     let f = |x: &BigUint| -> BigUint { (x * x + c) % n };
 
@@ -609,14 +576,12 @@ fn pollard_rho_brent(n: &BigUint, c: &BigUint) -> Option<BigUint> {
 
         r *= 2;
 
-        // Safety limit
         if r > 1_000_000 {
             return None;
         }
     }
 
     if &g == n {
-        // Backtrack
         loop {
             ys = f(&ys);
             let diff = if x > ys { &x - &ys } else { &ys - &x };
