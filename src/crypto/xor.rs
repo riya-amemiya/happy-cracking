@@ -111,6 +111,9 @@ fn run_bruteforce(input: &str, printable_only: bool) -> Result<()> {
 }
 
 fn run_keylength(input: &str, max_len: usize, top: usize) -> Result<()> {
+    if max_len > MAX_KEY_LENGTH {
+        check_key_length(max_len)?;
+    }
     let input_bytes = hex::decode(input.trim()).context("Failed to decode input hex")?;
 
     let results = detect_key_length(&input_bytes, max_len);
@@ -168,8 +171,29 @@ fn hamming_distance(a: &[u8], b: &[u8]) -> u32 {
         .sum()
 }
 
+/// Maximum XOR repeating-key length to analyse.
+///
+/// SECURITY: `--max-len` and `--key-length` are user-controlled loop bounds.
+/// `detect_key_length` is O(n * max_len) Hamming-distance work; without a hard
+/// cap a huge `--max-len` plus a large ciphertext is a CPU Denial of Service.
+pub const MAX_KEY_LENGTH: usize = 256;
+
+pub fn check_key_length(len: usize) -> Result<()> {
+    if len == 0 {
+        anyhow::bail!("Key length must be at least 1");
+    }
+    if len > MAX_KEY_LENGTH {
+        anyhow::bail!(
+            "Key length {} exceeds the maximum allowed of {} to prevent Denial of Service",
+            len,
+            MAX_KEY_LENGTH
+        );
+    }
+    Ok(())
+}
+
 pub fn detect_key_length(data: &[u8], max_len: usize) -> Vec<(usize, f64)> {
-    let max_key_len = max_len.min(data.len() / 2);
+    let max_key_len = max_len.min(MAX_KEY_LENGTH).min(data.len() / 2);
     if max_key_len < 2 {
         return Vec::new();
     }
@@ -202,6 +226,12 @@ pub fn detect_key_length(data: &[u8], max_len: usize) -> Vec<(usize, f64)> {
 }
 
 fn run_crack(input: &str, max_len: usize, top: usize, key_length: Option<usize>) -> Result<()> {
+    if max_len > MAX_KEY_LENGTH {
+        check_key_length(max_len)?;
+    }
+    if let Some(k) = key_length {
+        check_key_length(k)?;
+    }
     let input_bytes = hex::decode(input.trim()).context("Failed to decode input hex")?;
     if input_bytes.is_empty() {
         anyhow::bail!("Input is empty");
@@ -359,7 +389,7 @@ pub fn crack_repeating_key(
     }
 
     let lengths: Vec<usize> = if let Some(k) = fixed_length {
-        if k == 0 {
+        if k == 0 || k > MAX_KEY_LENGTH {
             return Vec::new();
         }
         vec![k.min(data.len())]
