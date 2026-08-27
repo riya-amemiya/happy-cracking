@@ -1,18 +1,5 @@
 use anyhow::{Context, Result};
 use clap::Subcommand;
-use std::collections::HashMap;
-use std::sync::LazyLock;
-
-static ENCODE_LUT: LazyLock<[Option<&'static str>; 128]> = LazyLock::new(|| {
-    let mut table: [Option<&'static str>; 128] = [None; 128];
-    for &(ch, word) in NATO_TABLE {
-        let idx = ch as usize;
-        if idx < 128 {
-            table[idx] = Some(word);
-        }
-    }
-    table
-});
 
 #[derive(Subcommand)]
 pub enum NatoAction {
@@ -79,11 +66,84 @@ const NATO_TABLE: &[(char, &str)] = &[
     ('9', "NINE"),
 ];
 
-static NATO_TO_CHAR: LazyLock<HashMap<&'static str, char>> =
-    LazyLock::new(|| NATO_TABLE.iter().map(|&(c, word)| (word, c)).collect());
+const ENCODE_LUT: [Option<&str>; 128] = {
+    let mut table: [Option<&str>; 128] = [None; 128];
+    let mut i = 0;
+    while i < NATO_TABLE.len() {
+        let (ch, word) = NATO_TABLE[i];
+        let idx = ch as usize;
+        if idx < 128 {
+            table[idx] = Some(word);
+        }
+        i += 1;
+    }
+    table
+};
+
+/// First-letter buckets for NATO decode.
+///
+/// Digit words share an initial letter with A–Z words (ZERO/ZULU, FOUR/FIVE/FOXTROT,
+/// …), but no letter has more than 3 entries, so a 26×3 table plus
+/// `eq_ignore_ascii_case` replaces HashMap hashing and the per-token
+/// `to_uppercase()` allocation.
+const DECODE_LUT: [[Option<(&str, char)>; 3]; 26] = {
+    let mut table = [[None; 3]; 26];
+    let mut i = 0;
+    while i < NATO_TABLE.len() {
+        let (ch, word) = NATO_TABLE[i];
+        let bucket = (word.as_bytes()[0] - b'A') as usize;
+        let mut slot = 0;
+        while slot < 3 {
+            if table[bucket][slot].is_none() {
+                table[bucket][slot] = Some((word, ch));
+                break;
+            }
+            slot += 1;
+        }
+        i += 1;
+    }
+    table
+};
+
+const fn decode_lut_len(table: &[[Option<(&str, char)>; 3]; 26]) -> usize {
+    let mut n = 0;
+    let mut i = 0;
+    while i < 26 {
+        let mut slot = 0;
+        while slot < 3 {
+            if table[i][slot].is_some() {
+                n += 1;
+            }
+            slot += 1;
+        }
+        i += 1;
+    }
+    n
+}
+
+const _: () = assert!(decode_lut_len(&DECODE_LUT) == NATO_TABLE.len());
+
+fn lookup_nato(word: &str) -> Option<char> {
+    let b = word.as_bytes();
+    if b.is_empty() {
+        return None;
+    }
+    let first = b[0].to_ascii_uppercase();
+    if !first.is_ascii_uppercase() {
+        return None;
+    }
+    let bucket = &DECODE_LUT[(first - b'A') as usize];
+    for slot in bucket {
+        if let Some((w, ch)) = slot
+            && word.eq_ignore_ascii_case(w)
+        {
+            return Some(*ch);
+        }
+    }
+    None
+}
 
 pub fn encode(input: &str) -> String {
-    let lut = &*ENCODE_LUT;
     // Average NATO word is ~5 chars + 1 space.
     let mut result = String::with_capacity(input.len() * 6);
     let mut first = true;
@@ -91,7 +151,7 @@ pub fn encode(input: &str) -> String {
     for c in input.chars() {
         let upper = c.to_ascii_uppercase();
         let idx = upper as usize;
-        if let Some(word) = if idx < 128 { lut[idx] } else { None } {
+        if let Some(word) = if idx < 128 { ENCODE_LUT[idx] } else { None } {
             if !first {
                 result.push(' ');
             }
@@ -108,14 +168,10 @@ pub fn decode(input: &str) -> Result<String> {
         return Ok(String::new());
     }
 
-    input
-        .split_whitespace()
-        .map(|word| {
-            let upper = word.to_uppercase();
-            NATO_TO_CHAR
-                .get(upper.as_str())
-                .copied()
-                .with_context(|| format!("Unknown NATO word: {}", word))
-        })
-        .collect::<Result<String>>()
+    let mut result = String::with_capacity(input.len() / 4);
+    for word in input.split_whitespace() {
+        let ch = lookup_nato(word).with_context(|| format!("Unknown NATO word: {}", word))?;
+        result.push(ch);
+    }
+    Ok(result)
 }
