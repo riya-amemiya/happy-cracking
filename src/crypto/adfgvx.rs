@@ -56,6 +56,29 @@ pub fn run(action: AdfgvxAction) -> Result<()> {
 const ADFGVX: [char; 6] = ['A', 'D', 'F', 'G', 'V', 'X'];
 const DEFAULT_GRID: &str = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
 
+/// Maximum ADFGVX transposition-key length.
+///
+/// SECURITY: `--transposition-key` is a user-controlled allocation bound.
+/// Encrypt/decrypt build `tk_len` columns plus rank vectors via `column_order`.
+/// A tiny plaintext with a multi-million-character key would exhaust memory —
+/// the same class of Denial of Service already capped in the columnar cipher.
+const MAX_TRANSPOSITION_KEY_LEN: usize = 1_000_000;
+
+fn check_transposition_key(transposition_key: &str) -> Result<()> {
+    // Bound length before scanning characters so a huge invalid key cannot
+    // burn CPU in `chars().all` before being rejected.
+    if transposition_key.len() > MAX_TRANSPOSITION_KEY_LEN {
+        anyhow::bail!(
+            "Transposition key exceeds maximum length of {} to prevent Denial of Service",
+            MAX_TRANSPOSITION_KEY_LEN
+        );
+    }
+    if transposition_key.is_empty() || !transposition_key.chars().all(|c| c.is_ascii_alphabetic()) {
+        anyhow::bail!("Transposition key must be non-empty and contain only alphabetic characters");
+    }
+    Ok(())
+}
+
 fn build_grid(key: &str) -> Result<Vec<char>> {
     let grid_str = if key.eq_ignore_ascii_case("default") {
         DEFAULT_GRID.to_string()
@@ -84,9 +107,7 @@ fn find_in_grid(grid: &[char], c: char) -> Option<(usize, usize)> {
 }
 
 pub fn encrypt(input: &str, key: &str, transposition_key: &str) -> Result<String> {
-    if transposition_key.is_empty() || !transposition_key.chars().all(|c| c.is_ascii_alphabetic()) {
-        anyhow::bail!("Transposition key must be non-empty and contain only alphabetic characters");
-    }
+    check_transposition_key(transposition_key)?;
 
     let grid = build_grid(key)?;
 
@@ -134,9 +155,7 @@ pub fn encrypt(input: &str, key: &str, transposition_key: &str) -> Result<String
 }
 
 pub fn decrypt(input: &str, key: &str, transposition_key: &str) -> Result<String> {
-    if transposition_key.is_empty() || !transposition_key.chars().all(|c| c.is_ascii_alphabetic()) {
-        anyhow::bail!("Transposition key must be non-empty and contain only alphabetic characters");
-    }
+    check_transposition_key(transposition_key)?;
 
     let grid = build_grid(key)?;
     let adfgvx_chars: Vec<char> = input
