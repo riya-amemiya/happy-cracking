@@ -99,3 +99,27 @@ fn test_single_char() {
     let decrypted = adfgvx::decrypt(&encrypted, key, tk).unwrap();
     assert_eq!(decrypted, "A");
 }
+
+#[test]
+fn test_transposition_key_rejects_excessive_length() {
+    let tk = "A".repeat(1_000_001);
+    let start = std::time::Instant::now();
+    let enc = adfgvx::encrypt("HELLO", "default", &tk);
+    let dec = adfgvx::decrypt("DDXDVDFAXF", "default", &tk);
+    assert!(enc.is_err());
+    assert!(dec.is_err());
+    assert!(
+        enc.unwrap_err()
+            .to_string()
+            .contains("exceeds maximum length")
+    );
+    assert!(
+        dec.unwrap_err()
+            .to_string()
+            .contains("exceeds maximum length")
+    );
+    assert!(
+        start.elapsed().as_millis() < 100,
+        "Oversized-key rejection took too long"
+    );
+}
