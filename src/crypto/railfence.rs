@@ -35,12 +35,31 @@ pub fn run(action: RailFenceAction) -> Result<()> {
             println!("{}", decrypt(&input, rails)?);
         }
         RailFenceAction::Bruteforce { input, max_rails } => {
+            check_max_rails(max_rails)?;
             for r in 2..=max_rails {
                 if let Ok(result) = decrypt(&input, r) {
                     println!("Rails {}: {}", r, result);
                 }
             }
         }
+    }
+    Ok(())
+}
+
+/// SECURITY: `--max-rails` is a user-controlled loop bound.
+/// Bruteforce iterates `2..=max_rails` and calls `decrypt` (plus prints) each
+/// time. Encrypt/decrypt already short-circuit when rails >= input length, but
+/// the brute loop itself still runs to `max_rails`. An empty or tiny ciphertext
+/// with `--max-rails` near `usize::MAX` is a CPU (and stdout) Denial of Service.
+pub const MAX_RAILS: usize = 10_000;
+
+pub fn check_max_rails(max_rails: usize) -> Result<()> {
+    if max_rails > MAX_RAILS {
+        anyhow::bail!(
+            "Maximum rails {} exceeds the maximum allowed of {} to prevent Denial of Service",
+            max_rails,
+            MAX_RAILS
+        );
     }
     Ok(())
 }

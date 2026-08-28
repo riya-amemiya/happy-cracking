@@ -44,4 +44,32 @@ mod tests {
             duration
         );
     }
+
+    #[test]
+    fn test_railfence_bruteforce_rejects_excessive_max_rails() {
+        // Attempt to bruteforce with a huge max-rails on empty input.
+        // Without a cap, the loop `2..=max_rails` still runs even though
+        // decrypt short-circuits, causing CPU / stdout exhaustion.
+
+        let start = std::time::Instant::now();
+        let result = railfence::run(railfence::RailFenceAction::Bruteforce {
+            input: String::new(),
+            max_rails: 100_000_000,
+        });
+        let duration = start.elapsed();
+
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Denial of Service"),
+            "expected DoS rejection"
+        );
+        assert!(
+            duration.as_millis() < 100,
+            "Bruteforce rejection took too long: {:?}",
+            duration
+        );
+    }
 }
