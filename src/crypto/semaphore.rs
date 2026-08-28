@@ -1,7 +1,5 @@
 use anyhow::{Context, Result};
 use clap::Subcommand;
-use std::collections::HashMap;
-use std::sync::LazyLock;
 
 #[derive(Subcommand)]
 pub enum SemaphoreAction {
@@ -70,8 +68,54 @@ const ENCODE_LUT: [Option<&str>; 26] = {
     table
 };
 
-static SEMAPHORE_TO_CHAR: LazyLock<HashMap<&'static str, char>> =
-    LazyLock::new(|| SEMAPHORE_MAP.iter().map(|&(c, code)| (code, c)).collect());
+/// Digit-pair lookup for semaphore decode.
+///
+/// Every flag pair is `"X-Y"` with digits 1–8 (order matters: `1-3` is B, `3-1`
+/// is K). Indexing `[first][second]` replaces HashMap hashing of the 3-byte
+/// token with a pair of array loads. Slot 0 is unused (digits are 1-based).
+const DECODE_LUT: [[Option<char>; 9]; 9] = {
+    let mut table = [[None; 9]; 9];
+    let mut i = 0;
+    while i < SEMAPHORE_MAP.len() {
+        let (ch, code) = SEMAPHORE_MAP[i];
+        let b = code.as_bytes();
+        table[(b[0] - b'0') as usize][(b[2] - b'0') as usize] = Some(ch);
+        i += 1;
+    }
+    table
+};
+
+const fn decode_lut_len(table: &[[Option<char>; 9]; 9]) -> usize {
+    let mut n = 0;
+    let mut r = 0;
+    while r < 9 {
+        let mut c = 0;
+        while c < 9 {
+            if table[r][c].is_some() {
+                n += 1;
+            }
+            c += 1;
+        }
+        r += 1;
+    }
+    n
+}
+
+const _: () = assert!(decode_lut_len(&DECODE_LUT) == SEMAPHORE_MAP.len());
+
+fn lookup_semaphore(code: &str) -> Option<char> {
+    let b = code.as_bytes();
+    if b.len() != 3 || b[1] != b'-' {
+        return None;
+    }
+    let r = b[0].wrapping_sub(b'0') as usize;
+    let c = b[2].wrapping_sub(b'0') as usize;
+    if r < 9 && c < 9 {
+        DECODE_LUT[r][c]
+    } else {
+        None
+    }
+}
 
 pub fn encode(input: &str) -> Result<String> {
     if input.is_empty() {
@@ -106,13 +150,12 @@ pub fn decode(input: &str) -> Result<String> {
         return Ok(String::new());
     }
 
-    input
-        .split_whitespace()
-        .map(|code| {
-            SEMAPHORE_TO_CHAR
-                .get(code)
-                .copied()
-                .with_context(|| format!("Unknown semaphore code: {}", code))
-        })
-        .collect()
+    // Each code is 3 chars ("X-Y") plus a space; letters are 1-byte ASCII.
+    let mut result = String::with_capacity((input.len() + 1) / 4);
+    for code in input.split_whitespace() {
+        let ch =
+            lookup_semaphore(code).with_context(|| format!("Unknown semaphore code: {}", code))?;
+        result.push(ch);
+    }
+    Ok(result)
 }

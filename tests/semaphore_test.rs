@@ -63,4 +63,13 @@ fn test_non_alpha_ignored() {
 #[test]
 fn test_decode_invalid() {
     assert!(semaphore::decode("9-9").is_err());
+    assert!(semaphore::decode("1-9").is_err());
+    assert!(semaphore::decode("0-1").is_err());
+    assert!(semaphore::decode("1-23").is_err());
+    assert!(semaphore::decode("12").is_err());
+}
+
+#[test]
+fn test_decode_extra_whitespace() {
+    assert_eq!(semaphore::decode("  1-2   1-3\n1-4  ").unwrap(), "ABC");
 }
