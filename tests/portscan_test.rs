@@ -132,3 +132,55 @@ fn run_nmap_rejects_option_like_target_without_spawning() {
         "validation error should mention the target, got: {msg}"
     );
 }
+
+#[test]
+fn validate_nmap_extra_args_accepts_scan_options() {
+    for args in [
+        "",
+        "-sV -T4",
+        "-Pn -p 80,443 --top-ports 100",
+        "-sC --open --script-args http.useragent=hc",
+        "-sU -A",
+    ] {
+        portscan::validate_nmap_extra_args(args)
+            .unwrap_or_else(|e| panic!("expected {args:?} to be accepted: {e}"));
+    }
+}
+
+#[test]
+fn validate_nmap_extra_args_rejects_file_and_script_flags() {
+    for args in [
+        "-oN /tmp/out",
+        "-oX scan.xml",
+        "-oG scan.gnmap",
+        "-oA scan",
+        "-iL /etc/hosts",
+        "-iL/etc/hosts",
+        "--script vuln",
+        "--script=/tmp/evil.nse",
+        "--script-args-file /tmp/args",
+        "--datadir /tmp",
+        "--excludefile /tmp/x",
+        "--resume /tmp/x",
+        "--stylesheet http://example.invalid/x.xsl",
+        "--append-output",
+        "--servicedb /tmp/services",
+        "--versiondb /tmp/versions",
+        &"a".repeat(5000),
+    ] {
+        assert!(
+            portscan::validate_nmap_extra_args(args).is_err(),
+            "expected {args:?} to be rejected"
+        );
+    }
+}
+
+#[test]
+fn run_nmap_rejects_dangerous_extra_args_without_spawning() {
+    let err = portscan::run_nmap("127.0.0.1", Some("-oN /tmp/out")).unwrap_err();
+    let msg = err.to_string();
+    assert!(
+        msg.contains("output-file") || msg.contains("extra args") || msg.contains("-o"),
+        "validation error should mention extra args, got: {msg}"
+    );
+}
