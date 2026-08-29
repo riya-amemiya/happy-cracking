@@ -35,12 +35,26 @@ pub fn run(action: RailFenceAction) -> Result<()> {
             println!("{}", decrypt(&input, rails)?);
         }
         RailFenceAction::Bruteforce { input, max_rails } => {
+            check_max_rails(max_rails)?;
             for r in 2..=max_rails {
                 if let Ok(result) = decrypt(&input, r) {
                     println!("Rails {}: {}", r, result);
                 }
             }
         }
+    }
+    Ok(())
+}
+
+pub const MAX_RAILS: usize = 10_000;
+
+pub fn check_max_rails(max_rails: usize) -> Result<()> {
+    if max_rails > MAX_RAILS {
+        anyhow::bail!(
+            "Maximum rails {} exceeds the maximum allowed of {} to prevent Denial of Service",
+            max_rails,
+            MAX_RAILS
+        );
     }
     Ok(())
 }

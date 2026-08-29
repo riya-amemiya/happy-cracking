@@ -39,3 +39,38 @@ fn test_roundtrip() {
 fn test_invalid_rails() {
     assert!(railfence::encrypt("HELLO", 1).is_err());
 }
+
+#[test]
+fn test_check_max_rails_rejects_excessive() {
+    let err = railfence::check_max_rails(railfence::MAX_RAILS + 1).unwrap_err();
+    assert!(err.to_string().contains("Denial of Service"));
+}
+
+#[test]
+fn test_check_max_rails_accepts_limit() {
+    railfence::check_max_rails(railfence::MAX_RAILS).unwrap();
+}
+
+#[test]
+fn test_check_max_rails_accepts_default() {
+    railfence::check_max_rails(10).unwrap();
+}
+
+#[test]
+fn bruteforce_run_rejects_excessive_max_rails() {
+    let err = railfence::run(railfence::RailFenceAction::Bruteforce {
+        input: String::new(),
+        max_rails: railfence::MAX_RAILS + 1,
+    })
+    .unwrap_err();
+    assert!(err.to_string().contains("Denial of Service"));
+}
+
+#[test]
+fn bruteforce_run_accepts_default_max_rails() {
+    railfence::run(railfence::RailFenceAction::Bruteforce {
+        input: "HOREL OLLWD".to_string(),
+        max_rails: 10,
+    })
+    .unwrap();
+}
