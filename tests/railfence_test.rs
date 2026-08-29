@@ -42,8 +42,6 @@ fn test_invalid_rails() {
 
 #[test]
 fn test_check_max_rails_rejects_excessive() {
-    // SECURITY: `--max-rails` is a user-controlled loop bound. Without a hard
-    // cap, bruteforce iterates `2..=max_rails` even when decrypt short-circuits.
     let err = railfence::check_max_rails(railfence::MAX_RAILS + 1).unwrap_err();
     assert!(err.to_string().contains("Denial of Service"));
 }
