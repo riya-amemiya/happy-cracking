@@ -1,6 +1,9 @@
 use anyhow::{Context, Result};
 use clap::Subcommand;
-use std::path::PathBuf;
+use std::io::Read;
+use std::path::{Path, PathBuf};
+
+pub const MAX_IDENTIFY_BYTES: usize = 512;
 
 #[derive(Subcommand)]
 pub enum FiletypeAction {
@@ -19,6 +22,28 @@ pub struct Signature {
     pub offset: usize,
 }
 
+pub fn read_identify_prefix(path: &Path) -> Result<Vec<u8>> {
+    let mut file = std::fs::File::open(path)
+        .with_context(|| format!("Failed to open file: {}", path.display()))?;
+    let mut buf = vec![0u8; MAX_IDENTIFY_BYTES];
+    let n = file
+        .read(&mut buf)
+        .with_context(|| format!("Failed to read file: {}", path.display()))?;
+    buf.truncate(n);
+    Ok(buf)
+}
+
+pub fn decode_identify_hex(hex_str: &str) -> Result<Vec<u8>> {
+    let hex_str = hex_str.trim();
+    let max_chars = MAX_IDENTIFY_BYTES.saturating_mul(2);
+    let prefix = if hex_str.len() > max_chars {
+        &hex_str[..max_chars]
+    } else {
+        hex_str
+    };
+    hex::decode(prefix).context("Failed to decode input as hex")
+}
+
 pub fn run(action: FiletypeAction) -> Result<()> {
     match action {
         FiletypeAction::Identify { input, file } => {
@@ -29,11 +54,8 @@ pub fn run(action: FiletypeAction) -> Result<()> {
                 (None, None) => {
                     anyhow::bail!("Provide exactly one of <input> or --file")
                 }
-                (Some(hex_str), None) => {
-                    hex::decode(hex_str.trim()).context("Failed to decode input as hex")?
-                }
-                (None, Some(path)) => std::fs::read(&path)
-                    .with_context(|| format!("Failed to read file: {}", path.display()))?,
+                (Some(hex_str), None) => decode_identify_hex(&hex_str)?,
+                (None, Some(path)) => read_identify_prefix(&path)?,
             };
 
             let matches = identify(&data);
