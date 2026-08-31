@@ -49,11 +49,6 @@ pub fn encode(input: &str) -> String {
 }
 
 pub fn decode(input: &str) -> Result<String> {
-    // Pack bits in one pass instead of collecting ASCII '0'/'1' bytes and
-    // parsing each octet with `from_str_radix`. That extra buffer plus a
-    // string parse per output byte dominated decode time (autodecode and
-    // `chain binary-decode` both hit this path). Non-bit characters are
-    // still skipped, matching the previous filter.
     let mut bytes = Vec::with_capacity(input.len() / 8);
     let mut acc = 0u8;
     let mut nbits = 0u8;
