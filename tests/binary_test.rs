@@ -32,3 +32,20 @@ fn test_roundtrip() {
 fn test_invalid_length() {
     assert!(binary::decode("0100").is_err());
 }
+
+#[test]
+fn test_decode_empty() {
+    assert_eq!(binary::decode("").unwrap(), "");
+}
+
+#[test]
+fn test_decode_skips_non_bits() {
+    assert_eq!(binary::decode("01001000\n01101001").unwrap(), "Hi");
+}
+
+#[test]
+fn test_ctf_flag_roundtrip() {
+    let original = "flag{binary_decode}";
+    let encoded = binary::encode(original);
+    assert_eq!(binary::decode(&encoded).unwrap(), original);
+}

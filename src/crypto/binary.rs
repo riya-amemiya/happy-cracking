@@ -49,25 +49,22 @@ pub fn encode(input: &str) -> String {
 }
 
 pub fn decode(input: &str) -> Result<String> {
-    let mut cleaned_bytes = Vec::with_capacity(input.len());
+    let mut bytes = Vec::with_capacity(input.len() / 8);
+    let mut acc = 0u8;
+    let mut nbits = 0u8;
     for b in input.bytes() {
         if b == b'0' || b == b'1' {
-            cleaned_bytes.push(b);
+            acc = (acc << 1) | (b - b'0');
+            nbits += 1;
+            if nbits == 8 {
+                bytes.push(acc);
+                acc = 0;
+                nbits = 0;
+            }
         }
     }
-
-    if !cleaned_bytes.len().is_multiple_of(8) {
+    if nbits != 0 {
         anyhow::bail!("Binary string length must be a multiple of 8");
     }
-
-    let bytes: Result<Vec<u8>, _> = cleaned_bytes
-        .chunks(8)
-        .map(|chunk| {
-            let s = std::str::from_utf8(chunk).expect("cleaned_bytes are ASCII digits");
-            u8::from_str_radix(s, 2)
-        })
-        .collect();
-
-    let bytes = bytes.context("Failed to parse binary")?;
     String::from_utf8(bytes).context("Decoded data is not valid UTF-8")
 }
