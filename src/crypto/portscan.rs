@@ -51,7 +51,7 @@ pub enum PortscanAction {
         #[arg(
             short,
             long,
-            help = "Extra nmap arguments as a single string (e.g. '-sV -T4')"
+            help = "Extra nmap scan arguments as a single string (e.g. '-sV -T4'). File I/O and --script flags are rejected."
         )]
         args: Option<String>,
         #[arg(long, help = "Show all open ports, not only the common set")]
@@ -118,6 +118,28 @@ pub fn common_service_name(port: u16) -> Option<&'static str> {
 /// Max length of a target specifier (hostname, address, CIDR, or short list).
 const MAX_NMAP_TARGET_LEN: usize = 1024;
 
+/// Max length of the `--args` string forwarded to nmap.
+const MAX_NMAP_EXTRA_ARGS_LEN: usize = 4096;
+
+/// nmap flags that read/write files or load NSE scripts when passed via `--args`.
+///
+/// SECURITY: `Command` does not invoke a shell, but nmap still honors argv flags.
+/// Target validation already rejects option-like hosts (`-oN`, `-iL`). Extra
+/// `--args` tokens were still forwarded verbatim, which could redirect scan
+/// output, read unexpected files, or load attacker-controlled NSE scripts.
+const DANGEROUS_NMAP_FLAGS: &[&str] = &[
+    "-iL",
+    "--excludefile",
+    "--resume",
+    "--stylesheet",
+    "--script",
+    "--script-args-file",
+    "--datadir",
+    "--servicedb",
+    "--versiondb",
+    "--append-output",
+];
+
 /// Reject option-like or otherwise unsafe nmap target strings.
 ///
 /// `Command` does not invoke a shell, but nmap still parses argv flags.
@@ -150,8 +172,32 @@ pub fn validate_nmap_target(target: &str) -> Result<()> {
     Ok(())
 }
 
+/// Reject extra `--args` tokens that would make nmap read/write files or load scripts.
+pub fn validate_nmap_extra_args(extra: &str) -> Result<()> {
+    if extra.len() > MAX_NMAP_EXTRA_ARGS_LEN {
+        anyhow::bail!(
+            "nmap extra args exceed maximum length of {}",
+            MAX_NMAP_EXTRA_ARGS_LEN
+        );
+    }
+    for tok in extra.split_whitespace() {
+        // All short `-o*` flags are output-file destinations (`-oN`, `-oX`, ...).
+        if tok.starts_with("-o") {
+            anyhow::bail!("nmap extra args must not include output-file flags");
+        }
+        let flag = tok.split_once('=').map(|(f, _)| f).unwrap_or(tok);
+        if flag.starts_with("-iL") || DANGEROUS_NMAP_FLAGS.contains(&flag) {
+            anyhow::bail!("nmap extra args must not include {}", flag);
+        }
+    }
+    Ok(())
+}
+
 pub fn run_nmap(target: &str, extra_args: Option<&str>) -> Result<String> {
     validate_nmap_target(target)?;
+    if let Some(extra) = extra_args {
+        validate_nmap_extra_args(extra)?;
+    }
     let mut cmd = Command::new("nmap");
     // Default to a fast common-port focused scan; user may override via --args.
     if let Some(extra) = extra_args {
