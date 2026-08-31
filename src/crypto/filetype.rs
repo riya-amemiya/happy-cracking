@@ -3,11 +3,6 @@ use clap::Subcommand;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
-/// Bytes of header inspected for magic-byte identification.
-///
-/// SECURITY: `identify` only looks at a small prefix (TAR ustar is at offset 257).
-/// `std::fs::read` on `--file` would load the entire blob — or never return on a
-/// device without EOF such as `/dev/zero` — which is a memory Denial of Service.
 pub const MAX_IDENTIFY_BYTES: usize = 512;
 
 #[derive(Subcommand)]
@@ -27,7 +22,6 @@ pub struct Signature {
     pub offset: usize,
 }
 
-/// Read at most [`MAX_IDENTIFY_BYTES`] from `path` for magic-byte matching.
 pub fn read_identify_prefix(path: &Path) -> Result<Vec<u8>> {
     let mut file = std::fs::File::open(path)
         .with_context(|| format!("Failed to open file: {}", path.display()))?;
@@ -39,7 +33,6 @@ pub fn read_identify_prefix(path: &Path) -> Result<Vec<u8>> {
     Ok(buf)
 }
 
-/// Decode at most [`MAX_IDENTIFY_BYTES`] of hex so huge dumps cannot inflate RAM.
 pub fn decode_identify_hex(hex_str: &str) -> Result<Vec<u8>> {
     let hex_str = hex_str.trim();
     let max_chars = MAX_IDENTIFY_BYTES.saturating_mul(2);

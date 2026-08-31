@@ -129,7 +129,6 @@ fn read_identify_prefix_covers_tar_ustar_offset() {
 #[cfg(unix)]
 #[test]
 fn read_identify_prefix_bounds_device_without_eof() {
-    // /dev/zero never EOFs; an uncapped read would grow until OOM.
     let data = filetype::read_identify_prefix(std::path::Path::new("/dev/zero")).unwrap();
     assert_eq!(data.len(), filetype::MAX_IDENTIFY_BYTES);
 }
