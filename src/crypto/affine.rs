@@ -47,14 +47,21 @@ pub fn run(action: AffineAction) -> Result<()> {
 const VALID_A: [i32; 12] = [1, 3, 5, 7, 9, 11, 15, 17, 19, 21, 23, 25];
 
 fn mod_inverse(a: i32, m: i32) -> Option<i32> {
-    let a = ((a % m) + m) % m;
+    let a = a.rem_euclid(m);
     (1..m).find(|&x| (a * x) % m == 1)
 }
 
-pub fn encrypt(input: &str, a: i32, b: i32) -> Result<String> {
-    if crate::crypto::mathtools::gcd(a.unsigned_abs() as u128, 26) != 1 {
+fn reduce_key(a: i32, b: i32) -> Result<(i32, i32)> {
+    let a = a.rem_euclid(26);
+    let b = b.rem_euclid(26);
+    if crate::crypto::mathtools::gcd(a as u128, 26) != 1 {
         anyhow::bail!("'a' must be coprime with 26. Valid values: {:?}", VALID_A);
     }
+    Ok((a, b))
+}
+
+pub fn encrypt(input: &str, a: i32, b: i32) -> Result<String> {
+    let (a, b) = reduce_key(a, b)?;
 
     let mut bytes = input.as_bytes().to_vec();
     for byte in &mut bytes {
@@ -65,7 +72,7 @@ pub fn encrypt(input: &str, a: i32, b: i32) -> Result<String> {
                 b'a'
             };
             let x = (*byte - base) as i32;
-            let encrypted = ((a * x + b) % 26 + 26) % 26;
+            let encrypted = (a * x + b) % 26;
             *byte = encrypted as u8 + base;
         }
     }
@@ -74,6 +81,7 @@ pub fn encrypt(input: &str, a: i32, b: i32) -> Result<String> {
 }
 
 pub fn decrypt(input: &str, a: i32, b: i32) -> Result<String> {
+    let (a, b) = reduce_key(a, b)?;
     let a_inv = mod_inverse(a, 26).ok_or_else(|| {
         anyhow::anyhow!("'a' must be coprime with 26. Valid values: {:?}", VALID_A)
     })?;
@@ -87,7 +95,7 @@ pub fn decrypt(input: &str, a: i32, b: i32) -> Result<String> {
                 b'a'
             };
             let y = (*byte - base) as i32;
-            let decrypted = ((a_inv * (y - b)) % 26 + 26) % 26;
+            let decrypted = (a_inv * (y - b + 26)) % 26;
             *byte = decrypted as u8 + base;
         }
     }

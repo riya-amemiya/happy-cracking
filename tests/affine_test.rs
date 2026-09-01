@@ -37,3 +37,25 @@ fn test_invalid_a_error() {
     // a=2 is not coprime with 26
     assert!(affine::encrypt("HELLO", 2, 5).is_err());
 }
+
+#[test]
+fn test_encrypt_equivalent_a_mod_26() {
+    let got = affine::encrypt("HELLO", i32::MAX, 8).unwrap();
+    let expected = affine::encrypt("HELLO", 23, 8).unwrap();
+    assert_eq!(got, expected);
+}
+
+#[test]
+fn test_decrypt_equivalent_b_mod_26() {
+    let ciphertext = affine::encrypt("HELLO", 5, 2).unwrap();
+    let got = affine::decrypt(&ciphertext, 5, i32::MIN).unwrap();
+    assert_eq!(got, "HELLO");
+}
+
+#[test]
+fn test_roundtrip_extreme_coefficients() {
+    let original = "FLAG";
+    let encrypted = affine::encrypt(original, i32::MAX, i32::MAX).unwrap();
+    let decrypted = affine::decrypt(&encrypted, i32::MAX, i32::MAX).unwrap();
+    assert_eq!(decrypted, original);
+}
