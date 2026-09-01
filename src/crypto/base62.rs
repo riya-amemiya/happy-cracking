@@ -49,23 +49,20 @@ pub fn encode(input: &str) -> String {
     }
 
     let leading_zeros = bytes.iter().take_while(|&&b| b == 0).count();
+    let num = BigUint::from_bytes_be(bytes);
 
-    let mut num = BigUint::from_bytes_be(bytes);
-    let base = BigUint::from(BASE);
-    let mut encoded = Vec::new();
+    let digits = if num.is_zero() {
+        Vec::new()
+    } else {
+        num.to_radix_be(BASE)
+    };
 
-    while !num.is_zero() {
-        let remainder = &num % &base;
-        let digit = remainder.to_u32_digits().first().copied().unwrap_or(0) as usize;
-        encoded.push(ALPHABET[digit] as char);
-        num /= &base;
+    let mut encoded = Vec::with_capacity(leading_zeros + digits.len());
+    encoded.resize(leading_zeros, ALPHABET[0]);
+    for d in digits {
+        encoded.push(ALPHABET[d as usize]);
     }
-
-    for _ in 0..leading_zeros {
-        encoded.push(ALPHABET[0] as char);
-    }
-
-    encoded.iter().rev().collect()
+    String::from_utf8(encoded).expect("Base62 alphabet is ASCII")
 }
 
 pub fn decode(input: &str) -> Result<String> {
@@ -76,16 +73,16 @@ pub fn decode(input: &str) -> Result<String> {
 
     let leading_zeros = input.bytes().take_while(|&b| b == ALPHABET[0]).count();
 
-    let base = BigUint::from(BASE);
-    let mut num = BigUint::zero();
-
+    let mut digits = Vec::with_capacity(input.len());
     for c in input.bytes() {
         let digit = DECODE_TABLE[c as usize];
         if digit == 0xFF {
             anyhow::bail!("Invalid Base62 character: {}", c as char);
         }
-        num = num * &base + BigUint::from(digit as u32);
+        digits.push(digit);
     }
+
+    let num = BigUint::from_radix_be(&digits, BASE).context("Invalid Base62 digit")?;
 
     let mut bytes = num.to_bytes_be();
 
