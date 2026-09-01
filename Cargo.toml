@@ -1,7 +1,7 @@
 [package]
 edition = "2024"
 name = "happy-cracking"
-version = "0.11.0"
+version = "0.12.0"
 default-run = "happy-cracking"
 autobins = false
 description = "A fast, comprehensive CTF toolkit for cryptographic encoding/decoding, classic ciphers, hash operations, and analysis tools"
