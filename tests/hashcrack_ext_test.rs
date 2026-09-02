@@ -20,8 +20,8 @@ fn apply_rule_identity_lower_append() {
 fn rule_attack_finds_capitalized_word() {
     let plain = "Admin";
     let target = compute_hash(HashAlgo::Md5, plain);
-    let words = vec!["admin".to_string()];
-    let rules = vec!["c".to_string()];
+    let words = ["admin"];
+    let rules = ["c"];
     let found = rule_attack(&target, HashAlgo::Md5, &words, &rules);
     assert_eq!(found.as_deref(), Some("Admin"));
 }
@@ -74,7 +74,7 @@ fn mask_attack_miss_returns_none() {
 fn hybrid_attack_numeric_suffix() {
     let plain = "pass12";
     let target = compute_hash(HashAlgo::Md5, plain);
-    let words = vec!["pass".to_string(), "admin".to_string()];
+    let words = ["pass", "admin"];
     let found = hybrid_attack(&target, HashAlgo::Md5, &words, 2, 2, false).unwrap();
     assert_eq!(found.as_deref(), Some("pass12"));
 }
