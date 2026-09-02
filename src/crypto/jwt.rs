@@ -75,12 +75,12 @@ pub fn run(action: JwtAction) -> Result<()> {
             } else {
                 println!("Potential vulnerabilities:");
                 for w in &warnings {
-                    println!("  [!] {}", w);
+                    println!("  [!] {w}");
                 }
             }
         }
         JwtAction::Crack { token, wordlist } => match crack_hmac_secret(&token, &wordlist)? {
-            Some(secret) => println!("Found secret: {}", secret),
+            Some(secret) => println!("Found secret: {secret}"),
             None => println!("Not found"),
         },
         JwtAction::ForgeNone { token, payload } => {
@@ -92,13 +92,13 @@ pub fn run(action: JwtAction) -> Result<()> {
                 anyhow::bail!("Provide a token or --payload");
             };
             let forged = forge_none(&payload_json)?;
-            println!("{}", forged);
+            println!("{forged}");
         }
         JwtAction::Confuse { token, key, alg } => {
             let key_bytes = std::fs::read(&key)
                 .with_context(|| format!("Failed to read key file: {}", key.display()))?;
             let forged = forge_alg_confusion(&token, &key_bytes, &alg)?;
-            println!("{}", forged);
+            println!("{forged}");
         }
     }
     Ok(())
@@ -112,7 +112,7 @@ pub struct JwtParts {
 
 /// Maximum encoded JWT length in bytes.
 ///
-/// SECURITY: Unbounded tokens are a memory/CPU DoS. `split('.')` can allocate
+/// SECURITY: Unbounded tokens are a memory/CPU `DoS`. `split('.')` can allocate
 /// a slice per delimiter, and base64-decoding header/payload/signature grows
 /// with input. Typical JWTs are a few kilobytes; 64 KiB still covers oversized
 /// CTF tokens (embedded certs, large claims).
@@ -122,8 +122,7 @@ fn split_jwt(token: &str) -> Result<[&str; 3]> {
     let token = token.trim();
     if token.len() > MAX_JWT_LEN {
         anyhow::bail!(
-            "JWT exceeds maximum length of {} bytes to prevent Denial of Service",
-            MAX_JWT_LEN
+            "JWT exceeds maximum length of {MAX_JWT_LEN} bytes to prevent Denial of Service"
         );
     }
     // splitn(4) bounds allocation even if the token is packed with dots.
@@ -159,6 +158,7 @@ pub fn decode(token: &str) -> Result<JwtParts> {
     })
 }
 
+#[must_use]
 pub fn extract_algorithm(header_json: &str) -> String {
     let v: serde_json::Value = serde_json::from_str(header_json).unwrap_or(serde_json::Value::Null);
     v.get("alg")
@@ -167,6 +167,7 @@ pub fn extract_algorithm(header_json: &str) -> String {
         .to_string()
 }
 
+#[must_use]
 pub fn find_vulnerabilities(header_json: &str) -> Vec<String> {
     let mut warnings = Vec::new();
 
@@ -184,8 +185,7 @@ pub fn find_vulnerabilities(header_json: &str) -> Vec<String> {
 
     if alg_lower == "hs256" || alg_lower == "hs384" || alg_lower == "hs512" {
         warnings.push(format!(
-            "Symmetric algorithm ({}) - check for algorithm confusion attacks (RS256 -> HS256)",
-            alg
+            "Symmetric algorithm ({alg}) - check for algorithm confusion attacks (RS256 -> HS256)"
         ));
     }
 
@@ -219,7 +219,7 @@ pub fn find_vulnerabilities(header_json: &str) -> Vec<String> {
 
 fn signing_input(token: &str) -> Result<String> {
     let [header, payload, _] = split_jwt(token)?;
-    Ok(format!("{}.{}", header, payload))
+    Ok(format!("{header}.{payload}"))
 }
 
 fn signature_bytes(token: &str) -> Result<Vec<u8>> {
@@ -248,7 +248,7 @@ pub fn verify_hs(token: &str, secret: &[u8]) -> Result<bool> {
             let hex = hmac::hmac_sha512(secret, msg.as_bytes());
             hex::decode(hex).context("internal hex decode")?
         }
-        other => anyhow::bail!("Unsupported or non-HMAC algorithm for crack: {}", other),
+        other => anyhow::bail!("Unsupported or non-HMAC algorithm for crack: {other}"),
     };
     Ok(constant_time_eq(&expected, &actual))
 }
@@ -290,10 +290,7 @@ pub fn crack_hmac_secret(token: &str, wordlist: &PathBuf) -> Result<Option<Strin
     let parts = decode(token)?;
     let alg = extract_algorithm(&parts.header).to_ascii_uppercase();
     if !matches!(alg.as_str(), "HS256" | "HS384" | "HS512") {
-        anyhow::bail!(
-            "Token algorithm is {} (need HS256/HS384/HS512 for dictionary crack)",
-            alg
-        );
+        anyhow::bail!("Token algorithm is {alg} (need HS256/HS384/HS512 for dictionary crack)");
     }
 
     let bytes = std::fs::read(wordlist)
@@ -318,7 +315,7 @@ pub fn forge_none(payload_json: &str) -> Result<String> {
     let h = URL_SAFE_NO_PAD.encode(header.as_bytes());
     let p = URL_SAFE_NO_PAD.encode(payload_json.as_bytes());
     // Empty signature segment (some libs accept trailing dot with empty sig)
-    Ok(format!("{}.{}.", h, p))
+    Ok(format!("{h}.{p}."))
 }
 
 /// Re-sign token header/payload as HS* using arbitrary key material (alg confusion).
@@ -336,7 +333,7 @@ pub fn forge_alg_confusion(token: &str, key: &[u8], alg: &str) -> Result<String>
 
     let h = URL_SAFE_NO_PAD.encode(header_json.as_bytes());
     let p = URL_SAFE_NO_PAD.encode(parts.payload.as_bytes());
-    let signing = format!("{}.{}", h, p);
+    let signing = format!("{h}.{p}");
 
     let sig = match alg_up.as_str() {
         "HS256" => {
@@ -354,7 +351,7 @@ pub fn forge_alg_confusion(token: &str, key: &[u8], alg: &str) -> Result<String>
         _ => unreachable!(),
     };
     let s = URL_SAFE_NO_PAD.encode(&sig);
-    Ok(format!("{}.{}.{}", h, p, s))
+    Ok(format!("{h}.{p}.{s}"))
 }
 
 /// Crack against an in-memory list of secrets (for tests).

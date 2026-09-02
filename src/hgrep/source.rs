@@ -19,11 +19,7 @@ fn read_first_chunk(file: &mut File, buf: &mut Vec<u8>) -> io::Result<usize> {
     Ok(n)
 }
 
-pub(crate) fn from_file<'a>(
-    mut file: File,
-    buf: &'a mut Vec<u8>,
-    early: bool,
-) -> io::Result<Source<'a>> {
+pub(crate) fn from_file(mut file: File, buf: &mut Vec<u8>, early: bool) -> io::Result<Source<'_>> {
     let n = read_first_chunk(&mut file, buf)?;
     if n < CHUNK {
         return Ok(Source(Kind::Mem(buf)));

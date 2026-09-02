@@ -71,7 +71,7 @@ const ENCODE_LUT: [Option<&str>; 26] = {
 /// Digit-pair lookup for semaphore decode.
 ///
 /// Every flag pair is `"X-Y"` with digits 1–8 (order matters: `1-3` is B, `3-1`
-/// is K). Indexing `[first][second]` replaces HashMap hashing of the 3-byte
+/// is K). Indexing `[first][second]` replaces `HashMap` hashing of the 3-byte
 /// token with a pair of array loads. Slot 0 is unused (digits are 1-based).
 const DECODE_LUT: [[Option<char>; 9]; 9] = {
     let mut table = [[None; 9]; 9];
@@ -154,7 +154,7 @@ pub fn decode(input: &str) -> Result<String> {
     let mut result = String::with_capacity((input.len() + 1) / 4);
     for code in input.split_whitespace() {
         let ch =
-            lookup_semaphore(code).with_context(|| format!("Unknown semaphore code: {}", code))?;
+            lookup_semaphore(code).with_context(|| format!("Unknown semaphore code: {code}"))?;
         result.push(ch);
     }
     Ok(result)

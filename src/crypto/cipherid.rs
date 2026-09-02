@@ -45,6 +45,7 @@ const NATO_WORDS: &[&str] = &[
     "two", "three", "four", "five", "six", "seven", "eight", "nine",
 ];
 
+#[must_use]
 pub fn analyze(input: &str) -> Vec<Candidate> {
     let mut candidates: Vec<Candidate> = Vec::new();
     let trimmed = input.trim();
@@ -83,7 +84,7 @@ fn detect_formats(s: &str, out: &mut Vec<Candidate>) {
         out.push(Candidate {
             name: "Hex".to_string(),
             confidence,
-            reason: format!("{} hex digits, even length", len),
+            reason: format!("{len} hex digits, even length"),
         });
     }
 
@@ -127,7 +128,7 @@ fn detect_formats(s: &str, out: &mut Vec<Candidate>) {
         out.push(Candidate {
             name: "Braille".to_string(),
             confidence: 0.95,
-            reason: format!("{} characters in the Braille unicode block", braille),
+            reason: format!("{braille} characters in the Braille unicode block"),
         });
     }
 
@@ -209,7 +210,7 @@ fn looks_like_flag(s: &str) -> Option<String> {
                 .chars()
                 .all(|c| c.is_ascii_alphanumeric() || c == '_')
         {
-            return Some(format!("contains '{}{{...}}' CTF flag marker", prefix));
+            return Some(format!("contains '{prefix}{{...}}' CTF flag marker"));
         }
     }
     None
@@ -270,7 +271,7 @@ fn detect_nato(s: &str) -> Option<Candidate> {
 }
 
 fn detect_statistics(s: &str, out: &mut Vec<Candidate>) {
-    let alpha_count = s.chars().filter(|c| c.is_ascii_alphabetic()).count();
+    let alpha_count = s.chars().filter(char::is_ascii_alphabetic).count();
 
     if alpha_count < 20 {
         if let Some(c) = detect_english(s) {
@@ -285,28 +286,19 @@ fn detect_statistics(s: &str, out: &mut Vec<Candidate>) {
         out.push(Candidate {
             name: "Monoalphabetic (substitution / Caesar / Atbash) or plaintext".to_string(),
             confidence: 0.75,
-            reason: format!(
-                "IoC = {:.4} (~0.067 expected for English/monoalphabetic)",
-                ioc
-            ),
+            reason: format!("IoC = {ioc:.4} (~0.067 expected for English/monoalphabetic)"),
         });
     } else if ioc <= 0.05 {
         out.push(Candidate {
             name: "Polyalphabetic (Vigenere / Beaufort)".to_string(),
             confidence: 0.75,
-            reason: format!(
-                "IoC = {:.4} (~0.038 expected for polyalphabetic/random)",
-                ioc
-            ),
+            reason: format!("IoC = {ioc:.4} (~0.038 expected for polyalphabetic/random)"),
         });
     } else {
         out.push(Candidate {
             name: "Polyalphabetic or short monoalphabetic".to_string(),
             confidence: 0.45,
-            reason: format!(
-                "IoC = {:.4} (ambiguous, between mono- and polyalphabetic)",
-                ioc
-            ),
+            reason: format!("IoC = {ioc:.4} (ambiguous, between mono- and polyalphabetic)"),
         });
     }
 
@@ -334,10 +326,7 @@ fn detect_english(s: &str) -> Option<Candidate> {
         return Some(Candidate {
             name: "English plaintext".to_string(),
             confidence,
-            reason: format!(
-                "{} common English words found, chi-squared = {:.1}",
-                common_hits, chi
-            ),
+            reason: format!("{common_hits} common English words found, chi-squared = {chi:.1}"),
         });
     }
 
@@ -345,10 +334,7 @@ fn detect_english(s: &str) -> Option<Candidate> {
         return Some(Candidate {
             name: "English plaintext".to_string(),
             confidence: 0.5,
-            reason: format!(
-                "letter distribution close to English (chi-squared = {:.1})",
-                chi
-            ),
+            reason: format!("letter distribution close to English (chi-squared = {chi:.1})"),
         });
     }
 

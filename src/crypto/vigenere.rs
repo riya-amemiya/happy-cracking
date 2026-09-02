@@ -43,25 +43,20 @@ pub fn run(action: VigenereAction) -> Result<()> {
             println!("{}", decrypt(&input, &key)?);
         }
         VigenereAction::Crack { input, key_length } => {
-            let key_len = match key_length {
-                Some(len) => {
-                    check_key_length(len)?;
-                    len
+            let key_len = if let Some(len) = key_length {
+                check_key_length(len)?;
+                len
+            } else {
+                let candidates = estimate_key_length(&input, 20);
+                if candidates.is_empty() {
+                    anyhow::bail!("Could not determine key length. Try specifying --key-length");
                 }
-                None => {
-                    let candidates = estimate_key_length(&input, 20);
-                    if candidates.is_empty() {
-                        anyhow::bail!(
-                            "Could not determine key length. Try specifying --key-length"
-                        );
-                    }
-                    candidates[0].0
-                }
+                candidates[0].0
             };
             let key = recover_key(&input, key_len)?;
             let plaintext = decrypt(&input, &key)?;
-            println!("Key: {}", key);
-            println!("Plaintext: {}", plaintext);
+            println!("Key: {key}");
+            println!("Plaintext: {plaintext}");
         }
         VigenereAction::KeyLength { input, max_length } => {
             if max_length > MAX_KEY_LENGTH {
@@ -72,10 +67,10 @@ pub fn run(action: VigenereAction) -> Result<()> {
             println!("{:<8} {:<10}", "Length", "IoC");
             println!("{}", "-".repeat(20));
             for (len, ioc) in &candidates {
-                println!("{:<8} {:<10.6}", len, ioc);
+                println!("{len:<8} {ioc:<10.6}");
             }
             if let Some((best, _)) = candidates.first() {
-                println!("\nMost likely key length: {}", best);
+                println!("\nMost likely key length: {best}");
             }
         }
     }
@@ -141,7 +136,7 @@ const ENGLISH_IOC: f64 = 0.0667;
 fn extract_alpha(input: &str) -> Vec<u8> {
     input
         .chars()
-        .filter(|c| c.is_ascii_alphabetic())
+        .filter(char::is_ascii_alphabetic)
         .map(|c| c.to_ascii_uppercase() as u8 - b'A')
         .collect()
 }
@@ -158,7 +153,7 @@ fn kasiski_examination(input: &str, max_key_len: usize) -> HashMap<usize, usize>
         for i in 0..=letters.len() - trigram_len {
             let mut trigram: u32 = 0;
             for j in 0..trigram_len {
-                trigram = trigram * 26 + (letters[i + j] as u32);
+                trigram = trigram * 26 + u32::from(letters[i + j]);
             }
             positions.entry(trigram).or_default().push(i);
         }
@@ -187,7 +182,7 @@ fn kasiski_examination(input: &str, max_key_len: usize) -> HashMap<usize, usize>
 ///
 /// SECURITY: `--key-length` and `--max-length` are user-controlled loop and
 /// allocation bounds. `recover_key` does `String::with_capacity(key_length)`
-/// and iterates `0..key_length`; `estimate_key_length` scans O(max_length * n).
+/// and iterates `0..key_length`; `estimate_key_length` scans `O(max_length` * n).
 /// Unbounded values allow CPU/memory exhaustion.
 pub const MAX_KEY_LENGTH: usize = 256;
 
@@ -197,14 +192,13 @@ pub fn check_key_length(len: usize) -> Result<()> {
     }
     if len > MAX_KEY_LENGTH {
         anyhow::bail!(
-            "Key length {} exceeds the maximum allowed of {} to prevent Denial of Service",
-            len,
-            MAX_KEY_LENGTH
+            "Key length {len} exceeds the maximum allowed of {MAX_KEY_LENGTH} to prevent Denial of Service"
         );
     }
     Ok(())
 }
 
+#[must_use]
 pub fn estimate_key_length(input: &str, max_length: usize) -> Vec<(usize, f64)> {
     let max_length = max_length.min(MAX_KEY_LENGTH);
     let letters = extract_alpha(input);
@@ -234,7 +228,7 @@ pub fn estimate_key_length(input: &str, max_length: usize) -> Vec<(usize, f64)> 
             }
         }
         if count > 0 {
-            let avg_ioc = total_ioc / count as f64;
+            let avg_ioc = total_ioc / f64::from(count);
             results.push((key_len, avg_ioc));
         }
     }

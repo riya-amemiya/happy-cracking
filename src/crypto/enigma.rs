@@ -384,7 +384,7 @@ fn parse_plugboard(text: &str) -> Result<[u8; 26]> {
     }
     let compact: String = text
         .chars()
-        .filter(|c| c.is_ascii_alphabetic())
+        .filter(char::is_ascii_alphabetic)
         .map(|c| c.to_ascii_uppercase())
         .collect();
     if !compact.is_empty()
@@ -397,7 +397,7 @@ fn parse_plugboard(text: &str) -> Result<[u8; 26]> {
     for tok in tokens(text) {
         let letters: String = tok
             .chars()
-            .filter(|c| c.is_ascii_alphabetic())
+            .filter(char::is_ascii_alphabetic)
             .map(|c| c.to_ascii_uppercase())
             .collect();
         if letters.len() != 2 {
@@ -610,7 +610,7 @@ fn find_crib(plain: &[u8], crib: &[u8]) -> Option<usize> {
     plain.windows(crib.len()).position(|w| w == crib)
 }
 
-fn wheel_label(greek: &Option<Rotor>, moving: &[Rotor; 3]) -> String {
+fn wheel_label(greek: Option<&Rotor>, moving: &[Rotor; 3]) -> String {
     match greek {
         Some(g) => format!(
             "{} {} {} {}",
@@ -703,7 +703,7 @@ fn scan_job(
             out.push((b'A' + p) as char);
         }
         hits.push(Hit {
-            rotors: wheel_label(&greek, &moving),
+            rotors: wheel_label(greek.as_ref(), &moving),
             reflector: job.reflector_name.to_string(),
             rings: ring_label(m4, job.rings),
             position: ring_label(m4, pos),
@@ -818,7 +818,7 @@ pub fn crack(
                                 out.push((b'A' + p) as char);
                             }
                             return Ok(vec![Hit {
-                                rotors: wheel_label(&greek, &moving),
+                                rotors: wheel_label(greek.as_ref(), &moving),
                                 reflector: (*ukw).to_string(),
                                 rings: ring_label(want_m4, ring),
                                 position: ring_label(want_m4, pos),

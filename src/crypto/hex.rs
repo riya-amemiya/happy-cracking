@@ -27,6 +27,7 @@ pub fn run(action: HexAction) -> Result<()> {
     Ok(())
 }
 
+#[must_use]
 pub fn encode(input: &str) -> String {
     hex::encode(input.as_bytes())
 }

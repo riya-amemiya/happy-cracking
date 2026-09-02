@@ -19,6 +19,7 @@ pub fn run(action: AtbashAction) -> Result<()> {
     Ok(())
 }
 
+#[must_use]
 pub fn transform(input: &str) -> String {
     let mut bytes = input.as_bytes().to_vec();
     for b in &mut bytes {

@@ -28,6 +28,7 @@ pub fn run(action: Base64Action) -> Result<()> {
     Ok(())
 }
 
+#[must_use]
 pub fn encode(input: &str) -> String {
     umt_to_base64(input)
 }

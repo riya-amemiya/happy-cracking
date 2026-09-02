@@ -67,7 +67,7 @@ pub fn run(action: SolveAction) -> Result<()> {
             substitution::check_solve_iterations(substitution_iters)?;
             let results = solve(
                 &input,
-                SolveOptions {
+                &SolveOptions {
                     max_rails,
                     substitution_iters,
                     aggressive,
@@ -99,7 +99,8 @@ impl Default for SolveOptions {
     }
 }
 
-pub fn solve(input: &str, options: SolveOptions) -> Vec<SolveCandidate> {
+#[must_use]
+pub fn solve(input: &str, options: &SolveOptions) -> Vec<SolveCandidate> {
     let mut out: Vec<SolveCandidate> = Vec::new();
     let mut seen: HashSet<String> = HashSet::new();
 
@@ -127,16 +128,16 @@ pub fn solve(input: &str, options: SolveOptions) -> Vec<SolveCandidate> {
     }
 
     for (enc, decoded) in autodecode::detect_and_decode(trimmed) {
-        push_candidate(&mut out, &mut seen, format!("decode:{}", enc), decoded);
+        push_candidate(&mut out, &mut seen, format!("decode:{enc}"), decoded);
     }
 
     if options.aggressive {
         for (path, decoded) in autodecode::decode_tree(trimmed, options.max_depth, 64) {
-            push_candidate(&mut out, &mut seen, format!("aggressive:{}", path), decoded);
+            push_candidate(&mut out, &mut seen, format!("aggressive:{path}"), decoded);
         }
     }
 
-    try_classic_ciphers(trimmed, &options, &mut out, &mut seen);
+    try_classic_ciphers(trimmed, options, &mut out, &mut seen);
 
     let decoded_layers: Vec<String> = out
         .iter()
@@ -145,7 +146,7 @@ pub fn solve(input: &str, options: SolveOptions) -> Vec<SolveCandidate> {
         .take(12)
         .collect();
     for layer in decoded_layers {
-        try_classic_ciphers(&layer, &options, &mut out, &mut seen);
+        try_classic_ciphers(&layer, options, &mut out, &mut seen);
     }
 
     out.sort_by(|a, b| {
@@ -167,7 +168,7 @@ fn push_candidate(
     method: String,
     plaintext: String,
 ) {
-    if plaintext.is_empty() || !seen.insert(format!("{}|{}", method, plaintext)) {
+    if plaintext.is_empty() || !seen.insert(format!("{method}|{plaintext}")) {
         return;
     }
     let score = score_plaintext(&plaintext);
@@ -186,7 +187,7 @@ fn try_classic_ciphers(
     out: &mut Vec<SolveCandidate>,
     seen: &mut HashSet<String>,
 ) {
-    let letters: String = text.chars().filter(|c| c.is_ascii_alphabetic()).collect();
+    let letters: String = text.chars().filter(char::is_ascii_alphabetic).collect();
     if letters.len() < 3 {
         return;
     }
@@ -197,20 +198,20 @@ fn try_classic_ciphers(
 
     for shift in 0..26u8 {
         let plain = rot::rotate(text, (26 - (shift % 26)) % 26);
-        push_candidate(out, seen, format!("caesar:shift={}", shift), plain);
+        push_candidate(out, seen, format!("caesar:shift={shift}"), plain);
     }
 
     let max_rails = options.max_rails.clamp(2, 20);
     for rails in 2..=max_rails {
         if let Ok(plain) = railfence::decrypt(text, rails) {
-            push_candidate(out, seen, format!("railfence:rails={}", rails), plain);
+            push_candidate(out, seen, format!("railfence:rails={rails}"), plain);
         }
     }
 
     for &a in &[1i32, 3, 5, 7, 9, 11, 15, 17, 19, 21, 23, 25] {
         for b in 0..26i32 {
             if let Ok(plain) = affine::decrypt(text, a, b) {
-                push_candidate(out, seen, format!("affine:a={},b={}", a, b), plain);
+                push_candidate(out, seen, format!("affine:a={a},b={b}"), plain);
             }
         }
     }
@@ -225,7 +226,7 @@ fn try_classic_ciphers(
                 continue;
             };
             if let Ok(plain) = vigenere::decrypt(text, &key) {
-                push_candidate(out, seen, format!("vigenere:key={}", key), plain);
+                push_candidate(out, seen, format!("vigenere:key={key}"), plain);
             }
         }
     }
@@ -234,10 +235,11 @@ fn try_classic_ciphers(
         && options.substitution_iters > 0
         && let Ok((key, plain, _score)) = substitution::solve(text, options.substitution_iters)
     {
-        push_candidate(out, seen, format!("substitution:key={}", key), plain);
+        push_candidate(out, seen, format!("substitution:key={key}"), plain);
     }
 }
 
+#[must_use]
 pub fn looks_like_flag(text: &str) -> bool {
     let lower = text.to_ascii_lowercase();
     if FLAG_PATTERNS
@@ -254,6 +256,7 @@ pub fn looks_like_flag(text: &str) -> bool {
 }
 
 /// Higher score = more likely English / CTF plaintext.
+#[must_use]
 pub fn score_plaintext(text: &str) -> f64 {
     if text.is_empty() {
         return f64::NEG_INFINITY;
@@ -288,7 +291,7 @@ pub fn score_plaintext(text: &str) -> f64 {
     }
 
     let spaces = text.chars().filter(|c| *c == ' ').count() as f64;
-    let letters = text.chars().filter(|c| c.is_ascii_alphabetic()).count() as f64;
+    let letters = text.chars().filter(char::is_ascii_alphabetic).count() as f64;
     if letters > 0.0 {
         score += (spaces / letters * 20.0).min(15.0);
     }

@@ -122,6 +122,7 @@ fn braille_to_digit(b: char) -> Option<char> {
     })
 }
 
+#[must_use]
 pub fn encode(input: &str) -> String {
     let mut result = String::with_capacity(input.len() * 3);
     for c in input.chars() {
@@ -159,7 +160,7 @@ pub fn decode(input: &str) -> Result<String> {
         }
         if in_number_mode {
             let digit = braille_to_digit(c)
-                .with_context(|| format!("Invalid Braille number character: {:?}", c))?;
+                .with_context(|| format!("Invalid Braille number character: {c:?}"))?;
             result.push(digit);
             in_number_mode = false;
         } else {
@@ -169,7 +170,7 @@ pub fn decode(input: &str) -> Result<String> {
             } else {
                 None
             };
-            let letter = letter.with_context(|| format!("Unknown Braille character: {:?}", c))?;
+            let letter = letter.with_context(|| format!("Unknown Braille character: {c:?}"))?;
             result.push(letter);
         }
     }

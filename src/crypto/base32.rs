@@ -28,6 +28,7 @@ pub fn run(action: Base32Action) -> Result<()> {
     Ok(())
 }
 
+#[must_use]
 pub fn encode(input: &str) -> String {
     umt_encode_base32(input.as_bytes())
 }

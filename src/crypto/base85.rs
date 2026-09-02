@@ -27,6 +27,7 @@ pub fn run(action: Base85Action) -> Result<()> {
     Ok(())
 }
 
+#[must_use]
 pub fn encode(input: &str) -> String {
     let bytes = input.as_bytes();
     if bytes.is_empty() {
@@ -107,10 +108,10 @@ pub fn decode(input: &str) -> Result<String> {
 
             let mut value: u64 = 0;
             for &b in &block {
-                value = value * 85 + (b - b'!') as u64;
+                value = value * 85 + u64::from(b - b'!');
             }
 
-            if value > u32::MAX as u64 {
+            if value > u64::from(u32::MAX) {
                 anyhow::bail!("Invalid Base85 input: block value overflow");
             }
 

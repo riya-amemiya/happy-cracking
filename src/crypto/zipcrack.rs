@@ -59,7 +59,7 @@ pub fn run(action: ZipcrackAction) -> Result<()> {
                 .collect();
 
             match dict_attack(&bytes, &words) {
-                Some(password) => println!("Found password: {}", password),
+                Some(password) => println!("Found password: {password}"),
                 None => println!("Not found"),
             }
         }
@@ -73,7 +73,7 @@ pub fn run(action: ZipcrackAction) -> Result<()> {
                 .with_context(|| format!("Failed to read zip file: {}", file.display()))?;
 
             match brute_attack(&bytes, &charset, min_len, max_len)? {
-                Some(password) => println!("Found password: {}", password),
+                Some(password) => println!("Found password: {password}"),
                 None => println!("Not found"),
             }
         }
@@ -99,14 +99,14 @@ pub struct EntryInfo {
     pub method: String,
 }
 
+#[must_use]
 pub fn verify_password(zip_bytes: &[u8], password: &str) -> bool {
     verify_password_with_limit(zip_bytes, password, MAX_VERIFY_UNCOMPRESSED)
 }
 
 fn verify_password_with_limit(zip_bytes: &[u8], password: &str, max_uncompressed: u64) -> bool {
-    let mut archive = match zip::ZipArchive::new(Cursor::new(zip_bytes)) {
-        Ok(a) => a,
-        Err(_) => return false,
+    let Ok(mut archive) = zip::ZipArchive::new(Cursor::new(zip_bytes)) else {
+        return false;
     };
 
     let mut saw_encrypted = false;
@@ -120,9 +120,8 @@ fn verify_password_with_limit(zip_bytes: &[u8], password: &str, max_uncompressed
         }
         saw_encrypted = true;
 
-        let entry = match archive.by_index_decrypt(i, password.as_bytes()) {
-            Ok(entry) => entry,
-            Err(_) => return false,
+        let Ok(entry) = archive.by_index_decrypt(i, password.as_bytes()) else {
+            return false;
         };
 
         // Discard decompressed bytes; stop before a zip bomb can exhaust memory.
@@ -138,11 +137,12 @@ fn verify_password_with_limit(zip_bytes: &[u8], password: &str, max_uncompressed
     saw_encrypted
 }
 
+#[must_use]
 pub fn dict_attack(zip_bytes: &[u8], words: &[&str]) -> Option<String> {
     words
         .par_iter()
         .find_any(|word| verify_password(zip_bytes, word))
-        .map(|word| word.to_string())
+        .map(std::string::ToString::to_string)
 }
 
 pub fn brute_attack(
@@ -159,7 +159,7 @@ pub fn brute_attack(
         anyhow::bail!("min-len must be at least 1");
     }
     if max_len < min_len {
-        anyhow::bail!("max-len ({}) must be >= min-len ({})", max_len, min_len);
+        anyhow::bail!("max-len ({max_len}) must be >= min-len ({min_len})");
     }
 
     let base = chars.len() as u128;
@@ -168,11 +168,7 @@ pub fn brute_attack(
         let count = base.checked_pow(len as u32).unwrap_or(u128::MAX);
         total = total.saturating_add(count);
         if total > MAX_BRUTE_SPACE {
-            anyhow::bail!(
-                "Brute-force keyspace ({}+) exceeds the limit of {}",
-                total,
-                MAX_BRUTE_SPACE
-            );
+            anyhow::bail!("Brute-force keyspace ({total}+) exceeds the limit of {MAX_BRUTE_SPACE}");
         }
     }
 
@@ -213,7 +209,7 @@ pub fn list_entries(zip_bytes: &[u8]) -> Result<Vec<EntryInfo>> {
     for i in 0..archive.len() {
         let entry = archive
             .by_index_raw(i)
-            .with_context(|| format!("Failed to read entry at index {}", i))?;
+            .with_context(|| format!("Failed to read entry at index {i}"))?;
         entries.push(EntryInfo {
             name: entry.name().to_string(),
             size: entry.size(),

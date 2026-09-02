@@ -43,10 +43,7 @@ pub fn run(action: OtpAction) -> Result<()> {
                 length * 2
             );
             println!("Use a cryptographically secure random source (e.g., /dev/urandom).");
-            println!(
-                "Example: head -c {} /dev/urandom | xxd -p | tr -d '\\n'",
-                length
-            );
+            println!("Example: head -c {length} /dev/urandom | xxd -p | tr -d '\\n'");
         }
     }
     Ok(())

@@ -137,18 +137,22 @@ fn hmac<D: Digest>(key: &[u8], message: &[u8], block_size: usize) -> Vec<u8> {
     outer_hasher.finalize().to_vec()
 }
 
+#[must_use]
 pub fn hmac_md5(key: &[u8], message: &[u8]) -> String {
     hex::encode(hmac::<Md5>(key, message, 64))
 }
 
+#[must_use]
 pub fn hmac_sha1(key: &[u8], message: &[u8]) -> String {
     hex::encode(hmac::<Sha1>(key, message, 64))
 }
 
+#[must_use]
 pub fn hmac_sha256(key: &[u8], message: &[u8]) -> String {
     hex::encode(hmac::<Sha256>(key, message, 64))
 }
 
+#[must_use]
 pub fn hmac_sha512(key: &[u8], message: &[u8]) -> String {
     hex::encode(hmac::<Sha512>(key, message, 128))
 }
@@ -187,21 +191,25 @@ fn verify_with<D: Digest>(
 }
 
 /// Verifies an HMAC-MD5 tag against a freshly computed MAC in constant time.
+#[must_use]
 pub fn verify_md5(key: &[u8], message: &[u8], expected_tag_hex: &str) -> bool {
     verify_with::<Md5>(key, message, expected_tag_hex, 64)
 }
 
 /// Verifies an HMAC-SHA1 tag against a freshly computed MAC in constant time.
+#[must_use]
 pub fn verify_sha1(key: &[u8], message: &[u8], expected_tag_hex: &str) -> bool {
     verify_with::<Sha1>(key, message, expected_tag_hex, 64)
 }
 
 /// Verifies an HMAC-SHA256 tag against a freshly computed MAC in constant time.
+#[must_use]
 pub fn verify_sha256(key: &[u8], message: &[u8], expected_tag_hex: &str) -> bool {
     verify_with::<Sha256>(key, message, expected_tag_hex, 64)
 }
 
 /// Verifies an HMAC-SHA512 tag against a freshly computed MAC in constant time.
+#[must_use]
 pub fn verify_sha512(key: &[u8], message: &[u8], expected_tag_hex: &str) -> bool {
     verify_with::<Sha512>(key, message, expected_tag_hex, 128)
 }

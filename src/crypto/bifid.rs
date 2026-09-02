@@ -37,7 +37,7 @@ fn normalize_input(input: &str) -> Vec<char> {
     input
         .to_uppercase()
         .chars()
-        .filter(|c| c.is_ascii_uppercase())
+        .filter(char::is_ascii_uppercase)
         .map(|c| if c == 'J' { 'I' } else { c })
         .collect()
 }
@@ -59,7 +59,7 @@ pub fn encrypt(input: &str, key: &str) -> Result<String> {
     let mut cols = Vec::with_capacity(letters.len());
     for &c in &letters {
         let (r, col) = find_in_square_fast(&reverse, c)
-            .ok_or_else(|| anyhow::anyhow!("Character {} not in square", c))?;
+            .ok_or_else(|| anyhow::anyhow!("Character {c} not in square"))?;
         rows.push(r);
         cols.push(col);
     }
@@ -93,7 +93,7 @@ pub fn decrypt(input: &str, key: &str) -> Result<String> {
     let mut coords = Vec::with_capacity(letters.len() * 2);
     for &c in &letters {
         let (r, col) = find_in_square_fast(&reverse, c)
-            .ok_or_else(|| anyhow::anyhow!("Character {} not in square", c))?;
+            .ok_or_else(|| anyhow::anyhow!("Character {c} not in square"))?;
         coords.push(r);
         coords.push(col);
     }

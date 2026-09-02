@@ -44,7 +44,7 @@ pub fn rotate_left(data: &[u8], bits: u32, width: u32) -> Result<Vec<u8>> {
         8 => Ok(rotate_left_8(data, bits)),
         16 => rotate_left_16(data, bits),
         32 => rotate_left_32(data, bits),
-        _ => anyhow::bail!("Unsupported bit width: {} (must be 8, 16, or 32)", width),
+        _ => anyhow::bail!("Unsupported bit width: {width} (must be 8, 16, or 32)"),
     }
 }
 
@@ -53,7 +53,7 @@ pub fn rotate_right(data: &[u8], bits: u32, width: u32) -> Result<Vec<u8>> {
         8 => Ok(rotate_right_8(data, bits)),
         16 => rotate_right_16(data, bits),
         32 => rotate_right_32(data, bits),
-        _ => anyhow::bail!("Unsupported bit width: {} (must be 8, 16, or 32)", width),
+        _ => anyhow::bail!("Unsupported bit width: {width} (must be 8, 16, or 32)"),
     }
 }
 

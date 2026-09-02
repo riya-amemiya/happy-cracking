@@ -117,17 +117,17 @@ pub fn run(action: RsaAction) -> Result<()> {
             let q = q.parse::<BigUint>().context("Invalid number for q")?;
             let e = e.parse::<BigUint>().context("Invalid number for e")?;
             let d = compute_d(&p, &q, &e)?;
-            println!("{}", d);
+            println!("{d}");
         }
         RsaAction::Decrypt { c, d, n } => {
             let c = c.parse::<BigUint>().context("Invalid number for c")?;
             let d = d.parse::<BigUint>().context("Invalid number for d")?;
             let n = n.parse::<BigUint>().context("Invalid number for n")?;
             let m = big_modpow(&c, &d, &n)?;
-            println!("Decimal: {}", m);
+            println!("Decimal: {m}");
             let ascii = bigint_to_ascii(&m);
             if !ascii.is_empty() {
-                println!("ASCII: {}", ascii);
+                println!("ASCII: {ascii}");
             }
             println!("Hex: {}", hex::encode(m.to_bytes_be()));
         }
@@ -136,19 +136,19 @@ pub fn run(action: RsaAction) -> Result<()> {
             let e = e.parse::<BigUint>().context("Invalid number for e")?;
             let n = n.parse::<BigUint>().context("Invalid number for n")?;
             let c = big_modpow(&m, &e, &n)?;
-            println!("{}", c);
+            println!("{c}");
         }
         RsaAction::FactorizeN { n } => {
             let n = n.parse::<BigUint>().context("Invalid number for n")?;
             let (p, q) = fermat_factor(&n, 1_000_000)?;
-            println!("p = {}", p);
-            println!("q = {}", q);
+            println!("p = {p}");
+            println!("q = {q}");
         }
         RsaAction::Wiener { n, e } => {
             let n = n.parse::<BigUint>().context("Invalid number for n")?;
             let e = e.parse::<BigUint>().context("Invalid number for e")?;
             let d = wiener_attack(&e, &n)?;
-            println!("{}", d);
+            println!("{d}");
         }
         RsaAction::SmallE { c, e } => {
             let c = c.parse::<BigUint>().context("Invalid number for c")?;
@@ -159,10 +159,10 @@ pub fn run(action: RsaAction) -> Result<()> {
             }
 
             let m = c.nth_root(e);
-            println!("Decimal: {}", m);
+            println!("Decimal: {m}");
             let ascii = bigint_to_ascii(&m);
             if !ascii.is_empty() {
-                println!("ASCII: {}", ascii);
+                println!("ASCII: {ascii}");
             }
             println!("Hex: {}", hex::encode(m.to_bytes_be()));
         }
@@ -181,10 +181,10 @@ pub fn run(action: RsaAction) -> Result<()> {
                 .map(|s| s.trim().parse::<BigUint>().context("Invalid modulus"))
                 .collect::<Result<_>>()?;
             let m = hastad_broadcast(&cs, &ns, e)?;
-            println!("Decimal: {}", m);
+            println!("Decimal: {m}");
             let ascii = bigint_to_ascii(&m);
             if !ascii.is_empty() {
-                println!("ASCII: {}", ascii);
+                println!("ASCII: {ascii}");
             }
             println!("Hex: {}", hex::encode(m.to_bytes_be()));
         }
@@ -195,10 +195,10 @@ pub fn run(action: RsaAction) -> Result<()> {
             let c1 = c1.parse::<BigUint>().context("Invalid number for c1")?;
             let c2 = c2.parse::<BigUint>().context("Invalid number for c2")?;
             let m = common_modulus_attack(&n, &e1, &e2, &c1, &c2)?;
-            println!("Decimal: {}", m);
+            println!("Decimal: {m}");
             let ascii = bigint_to_ascii(&m);
             if !ascii.is_empty() {
-                println!("ASCII: {}", ascii);
+                println!("ASCII: {ascii}");
             }
             println!("Hex: {}", hex::encode(m.to_bytes_be()));
         }
@@ -206,14 +206,14 @@ pub fn run(action: RsaAction) -> Result<()> {
             let n = n.parse::<BigUint>().context("Invalid number for n")?;
             let b: u64 = b.parse().context("Invalid number for b")?;
             let (p, q) = pollard_p1(&n, b)?;
-            println!("p = {}", p);
-            println!("q = {}", q);
+            println!("p = {p}");
+            println!("q = {q}");
         }
         RsaAction::PollardRho { n } => {
             let n = n.parse::<BigUint>().context("Invalid number for n")?;
             let (p, q) = crate::crypto::primes::pollard_rho_biguint(&n)?;
-            println!("p = {}", p);
-            println!("q = {}", q);
+            println!("p = {p}");
+            println!("q = {q}");
         }
         RsaAction::Auto {
             n,
@@ -247,19 +247,19 @@ pub struct RsaAutoResult {
 fn print_auto_result(r: &RsaAutoResult) {
     println!("Method: {}", r.method);
     if let Some(p) = &r.p {
-        println!("p = {}", p);
+        println!("p = {p}");
     }
     if let Some(q) = &r.q {
-        println!("q = {}", q);
+        println!("q = {q}");
     }
     if let Some(d) = &r.d {
-        println!("d = {}", d);
+        println!("d = {d}");
     }
     if let Some(m) = &r.m {
-        println!("m (decimal) = {}", m);
+        println!("m (decimal) = {m}");
         let ascii = bigint_to_ascii(m);
         if !ascii.is_empty() {
-            println!("m (ascii) = {}", ascii);
+            println!("m (ascii) = {ascii}");
         }
         println!("m (hex) = {}", hex::encode(m.to_bytes_be()));
     }
@@ -287,7 +287,7 @@ pub fn auto_attack(
         let root = integer_nth_root(ct, eu);
         if root.pow(eu) == *ct {
             return Ok(RsaAutoResult {
-                method: format!("small-e (e={})", eu),
+                method: format!("small-e (e={eu})"),
                 p: None,
                 q: None,
                 d: None,
@@ -382,7 +382,7 @@ pub fn big_modinv(a: &BigUint, m: &BigUint) -> Result<BigUint> {
     }
 
     if old_r != BigInt::one() {
-        anyhow::bail!("Modular inverse does not exist (gcd is {})", old_r);
+        anyhow::bail!("Modular inverse does not exist (gcd is {old_r})");
     }
 
     let result = ((old_s % &m_int) + &m_int) % &m_int;
@@ -396,6 +396,7 @@ pub fn big_modpow(base: &BigUint, exp: &BigUint, modulus: &BigUint) -> Result<Bi
     Ok(base.modpow(exp, modulus))
 }
 
+#[must_use]
 pub fn integer_nth_root(n: &BigUint, k: u32) -> BigUint {
     if k == 0 {
         return BigUint::zero();
@@ -403,14 +404,13 @@ pub fn integer_nth_root(n: &BigUint, k: u32) -> BigUint {
     n.nth_root(k)
 }
 
-/// Maximum Fermat iterations allowed (DoS guard, same order as Pollard p-1).
+/// Maximum Fermat iterations allowed (`DoS` guard, same order as Pollard p-1).
 pub const MAX_FERMAT_ITERS: u64 = 10_000_000;
 
 pub fn fermat_factor(n: &BigUint, max_iter: u64) -> Result<(BigUint, BigUint)> {
     if max_iter > MAX_FERMAT_ITERS {
         anyhow::bail!(
-            "Fermat iteration limit exceeds the maximum allowed of {} to prevent DoS",
-            MAX_FERMAT_ITERS
+            "Fermat iteration limit exceeds the maximum allowed of {MAX_FERMAT_ITERS} to prevent DoS"
         );
     }
 
@@ -447,7 +447,7 @@ pub fn fermat_factor(n: &BigUint, max_iter: u64) -> Result<(BigUint, BigUint)> {
         a += BigUint::one();
     }
 
-    anyhow::bail!("Fermat factorization failed after {} iterations", max_iter)
+    anyhow::bail!("Fermat factorization failed after {max_iter} iterations")
 }
 
 pub fn wiener_attack(e: &BigUint, n: &BigUint) -> Result<BigUint> {
@@ -551,10 +551,7 @@ fn continued_fraction_convergents(a: &BigUint, b: &BigUint) -> Vec<(BigUint, Big
 pub fn hastad_broadcast(ciphertexts: &[BigUint], moduli: &[BigUint], e: u32) -> Result<BigUint> {
     let e_usize = e as usize;
     if ciphertexts.len() < e_usize || moduli.len() < e_usize {
-        anyhow::bail!(
-            "Hastad's attack requires at least e={} pairs of (ciphertext, modulus)",
-            e
-        );
+        anyhow::bail!("Hastad's attack requires at least e={e} pairs of (ciphertext, modulus)");
     }
     if e == 0 {
         anyhow::bail!("Exponent e must be non-zero");
@@ -563,7 +560,7 @@ pub fn hastad_broadcast(ciphertexts: &[BigUint], moduli: &[BigUint], e: u32) -> 
     let cs = &ciphertexts[..e_usize];
     let ns = &moduli[..e_usize];
 
-    if ns.iter().any(|n| n.is_zero()) {
+    if ns.iter().any(num_traits::Zero::is_zero) {
         anyhow::bail!("All moduli must be non-zero");
     }
 
@@ -604,26 +601,26 @@ pub fn common_modulus_attack(
     let (g, s, t) = extended_gcd_bigint(&e1_int, &e2_int);
 
     if g != BigInt::one() {
-        anyhow::bail!("Common modulus attack requires gcd(e1, e2) = 1, got {}", g);
+        anyhow::bail!("Common modulus attack requires gcd(e1, e2) = 1, got {g}");
     }
 
     let n_int = n.to_bigint().unwrap();
-    let c1_int = c1.to_bigint().unwrap();
-    let c2_int = c2.to_bigint().unwrap();
+    let first_cipher = c1.to_bigint().unwrap();
+    let second_cipher = c2.to_bigint().unwrap();
 
     // For negative exponents, use modular inverse of the ciphertext
     let part1 = if s < BigInt::zero() {
-        let c1_inv = big_modinv_signed(&c1_int, &n_int)?;
-        mod_pow_bigint(&c1_inv, &(-&s), &n_int)?
+        let first_inverse = big_modinv_signed(&first_cipher, &n_int)?;
+        mod_pow_bigint(&first_inverse, &(-&s), &n_int)?
     } else {
-        mod_pow_bigint(&c1_int, &s, &n_int)?
+        mod_pow_bigint(&first_cipher, &s, &n_int)?
     };
 
     let part2 = if t < BigInt::zero() {
-        let c2_inv = big_modinv_signed(&c2_int, &n_int)?;
-        mod_pow_bigint(&c2_inv, &(-&t), &n_int)?
+        let second_inverse = big_modinv_signed(&second_cipher, &n_int)?;
+        mod_pow_bigint(&second_inverse, &(-&t), &n_int)?
     } else {
-        mod_pow_bigint(&c2_int, &t, &n_int)?
+        mod_pow_bigint(&second_cipher, &t, &n_int)?
     };
 
     let m_int = (&part1 * &part2) % &n_int;
@@ -682,8 +679,7 @@ pub const MAX_POLLARD_P1_BOUND: u64 = 10_000_000;
 pub fn pollard_p1(n: &BigUint, b: u64) -> Result<(BigUint, BigUint)> {
     if b > MAX_POLLARD_P1_BOUND {
         anyhow::bail!(
-            "Smoothness bound B exceeds the maximum allowed limit of {} to prevent DoS",
-            MAX_POLLARD_P1_BOUND
+            "Smoothness bound B exceeds the maximum allowed limit of {MAX_POLLARD_P1_BOUND} to prevent DoS"
         );
     }
 
@@ -728,9 +724,10 @@ pub fn pollard_p1(n: &BigUint, b: u64) -> Result<(BigUint, BigUint)> {
         }
     }
 
-    anyhow::bail!("Pollard p-1 failed to factor n with bound B={}", b)
+    anyhow::bail!("Pollard p-1 failed to factor n with bound B={b}")
 }
 
+#[must_use]
 pub fn bigint_to_ascii(n: &BigUint) -> String {
     if n.is_zero() {
         return String::new();

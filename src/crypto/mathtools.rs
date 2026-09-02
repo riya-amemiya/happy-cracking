@@ -66,6 +66,7 @@ pub fn run(action: MathAction) -> Result<()> {
     Ok(())
 }
 
+#[must_use]
 pub fn gcd(mut a: u128, mut b: u128) -> u128 {
     while b != 0 {
         let t = b;
@@ -123,8 +124,8 @@ pub fn modpow(base: u128, exp: u128, m: u128) -> Result<u128> {
         return Ok(0);
     }
 
-    if m <= u64::MAX as u128 {
-        return Ok(modpow_u64(base, exp, m as u64) as u128);
+    if m <= u128::from(u64::MAX) {
+        return Ok(u128::from(modpow_u64(base, exp, m as u64)));
     }
 
     // Montgomery reduction requires an odd modulus.
@@ -150,13 +151,13 @@ fn modpow_u64(base: u128, mut exp: u128, m: u64) -> u64 {
     // Montgomery reduction requires an odd modulus.
     if m % 2 != 0 {
         let mont = Montgomery64::new(m).expect("m is odd");
-        let base_val = (base % (m as u128)) as u64;
+        let base_val = (base % u128::from(m)) as u64;
         let base_mont = mont.transform(base_val);
         let res_mont = mont.pow(base_mont, exp);
         return mont.reduce_from(res_mont);
     }
 
-    let m_u128 = m as u128;
+    let m_u128 = u128::from(m);
     let mut res: u128 = 1;
     let mut base = base % m_u128;
 
@@ -196,18 +197,19 @@ impl Montgomery64 {
         // Calculate R^2 mod m where R = 2^64
         // R % m = (2^64) % m = (u64::MAX % m + 1) % m
         let r_mod_m = (u64::MAX % m).wrapping_add(1) % m;
-        let r2 = ((r_mod_m as u128 * r_mod_m as u128) % m as u128) as u64;
+        let r2 = ((u128::from(r_mod_m) * u128::from(r_mod_m)) % u128::from(m)) as u64;
 
         Ok(Self { m, m_prime, r2 })
     }
 
-    #[inline(always)]
+    #[inline]
+    #[must_use]
     pub fn reduce(&self, t: u128) -> u64 {
         let m = self.m;
         let m_prime = self.m_prime;
 
         let m_factor = (t as u64).wrapping_mul(m_prime);
-        let t_correction = (m_factor as u128) * (m as u128);
+        let t_correction = u128::from(m_factor) * u128::from(m);
         let (val, overflow) = t.overflowing_add(t_correction);
         let mut res = (val >> 64) as u64;
 
@@ -220,21 +222,25 @@ impl Montgomery64 {
         res
     }
 
-    #[inline(always)]
+    #[inline]
+    #[must_use]
     pub fn mul(&self, a: u64, b: u64) -> u64 {
-        let prod = (a as u128) * (b as u128);
+        let prod = u128::from(a) * u128::from(b);
         self.reduce(prod)
     }
 
+    #[must_use]
     pub fn transform(&self, a: u64) -> u64 {
         self.mul(a, self.r2)
     }
 
     #[allow(dead_code)]
+    #[must_use]
     pub fn reduce_from(&self, a: u64) -> u64 {
-        self.reduce(a as u128)
+        self.reduce(u128::from(a))
     }
 
+    #[must_use]
     pub fn pow(&self, mut base: u64, mut exp: u128) -> u64 {
         let mut res = self.transform(1);
         while exp > 0 {
@@ -254,10 +260,10 @@ fn widening_mul_u128(a: u128, b: u128) -> (u128, u128) {
     let bl = b as u64;
     let bh = (b >> 64) as u64;
 
-    let t0 = (al as u128) * (bl as u128);
-    let t1 = (al as u128) * (bh as u128);
-    let t2 = (ah as u128) * (bl as u128);
-    let t3 = (ah as u128) * (bh as u128);
+    let t0 = u128::from(al) * u128::from(bl);
+    let t1 = u128::from(al) * u128::from(bh);
+    let t2 = u128::from(ah) * u128::from(bl);
+    let t3 = u128::from(ah) * u128::from(bh);
 
     let (mid, carry_mid) = t1.overflowing_add(t2);
     let mid_lo = mid << 64;
@@ -313,6 +319,7 @@ impl Montgomery {
         Ok(Self { m, m_prime, r2 })
     }
 
+    #[must_use]
     pub fn reduce(&self, lo: u128, hi: u128) -> u128 {
         let m = self.m;
         let m_prime = self.m_prime;
@@ -322,7 +329,7 @@ impl Montgomery {
 
         let (_, carry_lo) = lo.overflowing_add(prod_lo);
         let (sum, carry1) = hi.overflowing_add(prod_hi);
-        let (mut res, carry2) = sum.overflowing_add(if carry_lo { 1 } else { 0 });
+        let (mut res, carry2) = sum.overflowing_add(u128::from(carry_lo));
         let carry = carry1 || carry2;
 
         if carry {
@@ -333,20 +340,24 @@ impl Montgomery {
         res
     }
 
+    #[must_use]
     pub fn mul(&self, a: u128, b: u128) -> u128 {
         let (lo, hi) = widening_mul_u128(a, b);
         self.reduce(lo, hi)
     }
 
+    #[must_use]
     pub fn transform(&self, a: u128) -> u128 {
         self.mul(a, self.r2)
     }
 
     #[allow(dead_code)]
+    #[must_use]
     pub fn reduce_from(&self, a: u128) -> u128 {
         self.reduce(a, 0)
     }
 
+    #[must_use]
     pub fn pow(&self, mut base: u128, mut exp: u128) -> u128 {
         let mut res = self.transform(1);
         while exp > 0 {

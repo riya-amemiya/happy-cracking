@@ -64,10 +64,7 @@ pub fn run(action: AesCipherAction) -> Result<()> {
         AesCipherAction::EcbDetect { input } => {
             let (detected, duplicates) = ecb_detect(&input)?;
             if detected {
-                println!(
-                    "ECB mode detected! Found {} duplicate block(s):",
-                    duplicates
-                );
+                println!("ECB mode detected! Found {duplicates} duplicate block(s):");
                 println!("The ciphertext contains repeated 16-byte blocks, suggesting ECB mode.");
             } else {
                 println!("No duplicate blocks found. Likely not ECB mode.");

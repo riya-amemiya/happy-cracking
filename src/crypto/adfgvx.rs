@@ -69,8 +69,7 @@ fn check_transposition_key(transposition_key: &str) -> Result<()> {
     // burn CPU in `chars().all` before being rejected.
     if transposition_key.len() > MAX_TRANSPOSITION_KEY_LEN {
         anyhow::bail!(
-            "Transposition key exceeds maximum length of {} to prevent Denial of Service",
-            MAX_TRANSPOSITION_KEY_LEN
+            "Transposition key exceeds maximum length of {MAX_TRANSPOSITION_KEY_LEN} to prevent Denial of Service"
         );
     }
     if transposition_key.is_empty() || !transposition_key.chars().all(|c| c.is_ascii_alphabetic()) {
@@ -116,8 +115,8 @@ pub fn encrypt(input: &str, key: &str, transposition_key: &str) -> Result<String
         if !c.is_ascii_alphanumeric() {
             continue;
         }
-        let (row, col) = find_in_grid(&grid, c)
-            .ok_or_else(|| anyhow::anyhow!("Character '{}' not in grid", c))?;
+        let (row, col) =
+            find_in_grid(&grid, c).ok_or_else(|| anyhow::anyhow!("Character '{c}' not in grid"))?;
         fractionated.push(ADFGVX[row]);
         fractionated.push(ADFGVX[col]);
     }

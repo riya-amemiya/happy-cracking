@@ -142,8 +142,8 @@ fn prepare_input(input: &str, n: usize) -> Vec<i64> {
     let mut values: Vec<i64> = input
         .to_uppercase()
         .chars()
-        .filter(|c| c.is_ascii_uppercase())
-        .map(|c| (c as u8 - b'A') as i64)
+        .filter(char::is_ascii_uppercase)
+        .map(|c| i64::from(c as u8 - b'A'))
         .collect();
 
     while !values.len().is_multiple_of(n) {
@@ -185,15 +185,12 @@ pub fn decrypt(input: &str, key: &str) -> Result<String> {
     let values: Vec<i64> = input
         .to_uppercase()
         .chars()
-        .filter(|c| c.is_ascii_uppercase())
-        .map(|c| (c as u8 - b'A') as i64)
+        .filter(char::is_ascii_uppercase)
+        .map(|c| i64::from(c as u8 - b'A'))
         .collect();
 
     if !values.len().is_multiple_of(n) {
-        anyhow::bail!(
-            "Ciphertext length must be a multiple of matrix dimension ({})",
-            n
-        );
+        anyhow::bail!("Ciphertext length must be a multiple of matrix dimension ({n})");
     }
 
     let result: String = values

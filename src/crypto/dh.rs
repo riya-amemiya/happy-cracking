@@ -44,7 +44,7 @@ pub fn run(action: DhAction) -> Result<()> {
             let p = p.parse::<BigUint>().context("Invalid number for p")?;
             let a = a.parse::<BigUint>().context("Invalid number for a")?;
             let pubkey = compute_pubkey(&g, &a, &p)?;
-            println!("{}", pubkey);
+            println!("{pubkey}");
         }
         DhAction::SharedSecret { public_key, p, a } => {
             let pk = public_key
@@ -53,7 +53,7 @@ pub fn run(action: DhAction) -> Result<()> {
             let p = p.parse::<BigUint>().context("Invalid number for p")?;
             let a = a.parse::<BigUint>().context("Invalid number for a")?;
             let secret = compute_shared_secret(&pk, &a, &p)?;
-            println!("{}", secret);
+            println!("{secret}");
         }
         DhAction::Dlog {
             g,
@@ -70,7 +70,7 @@ pub fn run(action: DhAction) -> Result<()> {
                 .parse::<BigUint>()
                 .context("Invalid number for order")?;
             let x = baby_step_giant_step(&g, &target, &p, &order)?;
-            println!("{}", x);
+            println!("{x}");
         }
     }
     Ok(())
@@ -112,8 +112,7 @@ pub fn baby_step_giant_step(
 
     if m > BigUint::from(MAX_BSGS_ITERATIONS) {
         anyhow::bail!(
-            "Order too large for BSGS algorithm (limit: sqrt(order) <= {})",
-            MAX_BSGS_ITERATIONS
+            "Order too large for BSGS algorithm (limit: sqrt(order) <= {MAX_BSGS_ITERATIONS})"
         );
     }
 

@@ -38,7 +38,7 @@ pub fn run(action: RailFenceAction) -> Result<()> {
             check_max_rails(max_rails)?;
             for r in 2..=max_rails {
                 if let Ok(result) = decrypt(&input, r) {
-                    println!("Rails {}: {}", r, result);
+                    println!("Rails {r}: {result}");
                 }
             }
         }
@@ -51,9 +51,7 @@ pub const MAX_RAILS: usize = 10_000;
 pub fn check_max_rails(max_rails: usize) -> Result<()> {
     if max_rails > MAX_RAILS {
         anyhow::bail!(
-            "Maximum rails {} exceeds the maximum allowed of {} to prevent Denial of Service",
-            max_rails,
-            MAX_RAILS
+            "Maximum rails {max_rails} exceeds the maximum allowed of {MAX_RAILS} to prevent Denial of Service"
         );
     }
     Ok(())

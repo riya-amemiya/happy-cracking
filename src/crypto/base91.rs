@@ -50,7 +50,7 @@ pub fn encode(input: &str) -> Result<String> {
     let mut n: u32 = 0;
 
     for &byte in data {
-        b |= (byte as u32) << n;
+        b |= u32::from(byte) << n;
         n += 8;
 
         if n > 13 {
@@ -95,9 +95,9 @@ pub fn decode(input: &str) -> Result<String> {
             anyhow::bail!("Invalid Base91 character: {}", byte as char);
         }
         if v < 0 {
-            v = d as i32;
+            v = i32::from(d);
         } else {
-            v += (d as i32) * 91;
+            v += i32::from(d) * 91;
             b |= (v as u32) << n;
             n += if (v & 8191) > 88 { 13 } else { 14 };
             loop {

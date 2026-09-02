@@ -47,7 +47,7 @@ pub fn run(action: Crc32ForgeAction) -> Result<()> {
             if actual == target_crc {
                 println!("Match");
             } else {
-                println!("Mismatch (expected {:08x}, got {:08x})", target_crc, actual);
+                println!("Mismatch (expected {target_crc:08x}, got {actual:08x})");
             }
         }
     }
@@ -55,7 +55,7 @@ pub fn run(action: Crc32ForgeAction) -> Result<()> {
 }
 
 // CRC32 polynomial (reversed, IEEE 802.3).
-const CRC32_POLY: u32 = 0xEDB88320;
+const CRC32_POLY: u32 = 0xEDB8_8320;
 
 static CRC32_TABLE: LazyLock<[u32; 256]> = LazyLock::new(|| {
     let mut table = [0u32; 256];
@@ -82,6 +82,7 @@ static INV_TABLE: LazyLock<[u8; 256]> = LazyLock::new(|| {
     inv
 });
 
+#[must_use]
 pub fn crc32_compute(data: &[u8]) -> u32 {
     let table = &*CRC32_TABLE;
     let mut crc = 0xFFFF_FFFFu32;
@@ -100,6 +101,7 @@ pub fn crc32_compute(data: &[u8]) -> u32 {
 // The key observation is that the unknown low bytes at each reverse level
 // only affect lower bit positions, so they decouple byte-by-byte when
 // we set the reversed result equal to the known current state.
+#[must_use]
 pub fn forge_crc32(data: &[u8], target_crc: u32) -> [u8; 4] {
     let table = &*CRC32_TABLE;
 

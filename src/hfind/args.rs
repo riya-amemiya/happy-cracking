@@ -30,8 +30,7 @@ fn bin_name(argv0: Option<&OsStr>) -> String {
     argv0
         .and_then(|a| Path::new(a).file_name())
         .and_then(|n| n.to_str())
-        .map(str::to_owned)
-        .unwrap_or_else(|| env!("CARGO_PKG_NAME").to_string())
+        .map_or_else(|| env!("CARGO_PKG_NAME").to_string(), str::to_owned)
 }
 
 fn is_expr_start(tok: &OsStr) -> bool {

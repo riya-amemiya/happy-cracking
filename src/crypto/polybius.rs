@@ -79,7 +79,7 @@ pub fn decrypt(input: &str) -> Result<String> {
     for token in input.split_whitespace() {
         let bytes = token.as_bytes();
         if bytes.len() != 2 {
-            anyhow::bail!("Invalid Polybius pair: {}", token);
+            anyhow::bail!("Invalid Polybius pair: {token}");
         }
 
         let r_byte = bytes[0];
@@ -87,9 +87,9 @@ pub fn decrypt(input: &str) -> Result<String> {
 
         if !(b'1'..=b'5').contains(&r_byte) || !(b'1'..=b'5').contains(&c_byte) {
             if !r_byte.is_ascii_digit() || !c_byte.is_ascii_digit() {
-                anyhow::bail!("Invalid digit in pair: {}", token);
+                anyhow::bail!("Invalid digit in pair: {token}");
             }
-            anyhow::bail!("Polybius coordinates out of range (1-5): {}", token);
+            anyhow::bail!("Polybius coordinates out of range (1-5): {token}");
         }
 
         let row = (r_byte - b'0') as usize;
