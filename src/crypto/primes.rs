@@ -31,15 +31,16 @@ pub fn run(action: PrimesAction) -> Result<()> {
         PrimesAction::Isprime { n } => {
             let n: u128 = n.parse().map_err(|_| anyhow::anyhow!("Invalid number"))?;
             if is_prime(n) {
-                println!("{} is prime", n);
+                println!("{n} is prime");
             } else {
-                println!("{} is not prime", n);
+                println!("{n} is not prime");
             }
         }
     }
     Ok(())
 }
 
+#[must_use]
 pub fn factorize(mut n: u128) -> Vec<(u128, u32)> {
     let mut factors_list = Vec::new();
 
@@ -58,7 +59,7 @@ pub fn factorize(mut n: u128) -> Vec<(u128, u32)> {
         factor_recursive(n, &mut factors_list);
     }
 
-    factors_list.sort();
+    factors_list.sort_unstable();
 
     let mut result = Vec::new();
     if factors_list.is_empty() {
@@ -198,7 +199,7 @@ fn miller_rabin_u64(n: u64) -> bool {
         }
 
         let a_mont = mont.transform(a);
-        let mut x = mont.pow(a_mont, d as u128);
+        let mut x = mont.pow(a_mont, u128::from(d));
 
         if x == one_mont || x == n_minus_1_mont {
             continue;
@@ -219,8 +220,9 @@ fn miller_rabin_u64(n: u64) -> bool {
     true
 }
 
+#[must_use]
 pub fn is_prime(n: u128) -> bool {
-    if n <= u64::MAX as u128 {
+    if n <= u128::from(u64::MAX) {
         miller_rabin_u64(n as u64)
     } else {
         miller_rabin(n)
@@ -272,9 +274,10 @@ fn binary_gcd_u64(mut u: u64, mut v: u64) -> u64 {
 }
 
 // Pollard's Rho using Brent's cycle detection variant with batch GCD.
+#[must_use]
 pub fn pollard_rho(n: u128) -> u128 {
-    if n <= u64::MAX as u128 {
-        return pollard_rho_u64(n as u64) as u128;
+    if n <= u128::from(u64::MAX) {
+        return u128::from(pollard_rho_u64(n as u64));
     }
 
     if n % 2 == 0 {
@@ -426,6 +429,7 @@ fn pollard_rho_u64(n: u64) -> u64 {
     n
 }
 
+#[must_use]
 pub fn format_factors(factors: &[(u128, u32)]) -> String {
     if factors.is_empty() {
         return "1".to_string();
@@ -437,13 +441,14 @@ pub fn format_factors(factors: &[(u128, u32)]) -> String {
             if *e == 1 {
                 p.to_string()
             } else {
-                format!("{}^{}", p, e)
+                format!("{p}^{e}")
             }
         })
         .collect::<Vec<_>>()
         .join(" × ")
 }
 
+#[must_use]
 pub fn factorize_biguint(n: BigUint) -> Vec<(BigUint, u32)> {
     let mut factors_list = Vec::new();
     if n <= BigUint::one() {
@@ -472,7 +477,7 @@ pub fn factorize_biguint(n: BigUint) -> Vec<(BigUint, u32)> {
             current_count += 1;
         } else {
             result.push((current_p.clone(), current_count));
-            current_p = p.clone();
+            current_p.clone_from(p);
             current_count = 1;
         }
     }
@@ -553,7 +558,7 @@ fn pollard_rho_brent(n: &BigUint, c: &BigUint) -> Option<BigUint> {
     let mut g = BigUint::one();
 
     while g == BigUint::one() {
-        x = y.clone();
+        x.clone_from(&y);
 
         for _ in 0..r {
             y = f(&y);
@@ -561,7 +566,7 @@ fn pollard_rho_brent(n: &BigUint, c: &BigUint) -> Option<BigUint> {
 
         let mut k: u64 = 0;
         while k < r && g == BigUint::one() {
-            ys = y.clone();
+            ys.clone_from(&y);
 
             let batch_size = std::cmp::min(128, r - k);
             for _ in 0..batch_size {

@@ -9,6 +9,7 @@ use clap::{ArgAction, Parser};
     about = "grep-compatible line matcher",
     disable_help_flag = true
 )]
+#[allow(clippy::struct_excessive_bools)]
 pub(crate) struct Cli {
     #[arg(
         short = 'e',

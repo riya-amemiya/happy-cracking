@@ -27,6 +27,7 @@ pub fn run(action: BinaryAction) -> Result<()> {
     Ok(())
 }
 
+#[must_use]
 pub fn encode(input: &str) -> String {
     if input.is_empty() {
         return String::new();

@@ -82,14 +82,14 @@ pub fn run(action: PortscanAction) -> Result<()> {
                 buf
             } else {
                 std::fs::read_to_string(PathBuf::from(&file))
-                    .with_context(|| format!("Failed to read {}", file))?
+                    .with_context(|| format!("Failed to read {file}"))?
             };
             let ports = parse_nmap_output(&text);
             print_ports(&ports, all);
         }
         PortscanAction::Scan { target, args, all } => {
             let output = run_nmap(&target, args.as_deref())?;
-            print!("{}", output);
+            print!("{output}");
             println!();
             println!("=== Common open ports ===");
             let ports = parse_nmap_output(&output);
@@ -97,17 +97,19 @@ pub fn run(action: PortscanAction) -> Result<()> {
         }
         PortscanAction::Commons {} => {
             for &(port, name) in COMMON_PORTS {
-                println!("{:>5}/tcp  {}", port, name);
+                println!("{port:>5}/tcp  {name}");
             }
         }
     }
     Ok(())
 }
 
+#[must_use]
 pub fn is_common_port(port: u16) -> bool {
     COMMON_PORTS.iter().any(|(p, _)| *p == port)
 }
 
+#[must_use]
 pub fn common_service_name(port: u16) -> Option<&'static str> {
     COMMON_PORTS
         .iter()
@@ -151,10 +153,7 @@ pub fn validate_nmap_target(target: &str) -> Result<()> {
         anyhow::bail!("nmap target must not be empty");
     }
     if target.len() > MAX_NMAP_TARGET_LEN {
-        anyhow::bail!(
-            "nmap target exceeds maximum length of {}",
-            MAX_NMAP_TARGET_LEN
-        );
+        anyhow::bail!("nmap target exceeds maximum length of {MAX_NMAP_TARGET_LEN}");
     }
     if target.starts_with('-') {
         anyhow::bail!("nmap target must not start with '-'");
@@ -175,19 +174,16 @@ pub fn validate_nmap_target(target: &str) -> Result<()> {
 /// Reject extra `--args` tokens that would make nmap read/write files or load scripts.
 pub fn validate_nmap_extra_args(extra: &str) -> Result<()> {
     if extra.len() > MAX_NMAP_EXTRA_ARGS_LEN {
-        anyhow::bail!(
-            "nmap extra args exceed maximum length of {}",
-            MAX_NMAP_EXTRA_ARGS_LEN
-        );
+        anyhow::bail!("nmap extra args exceed maximum length of {MAX_NMAP_EXTRA_ARGS_LEN}");
     }
     for tok in extra.split_whitespace() {
         // All short `-o*` flags are output-file destinations (`-oN`, `-oX`, ...).
         if tok.starts_with("-o") {
             anyhow::bail!("nmap extra args must not include output-file flags");
         }
-        let flag = tok.split_once('=').map(|(f, _)| f).unwrap_or(tok);
+        let flag = tok.split_once('=').map_or(tok, |(f, _)| f);
         if flag.starts_with("-iL") || DANGEROUS_NMAP_FLAGS.contains(&flag) {
-            anyhow::bail!("nmap extra args must not include {}", flag);
+            anyhow::bail!("nmap extra args must not include {flag}");
         }
     }
     Ok(())
@@ -221,6 +217,7 @@ pub fn run_nmap(target: &str, extra_args: Option<&str>) -> Result<String> {
 }
 
 /// Parse normal (-oN), greppable (-oG), or XML (-oX) nmap output.
+#[must_use]
 pub fn parse_nmap_output(text: &str) -> Vec<OpenPort> {
     let mut by_port: BTreeMap<(u16, String), OpenPort> = BTreeMap::new();
 
@@ -348,7 +345,7 @@ fn parse_xml_port(line: &str) -> Option<OpenPort> {
 }
 
 fn extract_xml_attr<'a>(line: &'a str, name: &str) -> Option<&'a str> {
-    let key = format!("{}=\"", name);
+    let key = format!("{name}=\"");
     let start = line.find(&key)? + key.len();
     let rest = &line[start..];
     let end = rest.find('"')?;
@@ -377,7 +374,7 @@ fn print_ports(ports: &[OpenPort], show_all: bool) {
                     "Other open ports present: {}",
                     uncommon
                         .iter()
-                        .map(|p| p.to_string())
+                        .map(std::string::ToString::to_string)
                         .collect::<Vec<_>>()
                         .join(", ")
                 );

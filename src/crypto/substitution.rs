@@ -46,9 +46,9 @@ pub fn run(action: SubstitutionAction) -> Result<()> {
         }
         SubstitutionAction::Solve { input, iterations } => {
             let (key, plaintext, score) = solve(&input, iterations)?;
-            println!("Best key: {}", key);
-            println!("Score: {:.2}", score);
-            println!("Plaintext: {}", plaintext);
+            println!("Best key: {key}");
+            println!("Score: {score:.2}");
+            println!("Plaintext: {plaintext}");
         }
     }
     Ok(())
@@ -174,7 +174,7 @@ static BIGRAM_TABLE: LazyLock<[[f64; 26]; 26]> = LazyLock::new(|| {
 fn extract_alpha_indices(input: &str) -> Vec<u8> {
     input
         .chars()
-        .filter(|c| c.is_ascii_alphabetic())
+        .filter(char::is_ascii_alphabetic)
         .map(|c| c.to_ascii_uppercase() as u8 - b'A')
         .collect()
 }
@@ -250,15 +250,13 @@ impl SimpleRng {
 /// Maximum hill-climbing iterations for substitution auto-solve.
 ///
 /// SECURITY: `--iterations` / `--substitution-iters` are user-controlled loop
-/// bounds. Unbounded values let a caller hang the process (CPU exhaustion DoS).
+/// bounds. Unbounded values let a caller hang the process (CPU exhaustion `DoS`).
 pub const MAX_SOLVE_ITERATIONS: usize = 1_000_000;
 
 pub fn check_solve_iterations(iterations: usize) -> Result<()> {
     if iterations > MAX_SOLVE_ITERATIONS {
         anyhow::bail!(
-            "Hill-climbing iterations {} exceeds the maximum allowed limit of {} to prevent Denial of Service",
-            iterations,
-            MAX_SOLVE_ITERATIONS
+            "Hill-climbing iterations {iterations} exceeds the maximum allowed limit of {MAX_SOLVE_ITERATIONS} to prevent Denial of Service"
         );
     }
     Ok(())

@@ -88,6 +88,7 @@ const PHONE_PRESS_TABLE: [&str; 26] = [
     "9999", // Z
 ];
 
+#[must_use]
 pub fn encode(input: &str) -> String {
     let upper = input.to_uppercase();
     // ~3 chars per input char (press digits + separators).
@@ -138,7 +139,7 @@ fn presses_to_char(s: &str) -> Result<char> {
 
     let digit = bytes[0];
     if !bytes.iter().all(|&b| b == digit) {
-        anyhow::bail!("Mixed digits in press sequence: {}", s);
+        anyhow::bail!("Mixed digits in press sequence: {s}");
     }
 
     let count = bytes.len();

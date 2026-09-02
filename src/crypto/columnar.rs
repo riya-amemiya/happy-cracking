@@ -40,10 +40,7 @@ const MAX_KEY_LEN: usize = 1_000_000;
 
 pub fn encrypt(input: &str, key: &str) -> Result<String> {
     if key.len() > MAX_KEY_LEN {
-        anyhow::bail!(
-            "Key exceeds maximum length of {} to prevent Denial of Service",
-            MAX_KEY_LEN
-        );
+        anyhow::bail!("Key exceeds maximum length of {MAX_KEY_LEN} to prevent Denial of Service");
     }
 
     if key.is_empty() || !key.chars().all(|c| c.is_ascii_alphabetic()) {
@@ -81,10 +78,7 @@ pub fn encrypt(input: &str, key: &str) -> Result<String> {
 
 pub fn decrypt(input: &str, key: &str) -> Result<String> {
     if key.len() > MAX_KEY_LEN {
-        anyhow::bail!(
-            "Key exceeds maximum length of {} to prevent Denial of Service",
-            MAX_KEY_LEN
-        );
+        anyhow::bail!("Key exceeds maximum length of {MAX_KEY_LEN} to prevent Denial of Service");
     }
 
     if key.is_empty() || !key.chars().all(|c| c.is_ascii_alphabetic()) {

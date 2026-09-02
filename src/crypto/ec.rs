@@ -116,7 +116,7 @@ pub fn run(action: EcAction) -> Result<()> {
             }
             validate_point_on_curve(&pt, &a, &b, &p)?;
             let ord = point_order(&pt, &a, &p)?;
-            println!("{}", ord);
+            println!("{ord}");
         }
         EcAction::PohligHellman {
             generator,
@@ -140,7 +140,7 @@ pub fn run(action: EcAction) -> Result<()> {
             validate_point_on_curve(&generator_pt, &a, &b, &p)?;
             validate_point_on_curve(&tgt, &a, &b, &p)?;
             let n = pohlig_hellman(&generator_pt, &tgt, &a, &p, &order)?;
-            println!("{}", n);
+            println!("{n}");
         }
     }
     Ok(())
@@ -159,7 +159,7 @@ pub fn parse_point(s: &str) -> Result<ECPoint> {
     }
     let parts: Vec<&str> = s.split(',').collect();
     if parts.len() != 2 {
-        anyhow::bail!("Point must be 'x,y' or 'inf', got '{}'", s);
+        anyhow::bail!("Point must be 'x,y' or 'inf', got '{s}'");
     }
     let x = parts[0]
         .trim()
@@ -172,13 +172,15 @@ pub fn parse_point(s: &str) -> Result<ECPoint> {
     Ok(ECPoint::Affine { x, y })
 }
 
+#[must_use]
 pub fn format_point(point: &ECPoint) -> String {
     match point {
         ECPoint::Infinity => "inf".to_string(),
-        ECPoint::Affine { x, y } => format!("({}, {})", x, y),
+        ECPoint::Affine { x, y } => format!("({x}, {y})"),
     }
 }
 
+#[must_use]
 pub fn is_on_curve(point: &ECPoint, a: &BigInt, b: &BigInt, p: &BigInt) -> bool {
     if p.is_zero() {
         return false;
@@ -305,8 +307,7 @@ pub fn point_order(point: &ECPoint, a: &BigInt, p: &BigInt) -> Result<BigUint> {
         }
         if iterations > MAX_POINT_ORDER_ITERATIONS {
             anyhow::bail!(
-                "Point order calculation limit exceeded (limit: {})",
-                MAX_POINT_ORDER_ITERATIONS
+                "Point order calculation limit exceeded (limit: {MAX_POINT_ORDER_ITERATIONS})"
             );
         }
         if current == ECPoint::Infinity {
@@ -329,8 +330,7 @@ fn bsgs_ecdlp(
 
     if m_val > BigUint::from(MAX_BSGS_ITERATIONS) {
         anyhow::bail!(
-            "Order too large for BSGS algorithm (limit: sqrt(order) <= {})",
-            MAX_BSGS_ITERATIONS
+            "Order too large for BSGS algorithm (limit: sqrt(order) <= {MAX_BSGS_ITERATIONS})"
         );
     }
 
@@ -382,7 +382,7 @@ pub fn pohlig_hellman(
     if p.is_zero() {
         anyhow::bail!("Modulus p must be non-zero");
     }
-    let factors = factor_biguint(order)?;
+    let factors = factor_biguint(order);
 
     if factors.is_empty() {
         anyhow::bail!("Order must be > 1");
@@ -444,8 +444,8 @@ fn solve_prime_power_ecdlp(
     Ok(k)
 }
 
-fn factor_biguint(n: &BigUint) -> Result<Vec<(BigUint, u32)>> {
-    Ok(primes::factorize_biguint(n.clone()))
+fn factor_biguint(n: &BigUint) -> Vec<(BigUint, u32)> {
+    primes::factorize_biguint(n.clone())
 }
 
 fn crt(residues: &[BigUint], moduli: &[BigUint]) -> Result<BigUint> {
@@ -460,17 +460,17 @@ fn crt(residues: &[BigUint], moduli: &[BigUint]) -> Result<BigUint> {
 
     for (r_i, m_i) in residues.iter().zip(moduli.iter()) {
         let mi_big = &big_m / m_i;
-        let mi_int = mi_big.to_bigint().unwrap();
-        let m_i_int = m_i.to_bigint().unwrap();
-        let r_i_int = r_i.to_bigint().unwrap();
+        let cofactor = mi_big.to_bigint().unwrap();
+        let modulus_int = m_i.to_bigint().unwrap();
+        let residue_int = r_i.to_bigint().unwrap();
 
-        let ext = mi_int.extended_gcd(&m_i_int);
+        let ext = cofactor.extended_gcd(&modulus_int);
         if ext.gcd != BigInt::one() {
             anyhow::bail!("Moduli must be pairwise coprime for CRT");
         }
         let yi = ext.x;
 
-        x = (x + r_i_int * mi_int * yi) % &big_m_int;
+        x = (x + residue_int * cofactor * yi) % &big_m_int;
     }
 
     Ok(((x + &big_m_int) % &big_m_int).to_biguint().unwrap())
@@ -501,7 +501,7 @@ mod tests {
     #[test]
     fn test_factor_biguint_large_prime() {
         let n = BigUint::from(18446744073709551557u64);
-        let factors = factor_biguint(&n).unwrap();
+        let factors = factor_biguint(&n);
         assert_eq!(factors.len(), 1);
         assert_eq!(factors[0].0, n);
         assert_eq!(factors[0].1, 1);

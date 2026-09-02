@@ -19,7 +19,7 @@ pub fn run(action: HashIdAction) -> Result<()> {
             } else {
                 println!("Possible hash types:");
                 for result in results {
-                    println!("  - {}", result);
+                    println!("  - {result}");
                 }
             }
         }
@@ -27,6 +27,7 @@ pub fn run(action: HashIdAction) -> Result<()> {
     Ok(())
 }
 
+#[must_use]
 pub fn identify(input: &str) -> Vec<&'static str> {
     let input = input.trim();
     let len = input.len();

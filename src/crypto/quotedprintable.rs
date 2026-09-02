@@ -59,6 +59,7 @@ fn push_hex_encoded(out: &mut String, line_len: &mut usize, b: u8) {
     *line_len += 3;
 }
 
+#[must_use]
 pub fn encode(data: &[u8]) -> String {
     // Worst case is `=XX` (3 chars) per byte, plus occasional `=\n` soft breaks.
     let mut out = String::with_capacity(data.len().saturating_mul(3));

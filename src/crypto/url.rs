@@ -27,12 +27,13 @@ pub fn run(action: UrlAction) -> Result<()> {
     Ok(())
 }
 
+#[must_use]
 pub fn encode(input: &str) -> String {
     urlencoding::encode(input).into_owned()
 }
 
 pub fn decode(input: &str) -> Result<String> {
     urlencoding::decode(input.trim())
-        .map(|s| s.into_owned())
-        .map_err(|e| anyhow::anyhow!("Failed to decode URL: {}", e))
+        .map(std::borrow::Cow::into_owned)
+        .map_err(|e| anyhow::anyhow!("Failed to decode URL: {e}"))
 }

@@ -21,10 +21,7 @@ pub enum BeaufortAction {
 
 pub fn run(action: BeaufortAction) -> Result<()> {
     match action {
-        BeaufortAction::Encrypt { input, key } => {
-            println!("{}", cipher(&input, &key)?);
-        }
-        BeaufortAction::Decrypt { input, key } => {
+        BeaufortAction::Encrypt { input, key } | BeaufortAction::Decrypt { input, key } => {
             println!("{}", cipher(&input, &key)?);
         }
     }
@@ -49,7 +46,7 @@ pub fn cipher(input: &str, key: &str) -> Result<String> {
                 let k = key_upper[key_index % key_upper.len()] - b'A';
                 let p = c.to_ascii_uppercase() as u8 - b'A';
                 key_index += 1;
-                let encrypted = (k as i32 - p as i32).rem_euclid(26) as u8;
+                let encrypted = (i32::from(k) - i32::from(p)).rem_euclid(26) as u8;
                 (encrypted + base) as char
             } else {
                 c

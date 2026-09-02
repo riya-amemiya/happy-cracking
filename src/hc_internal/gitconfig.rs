@@ -214,7 +214,8 @@ fn config_int(text: &[u8]) -> Option<i64> {
     }
     let magnitude = body.iter().try_fold(0i64, |acc, &b| {
         let digit = (b as char).to_digit(radix)?;
-        acc.checked_mul(radix as i64)?.checked_add(digit as i64)
+        acc.checked_mul(i64::from(radix))?
+            .checked_add(i64::from(digit))
     })?;
     let scaled = magnitude.checked_mul(scale)?;
     Some(if negative { -scaled } else { scaled })
@@ -222,9 +223,8 @@ fn config_int(text: &[u8]) -> Option<i64> {
 
 fn config_bool(value: &[u8]) -> bool {
     match value.to_ascii_lowercase().as_slice() {
-        b"" => false,
         b"true" | b"yes" | b"on" => true,
-        b"false" | b"no" | b"off" => false,
+        b"" | b"false" | b"no" | b"off" => false,
         _ => config_int(value).is_some_and(|v| v != 0),
     }
 }
@@ -437,8 +437,8 @@ struct RawConfig {
     data: Vec<u8>,
 }
 
-fn push_source(out: &mut Vec<RawConfig>, path: PathBuf) {
-    if let Ok(data) = fs::read(&path) {
+fn push_source(out: &mut Vec<RawConfig>, path: &Path) {
+    if let Ok(data) = fs::read(path) {
         out.push(RawConfig {
             dir: path.parent().unwrap_or(Path::new(".")).to_path_buf(),
             data,
@@ -455,17 +455,16 @@ fn base_sources() -> &'static [RawConfig] {
         if !nosystem {
             let system = std::env::var_os("GIT_CONFIG_SYSTEM")
                 .map_or_else(|| PathBuf::from("/etc/gitconfig"), PathBuf::from);
-            push_source(&mut out, system);
+            push_source(&mut out, &system);
         }
-        match std::env::var_os("GIT_CONFIG_GLOBAL") {
-            Some(g) => push_source(&mut out, PathBuf::from(g)),
-            None => {
-                if let Some(dir) = xdg_config_home() {
-                    push_source(&mut out, dir.join("git").join("config"));
-                }
-                if let Some(home) = std::env::var_os("HOME") {
-                    push_source(&mut out, PathBuf::from(home).join(".gitconfig"));
-                }
+        if let Some(g) = std::env::var_os("GIT_CONFIG_GLOBAL") {
+            push_source(&mut out, &PathBuf::from(g));
+        } else {
+            if let Some(dir) = xdg_config_home() {
+                push_source(&mut out, &dir.join("git").join("config"));
+            }
+            if let Some(home) = std::env::var_os("HOME") {
+                push_source(&mut out, &PathBuf::from(home).join(".gitconfig"));
             }
         }
         out

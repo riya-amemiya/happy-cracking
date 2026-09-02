@@ -79,6 +79,7 @@ fn starts_with(data: &[u8], magic: &[u8]) -> bool {
     matches_at(data, 0, magic)
 }
 
+#[must_use]
 pub fn identify(data: &[u8]) -> Vec<Signature> {
     let mut out = Vec::new();
 

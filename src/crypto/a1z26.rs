@@ -27,6 +27,7 @@ pub fn run(action: A1z26Action) -> Result<()> {
     Ok(())
 }
 
+#[must_use]
 pub fn encode(input: &str) -> String {
     if input.is_empty() {
         return String::new();
@@ -60,7 +61,7 @@ pub fn encode(input: &str) -> String {
 fn parse_a1z26_number(s: &str) -> Result<char> {
     let n: u8 = s.parse().context("Failed to parse number in A1Z26 input")?;
     if !(1..=26).contains(&n) {
-        anyhow::bail!("Number {} is out of range (1-26)", n);
+        anyhow::bail!("Number {n} is out of range (1-26)");
     }
     Ok((b'A' + n - 1) as char)
 }

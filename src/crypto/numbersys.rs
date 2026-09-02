@@ -27,10 +27,10 @@ pub fn convert(input: &str, from_base: u32, to_base: u32) -> Result<String> {
     let input = input.trim();
 
     if !(2..=36).contains(&from_base) {
-        anyhow::bail!("Source base must be between 2 and 36, got {}", from_base);
+        anyhow::bail!("Source base must be between 2 and 36, got {from_base}");
     }
     if !(2..=36).contains(&to_base) {
-        anyhow::bail!("Target base must be between 2 and 36, got {}", to_base);
+        anyhow::bail!("Target base must be between 2 and 36, got {to_base}");
     }
     if input.is_empty() {
         anyhow::bail!("Input cannot be empty");
@@ -46,14 +46,14 @@ pub fn convert(input: &str, from_base: u32, to_base: u32) -> Result<String> {
     let mut v = value;
 
     while v > 0 {
-        let digit = (v % to_base as u128) as u8;
+        let digit = (v % u128::from(to_base)) as u8;
         let c = if digit < 10 {
             b'0' + digit
         } else {
             b'a' + digit - 10
         };
         result.push(c as char);
-        v /= to_base as u128;
+        v /= u128::from(to_base);
     }
 
     result.reverse();

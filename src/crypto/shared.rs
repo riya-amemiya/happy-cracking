@@ -1,4 +1,5 @@
 // order[i] is the rank of column i for columnar transposition.
+#[must_use]
 pub fn column_order(key: &str) -> Vec<usize> {
     let key_upper: Vec<char> = key.to_uppercase().chars().collect();
     let mut indices: Vec<usize> = (0..key_upper.len()).collect();

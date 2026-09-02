@@ -23,16 +23,18 @@ pub fn run(action: HexdumpAction) -> Result<()> {
         HexdumpAction::Reverse { input } => {
             let bytes = reverse(&input)?;
             let text = String::from_utf8(bytes).context("Reversed data is not valid UTF-8")?;
-            print!("{}", text);
+            print!("{text}");
         }
     }
     Ok(())
 }
 
+#[must_use]
 pub fn dump(input: &str) -> String {
     dump_bytes(input.as_bytes())
 }
 
+#[must_use]
 pub fn dump_bytes(data: &[u8]) -> String {
     if data.is_empty() {
         return String::new();
@@ -125,7 +127,7 @@ pub fn reverse(hex_dump: &str) -> Result<Vec<u8>> {
             after_colon
         };
 
-        let hex_chars: String = hex_part.chars().filter(|c| c.is_ascii_hexdigit()).collect();
+        let hex_chars: String = hex_part.chars().filter(char::is_ascii_hexdigit).collect();
         let bytes = hex::decode(&hex_chars).context("Failed to decode hex in dump")?;
         result.extend_from_slice(&bytes);
     }

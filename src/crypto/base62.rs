@@ -42,6 +42,7 @@ static DECODE_TABLE: LazyLock<[u8; 256]> = LazyLock::new(|| {
     table
 });
 
+#[must_use]
 pub fn encode(input: &str) -> String {
     let bytes = input.as_bytes();
     if bytes.is_empty() {

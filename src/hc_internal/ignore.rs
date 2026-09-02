@@ -107,25 +107,22 @@ fn push_class(pat: &[u8], open: usize, out: &mut String, fold: bool) -> Option<u
         } else if ch == b'[' && pat.get(i + 1) == Some(&b':') {
             let rest = &pat[i + 2..];
             let close = rest.iter().position(|&b| b == b']')?;
-            match rest[..close].strip_suffix(b":").filter(|n| !n.is_empty()) {
-                Some(name) => {
-                    let &text = POSIX_CLASSES.iter().find(|c| c.as_bytes() == name)?;
-                    let text = if fold && (text == "upper" || text == "lower") {
-                        "lower"
-                    } else {
-                        text
-                    };
-                    body.push_str("[:");
-                    body.push_str(text);
-                    body.push_str(":]");
-                    prev = None;
-                    i += close + 3;
-                }
-                None => {
-                    push_byte(&mut body, b'[');
-                    prev = Some(b'[');
-                    i += 1;
-                }
+            if let Some(name) = rest[..close].strip_suffix(b":").filter(|n| !n.is_empty()) {
+                let &text = POSIX_CLASSES.iter().find(|c| c.as_bytes() == name)?;
+                let text = if fold && (text == "upper" || text == "lower") {
+                    "lower"
+                } else {
+                    text
+                };
+                body.push_str("[:");
+                body.push_str(text);
+                body.push_str(":]");
+                prev = None;
+                i += close + 3;
+            } else {
+                push_byte(&mut body, b'[');
+                prev = Some(b'[');
+                i += 1;
             }
         } else {
             push_byte(&mut body, ch);

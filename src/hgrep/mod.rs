@@ -26,6 +26,7 @@ thread_local! {
     static SLOT: RefCell<(Vec<u8>, Vec<u8>)> = const { RefCell::new((Vec::new(), Vec::new())) };
 }
 
+#[must_use]
 pub fn run() -> ExitCode {
     let mut cli = Cli::parse();
 

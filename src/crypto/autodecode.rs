@@ -18,9 +18,7 @@ pub const MAX_DECODE_DEPTH: usize = 12;
 pub fn check_decode_depth(max_depth: usize) -> Result<()> {
     if max_depth > MAX_DECODE_DEPTH {
         anyhow::bail!(
-            "Maximum decode depth {} exceeds the maximum allowed limit of {} to prevent Denial of Service",
-            max_depth,
-            MAX_DECODE_DEPTH
+            "Maximum decode depth {max_depth} exceeds the maximum allowed limit of {MAX_DECODE_DEPTH} to prevent Denial of Service"
         );
     }
     Ok(())
@@ -70,7 +68,7 @@ pub fn run(action: AutoDecodeAction) -> Result<()> {
                         } else {
                             ""
                         };
-                        println!("[{}]{} {}", path, flag, decoded);
+                        println!("[{path}]{flag} {decoded}");
                     }
                 }
             } else if recursive {
@@ -82,7 +80,7 @@ pub fn run(action: AutoDecodeAction) -> Result<()> {
                     println!("No encoding detected");
                 } else {
                     for (encoding, decoded) in results {
-                        println!("[{}] {}", encoding, decoded);
+                        println!("[{encoding}] {decoded}");
                     }
                 }
             }
@@ -91,6 +89,7 @@ pub fn run(action: AutoDecodeAction) -> Result<()> {
     Ok(())
 }
 
+#[must_use]
 pub fn detect_and_decode(input: &str) -> Vec<(&'static str, String)> {
     let input = input.trim();
     let mut results = Vec::new();
@@ -150,7 +149,7 @@ fn decode_recursive(input: &str, depth: usize, max_depth: usize) {
     let indent = "  ".repeat(depth);
 
     if depth >= max_depth {
-        println!("{}[Max depth reached]", indent);
+        println!("{indent}[Max depth reached]");
         return;
     }
 
@@ -164,7 +163,7 @@ fn decode_recursive(input: &str, depth: usize, max_depth: usize) {
     }
 
     for (encoding, decoded) in results {
-        println!("{}[{}] {}", indent, encoding, decoded);
+        println!("{indent}[{encoding}] {decoded}");
 
         if decoded != input && !decoded.is_empty() {
             decode_recursive(&decoded, depth + 1, max_depth);
@@ -186,6 +185,7 @@ fn looks_like_flag(s: &str) -> bool {
 }
 
 /// Score a candidate decode result. Higher is better.
+#[must_use]
 pub fn score_decode_candidate(s: &str) -> f64 {
     if s.is_empty() || s.len() > MAX_OUTPUT_CHARS {
         return f64::NEG_INFINITY;
@@ -209,6 +209,7 @@ pub fn score_decode_candidate(s: &str) -> f64 {
 
 /// Breadth-first multi-path decode tree for aggressive mode.
 /// Returns (path, decoded) pairs sorted by score descending.
+#[must_use]
 pub fn decode_tree(input: &str, max_depth: usize, max_nodes: usize) -> Vec<(String, String)> {
     let max_depth = max_depth.min(MAX_DECODE_DEPTH);
     let max_nodes = max_nodes.clamp(1, MAX_TREE_NODES);
@@ -257,7 +258,7 @@ pub fn decode_tree(input: &str, max_depth: usize, max_nodes: usize) -> Vec<(Stri
             let next_path = if path.is_empty() {
                 encoding.to_string()
             } else {
-                format!("{}->{}", path, encoding)
+                format!("{path}->{encoding}")
             };
             let score = score_decode_candidate(&decoded);
             leaves.push((next_path.clone(), decoded.clone(), score));

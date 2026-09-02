@@ -28,7 +28,7 @@ pub fn run(action: Crc32Action) -> Result<()> {
             if computed == checksum.to_lowercase() {
                 println!("Match");
             } else {
-                println!("Mismatch (expected {}, got {})", checksum, computed);
+                println!("Mismatch (expected {checksum}, got {computed})");
             }
         }
     }
@@ -41,7 +41,7 @@ static CRC32_TABLE: LazyLock<[u32; 256]> = LazyLock::new(|| {
         let mut crc = i;
         for _ in 0..8 {
             if crc & 1 != 0 {
-                crc = (crc >> 1) ^ 0xEDB88320;
+                crc = (crc >> 1) ^ 0xEDB8_8320;
             } else {
                 crc >>= 1;
             }
@@ -51,6 +51,7 @@ static CRC32_TABLE: LazyLock<[u32; 256]> = LazyLock::new(|| {
     table
 });
 
+#[must_use]
 pub fn compute_bytes(data: &[u8]) -> u32 {
     let table = &*CRC32_TABLE;
     let mut crc = 0xFFFF_FFFFu32;
@@ -61,6 +62,7 @@ pub fn compute_bytes(data: &[u8]) -> u32 {
     crc ^ 0xFFFF_FFFF
 }
 
+#[must_use]
 pub fn compute(input: &str) -> String {
     format!("{:08x}", compute_bytes(input.as_bytes()))
 }

@@ -37,9 +37,9 @@ fn uu_char(value: u8) -> u8 {
     (value & 0x3F) + 0x20
 }
 
+#[must_use]
 pub fn encode(data: &[u8], filename: &str) -> String {
-    let mut out = String::new();
-    out.push_str(&format!("begin 644 {filename}\n"));
+    let mut out = format!("begin 644 {filename}\n");
 
     for chunk in data.chunks(45) {
         out.push(uu_char(chunk.len() as u8) as char);

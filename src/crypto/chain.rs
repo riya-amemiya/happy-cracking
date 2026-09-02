@@ -47,7 +47,7 @@ fn apply_operation(input: &str, op: &str) -> Result<String> {
         "reverse" => Ok(input.chars().rev().collect()),
         "upper" => Ok(input.to_uppercase()),
         "lower" => Ok(input.to_lowercase()),
-        _ => anyhow::bail!("Unknown operation: {}", op),
+        _ => anyhow::bail!("Unknown operation: {op}"),
     }
 }
 
@@ -58,15 +58,11 @@ pub fn chain(input: &str, ops: &str) -> Result<String> {
 
     let op_count = ops.split(',').count();
     if op_count > MAX_OPERATIONS {
-        anyhow::bail!(
-            "Too many operations: {} (limit: {})",
-            op_count,
-            MAX_OPERATIONS
-        );
+        anyhow::bail!("Too many operations: {op_count} (limit: {MAX_OPERATIONS})");
     }
 
     ops.split(',')
-        .map(|op| op.trim())
+        .map(str::trim)
         .try_fold(input.to_string(), |current, op| {
             if current.len() > MAX_OUTPUT_SIZE {
                 anyhow::bail!(
@@ -75,6 +71,6 @@ pub fn chain(input: &str, ops: &str) -> Result<String> {
                     MAX_OUTPUT_SIZE
                 );
             }
-            apply_operation(&current, op).with_context(|| format!("Failed at operation '{}'", op))
+            apply_operation(&current, op).with_context(|| format!("Failed at operation '{op}'"))
         })
 }

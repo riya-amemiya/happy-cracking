@@ -508,21 +508,21 @@ fn classify_dtype(
             }
         };
     }
-    let kind = match kind_from_dtype(d_type) {
-        Some(k) => k,
-        None => match fs::symlink_metadata(path) {
+    let Some(kind) = kind_from_dtype(d_type) else {
+        return match fs::symlink_metadata(path) {
             Ok(m) => {
                 let kind = kind_from_meta(&m);
                 if !need_meta && (kind != Kind::Dir || !follow) {
-                    return (None, kind);
+                    (None, kind)
+                } else {
+                    (Some(m), kind)
                 }
-                return (Some(m), kind);
             }
             Err(e) => {
                 report(path, e, errors);
-                return (None, Kind::Other);
+                (None, Kind::Other)
             }
-        },
+        };
     };
     if !need_meta && (kind != Kind::Dir || !follow) {
         return (None, kind);

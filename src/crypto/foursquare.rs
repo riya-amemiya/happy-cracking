@@ -50,7 +50,7 @@ fn prepare_letters(input: &str) -> Vec<char> {
     input
         .to_uppercase()
         .chars()
-        .filter(|c| c.is_ascii_uppercase())
+        .filter(char::is_ascii_uppercase)
         .map(normalize_char)
         .collect()
 }

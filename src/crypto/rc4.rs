@@ -32,14 +32,14 @@ pub fn run(action: Rc4Action) -> Result<()> {
             let result = rc4(&input_bytes, &key_bytes)?;
             println!("Hex: {}", hex::encode(&result));
             if let Ok(s) = String::from_utf8(result) {
-                println!("ASCII: {}", s);
+                println!("ASCII: {s}");
             }
         }
         Rc4Action::CipherAscii { input, key } => {
             let result = rc4(input.as_bytes(), key.as_bytes())?;
             println!("Hex: {}", hex::encode(&result));
             if let Ok(s) = String::from_utf8(result) {
-                println!("ASCII: {}", s);
+                println!("ASCII: {s}");
             }
         }
         Rc4Action::Sbox { key } => {

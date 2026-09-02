@@ -163,9 +163,9 @@ pub fn decode(input: &str) -> Result<String> {
     let mut result = String::new();
     for token in input.split_whitespace() {
         let idx = pattern_to_index(token)
-            .ok_or_else(|| anyhow::anyhow!("Invalid Baconian pattern: {}", token))?;
+            .ok_or_else(|| anyhow::anyhow!("Invalid Baconian pattern: {token}"))?;
         let c = bacon_index_to_char(idx)
-            .ok_or_else(|| anyhow::anyhow!("Invalid Baconian index: {}", idx))?;
+            .ok_or_else(|| anyhow::anyhow!("Invalid Baconian index: {idx}"))?;
         result.push(c);
     }
 

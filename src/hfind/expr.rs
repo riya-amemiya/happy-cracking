@@ -107,7 +107,7 @@ impl Parser<'_> {
 
     fn has_term(&self) -> bool {
         match self.peek() {
-            None | Some(b")") | Some(b"-o") | Some(b"-or") => false,
+            None | Some(b")" | b"-o" | b"-or") => false,
             Some(_) => true,
         }
     }
@@ -321,7 +321,7 @@ fn parse_size(raw: &[u8]) -> Result<(Cmp, u64, u64), String> {
         Some(b) if b.is_ascii_digit() => (rest, 512),
         _ => return Err(err()),
     };
-    if digits.is_empty() || !digits.iter().all(|b| b.is_ascii_digit()) {
+    if digits.is_empty() || !digits.iter().all(u8::is_ascii_digit) {
         return Err(err());
     }
     let n = std::str::from_utf8(digits)
@@ -333,7 +333,7 @@ fn parse_size(raw: &[u8]) -> Result<(Cmp, u64, u64), String> {
 
 fn parse_signed(raw: &[u8]) -> Option<(Cmp, i64)> {
     let (cmp, rest) = split_cmp(raw);
-    if rest.is_empty() || !rest.iter().all(|b| b.is_ascii_digit()) {
+    if rest.is_empty() || !rest.iter().all(u8::is_ascii_digit) {
         return None;
     }
     let n = std::str::from_utf8(rest).ok()?.parse().ok()?;
@@ -420,7 +420,7 @@ fn base_name(path: &Path) -> &[u8] {
     }
 }
 
-fn cmp_ord<T: Ord>(cmp: Cmp, got: T, n: T) -> bool {
+fn cmp_ord<T: Copy + Ord>(cmp: Cmp, got: T, n: T) -> bool {
     match cmp {
         Cmp::Eq => got == n,
         Cmp::Lt => got < n,
@@ -434,8 +434,8 @@ fn rounded_units(bytes: u64, unit: u64) -> u64 {
 
 fn age_units(now: SystemTime, mtime: SystemTime, unit: u64) -> i64 {
     match now.duration_since(mtime) {
-        Ok(d) => (d.as_secs() / unit) as i64,
-        Err(e) => -((e.duration().as_secs() / unit) as i64),
+        Ok(d) => (d.as_secs() / unit).cast_signed(),
+        Err(e) => (e.duration().as_secs() / unit).cast_signed().wrapping_neg(),
     }
 }
 

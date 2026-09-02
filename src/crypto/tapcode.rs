@@ -35,6 +35,7 @@ const GRID: [char; 25] = [
 
 const DOTS: [&str; 6] = ["", ".", "..", "...", "....", "....."];
 
+#[must_use]
 pub fn encode(input: &str) -> String {
     let mut out = String::with_capacity(input.len() * 10);
     let mut first_word = true;
@@ -97,23 +98,23 @@ pub fn decode(input: &str) -> Result<String> {
             let mut parts = pair.split(' ').filter(|s| !s.is_empty());
             let row_str = parts
                 .next()
-                .ok_or_else(|| anyhow::anyhow!("Invalid tap code pair: {}", pair))?;
+                .ok_or_else(|| anyhow::anyhow!("Invalid tap code pair: {pair}"))?;
             let col_str = parts
                 .next()
-                .ok_or_else(|| anyhow::anyhow!("Invalid tap code pair: {}", pair))?;
+                .ok_or_else(|| anyhow::anyhow!("Invalid tap code pair: {pair}"))?;
 
             if parts.next().is_some() {
-                anyhow::bail!("Invalid tap code pair: {}", pair);
+                anyhow::bail!("Invalid tap code pair: {pair}");
             }
 
             let row = row_str.len();
             let col = col_str.len();
 
             if !(1..=5).contains(&row) || !(1..=5).contains(&col) {
-                anyhow::bail!("Tap code values out of range (1-5): {}", pair);
+                anyhow::bail!("Tap code values out of range (1-5): {pair}");
             }
             if !row_str.chars().all(|c| c == '.') || !col_str.chars().all(|c| c == '.') {
-                anyhow::bail!("Invalid tap code characters: {}", pair);
+                anyhow::bail!("Invalid tap code characters: {pair}");
             }
 
             let idx = (row - 1) * 5 + (col - 1);

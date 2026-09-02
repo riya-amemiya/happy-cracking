@@ -22,7 +22,7 @@ fn solve_caesar_recovers_hello() {
     // "Khoor" is "Hello" with shift 3
     let results = solve::solve(
         "Khoor",
-        SolveOptions {
+        &SolveOptions {
             substitution_iters: 0,
             max_rails: 3,
             aggressive: false,
@@ -48,7 +48,7 @@ fn solve_base64_layer() {
     let encoded = "ZmxhZ3tiNjR9";
     let results = solve::solve(
         encoded,
-        SolveOptions {
+        &SolveOptions {
             substitution_iters: 0,
             max_rails: 2,
             aggressive: true,
@@ -63,7 +63,7 @@ fn solve_base64_layer() {
 
 #[test]
 fn solve_empty_input() {
-    let results = solve::solve("", SolveOptions::default());
+    let results = solve::solve("", &SolveOptions::default());
     assert!(results.is_empty());
 }
 

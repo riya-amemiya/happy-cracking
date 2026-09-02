@@ -36,10 +36,12 @@ pub fn run(action: StrToolsAction) -> Result<()> {
     Ok(())
 }
 
+#[must_use]
 pub fn reverse(input: &str) -> String {
     umt_reverse_string(input)
 }
 
+#[must_use]
 pub fn ord(input: &str) -> String {
     if input.is_empty() {
         return String::new();
@@ -87,8 +89,8 @@ pub fn chr(input: &str) -> Result<String> {
         .map(|s| {
             let n: u32 = s
                 .parse()
-                .map_err(|_| anyhow::anyhow!("Invalid code point: {}", s))?;
-            char::from_u32(n).ok_or_else(|| anyhow::anyhow!("Invalid Unicode code point: {}", n))
+                .map_err(|_| anyhow::anyhow!("Invalid code point: {s}"))?;
+            char::from_u32(n).ok_or_else(|| anyhow::anyhow!("Invalid Unicode code point: {n}"))
         })
         .collect()
 }

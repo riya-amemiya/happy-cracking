@@ -55,7 +55,7 @@ pub fn encrypt(input: &str, key: &str) -> Result<String> {
         }
     }
 
-    String::from_utf8(bytes).map_err(|e| anyhow::anyhow!("Invalid UTF-8 after encryption: {}", e))
+    String::from_utf8(bytes).map_err(|e| anyhow::anyhow!("Invalid UTF-8 after encryption: {e}"))
 }
 
 pub fn decrypt(input: &str, key: &str) -> Result<String> {
@@ -72,5 +72,5 @@ pub fn decrypt(input: &str, key: &str) -> Result<String> {
         }
     }
 
-    String::from_utf8(bytes).map_err(|e| anyhow::anyhow!("Invalid UTF-8 after decryption: {}", e))
+    String::from_utf8(bytes).map_err(|e| anyhow::anyhow!("Invalid UTF-8 after decryption: {e}"))
 }

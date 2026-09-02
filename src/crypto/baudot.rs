@@ -149,11 +149,11 @@ pub fn decode(input: &str) -> Result<String> {
 
     for code_str in input.split_whitespace() {
         if code_str.len() != 5 || !code_str.chars().all(|c| c == '0' || c == '1') {
-            anyhow::bail!("Invalid Baudot code: {}", code_str);
+            anyhow::bail!("Invalid Baudot code: {code_str}");
         }
 
         let code = u8::from_str_radix(code_str, 2)
-            .with_context(|| format!("Failed to parse Baudot code: {}", code_str))?;
+            .with_context(|| format!("Failed to parse Baudot code: {code_str}"))?;
 
         if code == FIGS_SHIFT {
             in_figures = true;
@@ -170,7 +170,7 @@ pub fn decode(input: &str) -> Result<String> {
                 result.push(ch);
             }
         } else {
-            anyhow::bail!("Baudot code out of range: {}", code);
+            anyhow::bail!("Baudot code out of range: {code}");
         }
     }
 

@@ -84,7 +84,7 @@ const ENCODE_LUT: [Option<&str>; 128] = {
 ///
 /// Digit words share an initial letter with A–Z words (ZERO/ZULU, FOUR/FIVE/FOXTROT,
 /// …), but no letter has more than 3 entries, so a 26×3 table plus
-/// `eq_ignore_ascii_case` replaces HashMap hashing and the per-token
+/// `eq_ignore_ascii_case` replaces `HashMap` hashing and the per-token
 /// `to_uppercase()` allocation.
 const DECODE_LUT: [[Option<(&str, char)>; 3]; 26] = {
     let mut table = [[None; 3]; 26];
@@ -143,6 +143,7 @@ fn lookup_nato(word: &str) -> Option<char> {
     None
 }
 
+#[must_use]
 pub fn encode(input: &str) -> String {
     // Average NATO word is ~5 chars + 1 space.
     let mut result = String::with_capacity(input.len() * 6);
@@ -170,7 +171,7 @@ pub fn decode(input: &str) -> Result<String> {
 
     let mut result = String::with_capacity(input.len() / 4);
     for word in input.split_whitespace() {
-        let ch = lookup_nato(word).with_context(|| format!("Unknown NATO word: {}", word))?;
+        let ch = lookup_nato(word).with_context(|| format!("Unknown NATO word: {word}"))?;
         result.push(ch);
     }
     Ok(result)

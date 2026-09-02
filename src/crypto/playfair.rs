@@ -37,7 +37,7 @@ fn prepare_digraphs(input: &str) -> Vec<(char, char)> {
     let letters: Vec<char> = input
         .to_uppercase()
         .chars()
-        .filter(|c| c.is_ascii_uppercase())
+        .filter(char::is_ascii_uppercase)
         .map(|c| if c == 'J' { 'I' } else { c })
         .collect();
 
@@ -68,7 +68,7 @@ pub fn encrypt(input: &str, key: &str) -> Result<String> {
         anyhow::bail!("Key must be non-empty and contain only alphabetic characters");
     }
 
-    let filtered: String = input.chars().filter(|c| c.is_ascii_alphabetic()).collect();
+    let filtered: String = input.chars().filter(char::is_ascii_alphabetic).collect();
     if filtered.is_empty() {
         return Ok(String::new());
     }
@@ -80,9 +80,9 @@ pub fn encrypt(input: &str, key: &str) -> Result<String> {
     let mut result = String::new();
     for (a, b) in digraphs {
         let (ra, ca) = find_in_square_fast(&reverse, a)
-            .ok_or_else(|| anyhow::anyhow!("Character {} not in square", a))?;
+            .ok_or_else(|| anyhow::anyhow!("Character {a} not in square"))?;
         let (rb, cb) = find_in_square_fast(&reverse, b)
-            .ok_or_else(|| anyhow::anyhow!("Character {} not in square", b))?;
+            .ok_or_else(|| anyhow::anyhow!("Character {b} not in square"))?;
 
         if ra == rb {
             // Same row: shift right
@@ -110,7 +110,7 @@ pub fn decrypt(input: &str, key: &str) -> Result<String> {
     let letters: Vec<char> = input
         .to_uppercase()
         .chars()
-        .filter(|c| c.is_ascii_uppercase())
+        .filter(char::is_ascii_uppercase)
         .map(|c| if c == 'J' { 'I' } else { c })
         .collect();
 

@@ -144,6 +144,7 @@ fn lookup_morse(token: &str) -> Option<char> {
     DECODE_LUT[idx]
 }
 
+#[must_use]
 pub fn encode(input: &str) -> String {
     let mut result = String::with_capacity(input.len() * 4);
     let mut first_word = true;
@@ -184,9 +185,8 @@ pub fn decode(input: &str) -> Result<String> {
         }
         first_word = false;
         for morse in word.split_whitespace() {
-            result.push(
-                lookup_morse(morse).with_context(|| format!("Unknown Morse code: {}", morse))?,
-            );
+            result
+                .push(lookup_morse(morse).with_context(|| format!("Unknown Morse code: {morse}"))?);
         }
     }
 

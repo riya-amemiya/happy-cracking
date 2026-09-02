@@ -43,12 +43,13 @@ pub fn run(action: Base45Action) -> Result<()> {
     Ok(())
 }
 
+#[must_use]
 pub fn encode(data: &[u8]) -> String {
     let mut result = String::with_capacity(data.len().div_ceil(2) * 3);
 
     let (chunks, rest) = data.as_chunks::<2>();
     for chunk in chunks {
-        let n = (chunk[0] as u16) * 256 + (chunk[1] as u16);
+        let n = u16::from(chunk[0]) * 256 + u16::from(chunk[1]);
         let c = (n % 45) as usize;
         let d = ((n / 45) % 45) as usize;
         let e = ((n / 45 / 45) % 45) as usize;
@@ -58,7 +59,7 @@ pub fn encode(data: &[u8]) -> String {
     }
 
     if let [b] = rest {
-        let n = *b as u16;
+        let n = u16::from(*b);
         let c = (n % 45) as usize;
         let d = ((n / 45) % 45) as usize;
         result.push(ALPHABET[c] as char);
@@ -83,7 +84,7 @@ pub fn decode(s: &str) -> Result<Vec<u8>> {
         if v == 255 {
             anyhow::bail!("Invalid Base45 character: {ch}");
         }
-        values.push(v as u32);
+        values.push(u32::from(v));
     }
 
     let mut result = Vec::with_capacity(values.len() / 3 * 2);

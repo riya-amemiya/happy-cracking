@@ -31,7 +31,7 @@ pub fn run(action: FrequencyAction) -> Result<()> {
         }
         FrequencyAction::ChiSquared { input } => {
             let score = chi_squared(&input);
-            println!("Chi-squared score: {:.4}", score);
+            println!("Chi-squared score: {score:.4}");
             println!("(Lower score = closer to English letter distribution)");
             if score < 50.0 {
                 println!("Likely English text");
@@ -43,7 +43,7 @@ pub fn run(action: FrequencyAction) -> Result<()> {
         }
         FrequencyAction::Ioc { input } => {
             let ioc = index_of_coincidence(&input);
-            println!("Index of Coincidence: {:.6}", ioc);
+            println!("Index of Coincidence: {ioc:.6}");
             println!("English text ~0.0667, random text ~0.0385");
             if (ioc - 0.0667).abs() < 0.01 {
                 println!("Consistent with monoalphabetic cipher or English text");
@@ -91,6 +91,7 @@ pub struct FrequencyResult {
     pub total_chars: usize,
 }
 
+#[must_use]
 pub fn analyze(input: &str, alpha_only: bool) -> FrequencyResult {
     let mut frequencies: Vec<(char, usize, f64)> = Vec::new();
     let mut total = 0usize;
@@ -144,6 +145,7 @@ pub fn analyze(input: &str, alpha_only: bool) -> FrequencyResult {
 }
 
 // Lower score means closer to English distribution.
+#[must_use]
 pub fn chi_squared(input: &str) -> f64 {
     let mut counts = [0u32; 26];
     let mut total = 0u32;
@@ -159,11 +161,11 @@ pub fn chi_squared(input: &str) -> f64 {
         return f64::INFINITY;
     }
 
-    let total_f = total as f64;
+    let total_f = f64::from(total);
     ENGLISH_FREQ
         .iter()
         .map(|&(ch, expected_pct)| {
-            let observed = counts[(ch as u8 - b'A') as usize] as f64;
+            let observed = f64::from(counts[(ch as u8 - b'A') as usize]);
             let expected = expected_pct / 100.0 * total_f;
             if expected > 0.0 {
                 (observed - expected).powi(2) / expected
@@ -175,6 +177,7 @@ pub fn chi_squared(input: &str) -> f64 {
 }
 
 // English text has IoC ~0.0667, random text ~0.0385 (1/26).
+#[must_use]
 pub fn index_of_coincidence(input: &str) -> f64 {
     let mut counts = [0u64; 26];
     let mut total = 0u64;
@@ -207,7 +210,7 @@ fn print_analysis(result: &FrequencyResult) {
         let english_freq = ENGLISH_FREQ
             .iter()
             .find(|(ch, _)| *ch == c.to_ascii_uppercase())
-            .map(|(_, f)| format!("{:.1}%", f))
+            .map(|(_, f)| format!("{f:.1}%"))
             .unwrap_or_default();
 
         let display_char = if *c == ' ' {
@@ -220,9 +223,6 @@ fn print_analysis(result: &FrequencyResult) {
             c.to_string()
         };
 
-        println!(
-            "{:<6} {:>6} {:>7.1}%   {}",
-            display_char, count, percentage, english_freq
-        );
+        println!("{display_char:<6} {count:>6} {percentage:>7.1}%   {english_freq}");
     }
 }

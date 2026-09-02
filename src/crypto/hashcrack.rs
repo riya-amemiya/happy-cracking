@@ -244,7 +244,7 @@ fn run_dict(
 
     for a in algos {
         if let Some(found) = find_in_candidates(&target, a, salt, pos, &candidates) {
-            println!("Found: {}", found);
+            println!("Found: {found}");
             return Ok(());
         }
     }
@@ -263,7 +263,7 @@ fn run_brute(
 ) -> Result<()> {
     let target = normalize_hash(hash);
     match brute_force(&target, algo, charset, min_len, max_len, salt, pos)? {
-        Some(found) => println!("Found: {}", found),
+        Some(found) => println!("Found: {found}"),
         None => println!("Not found"),
     }
     Ok(())
@@ -272,7 +272,7 @@ fn run_brute(
 fn run_lookup(hash: &str, table: &PathBuf) -> Result<()> {
     let target = normalize_hash(hash);
     match lookup_in_table_file(&target, table)? {
-        Some(plain) => println!("Found: {}", plain),
+        Some(plain) => println!("Found: {plain}"),
         None => println!("Not found"),
     }
     Ok(())
@@ -320,6 +320,7 @@ fn candidate_matches(
     }
 }
 
+#[must_use]
 pub fn compute_hash(algo: HashAlgo, input: &str) -> String {
     match algo {
         HashAlgo::Md5 => hex::encode(hash_digest::<Md5>(input.as_bytes())),
@@ -335,8 +336,8 @@ fn apply_salt(word: &str, salt: Option<&str>, pos: SaltPosition) -> String {
     match salt {
         None => word.to_string(),
         Some(s) => match pos {
-            SaltPosition::Prefix => format!("{}{}", s, word),
-            SaltPosition::Suffix => format!("{}{}", word, s),
+            SaltPosition::Prefix => format!("{s}{word}"),
+            SaltPosition::Suffix => format!("{word}{s}"),
         },
     }
 }
@@ -429,7 +430,7 @@ pub fn brute_force(
         anyhow::bail!("--min-len must be at least 1");
     }
     if max_len < min_len {
-        anyhow::bail!("--max-len ({}) must be >= --min-len ({})", max_len, min_len);
+        anyhow::bail!("--max-len ({max_len}) must be >= --min-len ({min_len})");
     }
 
     let base = chars.len() as u128;
@@ -443,8 +444,7 @@ pub fn brute_force(
             .context("Brute-force search space overflowed")?;
         if total > MAX_BRUTE_SPACE {
             anyhow::bail!(
-                "Search space exceeds the limit of {} candidates; narrow the charset or length range",
-                MAX_BRUTE_SPACE
+                "Search space exceeds the limit of {MAX_BRUTE_SPACE} candidates; narrow the charset or length range"
             );
         }
     }
@@ -455,7 +455,7 @@ pub fn brute_force(
         return Ok(None);
     };
 
-    let ascii_charset: Option<Vec<u8>> = if chars.iter().all(|c| c.is_ascii()) {
+    let ascii_charset: Option<Vec<u8>> = if chars.iter().all(char::is_ascii) {
         Some(chars.iter().map(|&c| c as u8).collect())
     } else {
         None
@@ -612,7 +612,7 @@ fn run_rule(
 
     for a in algos {
         if let Some(found) = rule_attack(&target, a, &words, &rules) {
-            println!("Found: {}", found);
+            println!("Found: {found}");
             return Ok(());
         }
     }
@@ -623,7 +623,7 @@ fn run_rule(
 fn run_mask(hash: &str, mask: &str, algo: HashAlgo) -> Result<()> {
     let target = normalize_hash(hash);
     match mask_attack(&target, algo, mask)? {
-        Some(found) => println!("Found: {}", found),
+        Some(found) => println!("Found: {found}"),
         None => println!("Not found"),
     }
     Ok(())
@@ -653,7 +653,7 @@ fn run_hybrid(
     for a in algos {
         if let Some(found) = hybrid_attack(&target, a, &words, min_digits, max_digits, also_prefix)?
         {
-            println!("Found: {}", found);
+            println!("Found: {found}");
             return Ok(());
         }
     }
@@ -664,13 +664,13 @@ fn run_hybrid(
 /// Apply a minimal hashcat-like rule to a word.
 /// Supported: `:` identity, `l` lower, `u` upper, `c` capitalize, `t` toggle,
 /// `r` reverse, `d` duplicate, `$X` append, `^X` prepend.
+#[must_use]
 pub fn apply_rule(word: &str, rule: &str) -> String {
     let mut out = word.to_string();
     let chars: Vec<char> = rule.chars().collect();
     let mut i = 0usize;
     while i < chars.len() {
         match chars[i] {
-            ':' => {}
             'l' => out = out.to_ascii_lowercase(),
             'u' => out = out.to_ascii_uppercase(),
             'c' => {
@@ -696,7 +696,7 @@ pub fn apply_rule(word: &str, rule: &str) -> String {
                     .collect();
             }
             'r' => out = out.chars().rev().collect(),
-            'd' => out = format!("{}{}", out, out),
+            'd' => out = format!("{out}{out}"),
             '$' => {
                 i += 1;
                 if i < chars.len() {
@@ -757,7 +757,7 @@ pub fn expand_mask(mask: &str) -> Result<Vec<Vec<char>>> {
                 'a' => (0x20u8..=0x7eu8).map(|b| b as char).collect(),
                 'h' => "0123456789abcdef".chars().collect(),
                 '?' => vec!['?'],
-                other => anyhow::bail!("Unknown mask class '?{}'", other),
+                other => anyhow::bail!("Unknown mask class '?{other}'"),
             };
             positions.push(class);
         } else {
@@ -779,10 +779,7 @@ pub fn mask_attack(target: &str, algo: HashAlgo, mask: &str) -> Result<Option<St
             .checked_mul(pos.len() as u128)
             .context("Mask search space overflowed")?;
         if total > MAX_BRUTE_SPACE {
-            anyhow::bail!(
-                "Mask search space exceeds the limit of {} candidates",
-                MAX_BRUTE_SPACE
-            );
+            anyhow::bail!("Mask search space exceeds the limit of {MAX_BRUTE_SPACE} candidates");
         }
     }
 
@@ -801,7 +798,7 @@ pub fn mask_attack(target: &str, algo: HashAlgo, mask: &str) -> Result<Option<St
             .context("Mask place-value overflowed")?;
     }
 
-    let stack_ok = npos <= MAX_STACK_MASK && positions.iter().flatten().all(|c| c.is_ascii());
+    let stack_ok = npos <= MAX_STACK_MASK && positions.iter().flatten().all(char::is_ascii);
 
     let found = if stack_ok {
         (0..total).into_par_iter().find_map_any(|index| {
@@ -847,7 +844,7 @@ pub fn hybrid_attack<S: AsRef<str> + Sync>(
     also_prefix: bool,
 ) -> Result<Option<String>> {
     if max_digits > 6 {
-        anyhow::bail!("--max-digits must be <= 6 (got {})", max_digits);
+        anyhow::bail!("--max-digits must be <= 6 (got {max_digits})");
     }
     if min_digits > max_digits {
         anyhow::bail!("--min-digits must be <= --max-digits");
@@ -867,10 +864,7 @@ pub fn hybrid_attack<S: AsRef<str> + Sync>(
             )
             .context("Hybrid search space overflowed")?;
         if total > MAX_BRUTE_SPACE {
-            anyhow::bail!(
-                "Hybrid search space exceeds the limit of {} candidates",
-                MAX_BRUTE_SPACE
-            );
+            anyhow::bail!("Hybrid search space exceeds the limit of {MAX_BRUTE_SPACE} candidates");
         }
     }
 
@@ -924,6 +918,7 @@ fn append_zero_padded(buf: &mut String, mut n: u32, width: u32) {
     }
 }
 
+#[must_use]
 pub fn builtin_rules() -> Vec<&'static str> {
     BUILTIN_RULES.to_vec()
 }

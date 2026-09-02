@@ -49,20 +49,20 @@ pub fn run(action: StringsAction) -> Result<()> {
             match encoding {
                 StringEncoding::Ascii => {
                     for s in extract_ascii(&data, min_len)? {
-                        println!("{}", s);
+                        println!("{s}");
                     }
                 }
                 StringEncoding::Utf16le => {
                     for s in extract_utf16le(&data, min_len)? {
-                        println!("{}", s);
+                        println!("{s}");
                     }
                 }
                 StringEncoding::Both => {
                     for s in extract_ascii(&data, min_len)? {
-                        println!("{}", s);
+                        println!("{s}");
                     }
                     for s in extract_utf16le(&data, min_len)? {
-                        println!("{}", s);
+                        println!("{s}");
                     }
                 }
             }

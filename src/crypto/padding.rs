@@ -84,7 +84,7 @@ pub fn pkcs7_unpad(data: &[u8], block_size: usize) -> Result<Vec<u8>> {
     let pad_len = pad_byte as usize;
 
     if pad_len == 0 || pad_len > block_size {
-        anyhow::bail!("Invalid PKCS7 padding value: {}", pad_byte);
+        anyhow::bail!("Invalid PKCS7 padding value: {pad_byte}");
     }
     if data.len() < pad_len {
         anyhow::bail!("Padding length exceeds data length");
@@ -108,9 +108,7 @@ pub fn zero_pad(data: &[u8], block_size: usize) -> Result<Vec<u8>> {
     }
     if block_size > MAX_ZERO_PAD_BLOCK_SIZE {
         anyhow::bail!(
-            "Block size {} exceeds maximum of {} to prevent excessive memory allocation",
-            block_size,
-            MAX_ZERO_PAD_BLOCK_SIZE
+            "Block size {block_size} exceeds maximum of {MAX_ZERO_PAD_BLOCK_SIZE} to prevent excessive memory allocation"
         );
     }
     let remainder = data.len() % block_size;
@@ -123,6 +121,7 @@ pub fn zero_pad(data: &[u8], block_size: usize) -> Result<Vec<u8>> {
     Ok(result)
 }
 
+#[must_use]
 pub fn zero_unpad(data: &[u8]) -> Vec<u8> {
     let end = data.iter().rposition(|&b| b != 0).map_or(0, |pos| pos + 1);
     data[..end].to_vec()

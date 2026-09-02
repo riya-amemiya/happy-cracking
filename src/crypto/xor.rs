@@ -86,7 +86,7 @@ fn run_cipher(input: &str, key: &str, ascii_key: bool) -> Result<()> {
     println!("Hex: {}", hex::encode(&result));
 
     if let Ok(s) = std::str::from_utf8(&result) {
-        println!("ASCII: {}", s);
+        println!("ASCII: {s}");
     }
 
     Ok(())
@@ -100,10 +100,10 @@ fn run_bruteforce(input: &str, printable_only: bool) -> Result<()> {
             if result.iter().all(|&b| b.is_ascii_graphic() || b == b' ')
                 && let Ok(s) = std::str::from_utf8(&result)
             {
-                println!("Key 0x{:02x}: {}", key, s);
+                println!("Key 0x{key:02x}: {s}");
             }
         } else if let Ok(s) = std::str::from_utf8(&result) {
-            println!("Key 0x{:02x}: {}", key, s);
+            println!("Key 0x{key:02x}: {s}");
         }
     }
 
@@ -122,10 +122,7 @@ fn run_keylength(input: &str, max_len: usize, top: usize) -> Result<()> {
         return Ok(());
     }
 
-    println!(
-        "Top {} likely key lengths (lower distance = more likely):",
-        top
-    );
+    println!("Top {top} likely key lengths (lower distance = more likely):");
     for (i, &(key_len, distance)) in results.iter().take(top).enumerate() {
         println!(
             "  {}. length={:2}  normalized distance={:.4}",
@@ -138,6 +135,7 @@ fn run_keylength(input: &str, max_len: usize, top: usize) -> Result<()> {
     Ok(())
 }
 
+#[must_use]
 pub fn xor_bytes(data: &[u8], key: &[u8]) -> Vec<u8> {
     if key.is_empty() {
         return data.to_vec();
@@ -158,6 +156,7 @@ pub fn xor_bytes(data: &[u8], key: &[u8]) -> Vec<u8> {
     out
 }
 
+#[must_use]
 pub fn single_byte_xor_bruteforce(data: &[u8]) -> Vec<(u8, Vec<u8>)> {
     (0..=255)
         .map(|key| (key, xor_bytes(data, &[key])))
@@ -174,7 +173,7 @@ fn hamming_distance(a: &[u8], b: &[u8]) -> u32 {
 /// Maximum XOR repeating-key length to analyse.
 ///
 /// SECURITY: `--max-len` and `--key-length` are user-controlled loop bounds.
-/// `detect_key_length` is O(n * max_len) Hamming-distance work; without a hard
+/// `detect_key_length` is O(n * `max_len`) Hamming-distance work; without a hard
 /// cap a huge `--max-len` plus a large ciphertext is a CPU Denial of Service.
 pub const MAX_KEY_LENGTH: usize = 256;
 
@@ -184,14 +183,13 @@ pub fn check_key_length(len: usize) -> Result<()> {
     }
     if len > MAX_KEY_LENGTH {
         anyhow::bail!(
-            "Key length {} exceeds the maximum allowed of {} to prevent Denial of Service",
-            len,
-            MAX_KEY_LENGTH
+            "Key length {len} exceeds the maximum allowed of {MAX_KEY_LENGTH} to prevent Denial of Service"
         );
     }
     Ok(())
 }
 
+#[must_use]
 pub fn detect_key_length(data: &[u8], max_len: usize) -> Vec<(usize, f64)> {
     let max_key_len = max_len.min(MAX_KEY_LENGTH).min(data.len() / 2);
     if max_key_len < 2 {
@@ -214,7 +212,7 @@ pub fn detect_key_length(data: &[u8], max_len: usize) -> Vec<(usize, f64)> {
                 })
                 .sum();
 
-            let normalized = total_distance as f64 / (num_pairs as f64 * key_len as f64);
+            let normalized = f64::from(total_distance) / (num_pairs as f64 * key_len as f64);
             Some((key_len, normalized))
         })
         .collect();
@@ -254,10 +252,10 @@ fn run_crack(input: &str, max_len: usize, top: usize, key_length: Option<usize>)
         if let Ok(s) = std::str::from_utf8(&cand.key)
             && s.chars().all(|c| c.is_ascii_graphic())
         {
-            println!("Key (ascii): {}", s);
+            println!("Key (ascii): {s}");
         }
         if let Ok(s) = std::str::from_utf8(&cand.plaintext) {
-            println!("Plaintext:   {}", s);
+            println!("Plaintext:   {s}");
         } else {
             println!("Plaintext (hex): {}", hex::encode(&cand.plaintext));
         }
@@ -312,6 +310,7 @@ pub struct CribHit {
 }
 
 /// English-ish scoring for byte sequences (higher is better).
+#[must_use]
 pub fn english_score(data: &[u8]) -> f64 {
     if data.is_empty() {
         return f64::NEG_INFINITY;
@@ -360,6 +359,7 @@ pub fn english_score(data: &[u8]) -> f64 {
     score
 }
 
+#[must_use]
 pub fn best_single_byte_key(data: &[u8]) -> (u8, f64, Vec<u8>) {
     let mut best_key = 0u8;
     let mut best_score = f64::NEG_INFINITY;
@@ -377,7 +377,8 @@ pub fn best_single_byte_key(data: &[u8]) -> (u8, f64, Vec<u8>) {
 }
 
 /// Recover repeating-key XOR. Tries the top Hamming-distance key lengths
-/// (or a fixed length) and ranks recovered plaintexts by english_score.
+/// (or a fixed length) and ranks recovered plaintexts by `english_score`.
+#[must_use]
 pub fn crack_repeating_key(
     data: &[u8],
     max_len: usize,
@@ -440,6 +441,7 @@ pub fn crack_repeating_key(
 
 /// Crib-drag: at each offset, derive the key fragment CT⊕crib and
 /// re-apply it (repeating if possible) to a local window for inspection.
+#[must_use]
 pub fn crib_drag(ciphertext: &[u8], crib: &[u8]) -> Vec<CribHit> {
     if crib.is_empty() || crib.len() > ciphertext.len() {
         return Vec::new();
