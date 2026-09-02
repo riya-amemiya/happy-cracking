@@ -458,7 +458,7 @@ fn base_sources() -> &'static [RawConfig] {
             push_source(&mut out, &system);
         }
         if let Some(g) = std::env::var_os("GIT_CONFIG_GLOBAL") {
-            push_source(&mut out, &PathBuf::from(g))
+            push_source(&mut out, &PathBuf::from(g));
         } else {
             if let Some(dir) = xdg_config_home() {
                 push_source(&mut out, &dir.join("git").join("config"));
