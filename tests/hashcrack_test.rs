@@ -79,6 +79,45 @@ fn test_dict_with_salt_prefix() {
 }
 
 #[test]
+fn test_dict_accepts_str_slices() {
+    let target = "5d41402abc4b2a76b9719d911017c592";
+    let pool = ["apple", "hello", "secret"];
+    let found = find_in_candidates(target, HashAlgo::Md5, None, SaltPosition::Suffix, &pool);
+    assert_eq!(found, Some("hello".to_string()));
+}
+
+#[test]
+fn test_dict_cli_wordlist_skips_blank_and_strips_crlf() {
+    use std::io::Write;
+    use std::process::Command;
+
+    let mut path = std::env::temp_dir();
+    path.push(format!("hashcrack_wl_{}.txt", std::process::id()));
+    {
+        let mut file = std::fs::File::create(&path).unwrap();
+        write!(file, "nope\r\n\nhello\r\n").unwrap();
+    }
+    let out = Command::new(env!("CARGO_BIN_EXE_happy-cracking"))
+        .args([
+            "hashcrack",
+            "dict",
+            "5d41402abc4b2a76b9719d911017c592",
+            "-w",
+        ])
+        .arg(&path)
+        .args(["--algo", "md5"])
+        .output()
+        .unwrap();
+    let _ = std::fs::remove_file(&path);
+    assert!(out.status.success(), "stderr {:?}", out.stderr);
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains("Found: hello"),
+        "unexpected stdout: {stdout}"
+    );
+}
+
+#[test]
 fn test_dict_not_found_returns_none() {
     let target = compute_hash(HashAlgo::Sha256, "not-in-the-list");
     let found = find_in_candidates(

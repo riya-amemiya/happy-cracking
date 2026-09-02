@@ -228,7 +228,8 @@ fn run_dict(
     pos: SaltPosition,
 ) -> Result<()> {
     let target = normalize_hash(hash);
-    let candidates = read_wordlist(wordlist)?;
+    let buf = read_wordlist_buf(wordlist)?;
+    let candidates = wordlist_lines(&buf);
 
     let algos = match algo {
         Some(a) => vec![a],
@@ -370,30 +371,34 @@ fn preset_charset(preset: CharsetPreset) -> &'static str {
     }
 }
 
-fn read_wordlist(path: &PathBuf) -> Result<Vec<String>> {
+fn read_wordlist_buf(path: &PathBuf) -> Result<String> {
     let bytes = std::fs::read(path)
         .with_context(|| format!("Failed to read wordlist: {}", path.display()))?;
-    Ok(bytes
-        .split(|&b| b == b'\n')
-        .map(|line| {
-            let line = line.strip_suffix(b"\r").unwrap_or(line);
-            String::from_utf8_lossy(line).into_owned()
-        })
-        .filter(|line| !line.is_empty())
-        .collect())
+    Ok(match String::from_utf8(bytes) {
+        Ok(s) => s,
+        Err(e) => String::from_utf8_lossy(e.as_bytes()).into_owned(),
+    })
 }
 
-pub fn find_in_candidates(
+fn wordlist_lines(buf: &str) -> Vec<&str> {
+    buf.split('\n')
+        .map(|line| line.strip_suffix('\r').unwrap_or(line))
+        .filter(|line| !line.is_empty())
+        .collect()
+}
+
+pub fn find_in_candidates<S: AsRef<str> + Sync>(
     target: &str,
     algo: HashAlgo,
     salt: Option<&str>,
     pos: SaltPosition,
-    candidates: &[String],
+    candidates: &[S],
 ) -> Option<String> {
     let target = decode_target_digest(target)?;
     candidates.par_iter().find_map_any(|word| {
+        let word = word.as_ref();
         if candidate_matches(algo, word, salt, pos, &target) {
-            Some(word.clone())
+            Some(word.to_string())
         } else {
             None
         }
@@ -584,11 +589,15 @@ fn run_rule(
     algo: Option<HashAlgo>,
 ) -> Result<()> {
     let target = normalize_hash(hash);
-    let words = read_wordlist(wordlist)?;
-    let rules: Vec<String> = if let Some(path) = rules_path {
-        read_wordlist(path)?
-    } else {
-        BUILTIN_RULES.iter().map(|s| (*s).to_string()).collect()
+    let words_buf = read_wordlist_buf(wordlist)?;
+    let words = wordlist_lines(&words_buf);
+    let rules_buf = match rules_path {
+        Some(path) => Some(read_wordlist_buf(path)?),
+        None => None,
+    };
+    let rules: Vec<&str> = match &rules_buf {
+        Some(buf) => wordlist_lines(buf),
+        None => BUILTIN_RULES.to_vec(),
     };
     let algos = match algo {
         Some(a) => vec![a],
@@ -629,7 +638,8 @@ fn run_hybrid(
     also_prefix: bool,
 ) -> Result<()> {
     let target = normalize_hash(hash);
-    let words = read_wordlist(wordlist)?;
+    let words_buf = read_wordlist_buf(wordlist)?;
+    let words = wordlist_lines(&words_buf);
     let algos = match algo {
         Some(a) => vec![a],
         None => algos_for_hex_len(target.len()),
@@ -708,17 +718,16 @@ pub fn apply_rule(word: &str, rule: &str) -> String {
     out
 }
 
-pub fn rule_attack(
-    target: &str,
-    algo: HashAlgo,
-    words: &[String],
-    rules: &[String],
-) -> Option<String> {
+pub fn rule_attack<W, R>(target: &str, algo: HashAlgo, words: &[W], rules: &[R]) -> Option<String>
+where
+    W: AsRef<str> + Sync,
+    R: AsRef<str> + Sync,
+{
     let target = decode_target_digest(target)?;
-    let rules: Vec<&str> = rules.iter().map(|s| s.as_str()).collect();
     words.par_iter().find_map_any(|word| {
-        for rule in &rules {
-            let candidate = apply_rule(word, rule);
+        let word = word.as_ref();
+        for rule in rules {
+            let candidate = apply_rule(word, rule.as_ref());
             if digest_matches(algo, &candidate, &target) {
                 return Some(candidate);
             }
@@ -829,10 +838,10 @@ pub fn mask_attack(target: &str, algo: HashAlgo, mask: &str) -> Result<Option<St
     Ok(found)
 }
 
-pub fn hybrid_attack(
+pub fn hybrid_attack<S: AsRef<str> + Sync>(
     target: &str,
     algo: HashAlgo,
-    words: &[String],
+    words: &[S],
     min_digits: u32,
     max_digits: u32,
     also_prefix: bool,
@@ -871,6 +880,7 @@ pub fn hybrid_attack(
     };
 
     let found = words.par_iter().find_map_any(|word| {
+        let word = word.as_ref();
         let mut buf = String::with_capacity(word.len() + max_digits as usize);
         for digits in min_digits..=max_digits {
             let max_n = 10u32.pow(digits);
