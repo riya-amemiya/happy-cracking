@@ -42,7 +42,11 @@ pub fn run(action: HillAction) -> Result<()> {
 fn parse_key_matrix(key: &str) -> Result<(Vec<i64>, usize)> {
     let values: Vec<i64> = key
         .split_whitespace()
-        .map(|s| s.parse::<i64>().context("Invalid number in key matrix"))
+        .map(|s| {
+            s.parse::<i64>()
+                .context("Invalid number in key matrix")
+                .map(mod26)
+        })
         .collect::<Result<Vec<_>>>()?;
 
     let n = (values.len() as f64).sqrt() as usize;

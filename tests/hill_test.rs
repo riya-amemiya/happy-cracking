@@ -1,5 +1,10 @@
 use happy_cracking::crypto::hill;
 
+fn congruent(base: i64) -> i64 {
+    let base = base.rem_euclid(26);
+    (i64::MAX / 26) * 26 - 26 + base
+}
+
 #[test]
 fn test_encrypt_2x2_basic() {
     // Key matrix: [[3, 3], [2, 5]]
@@ -105,4 +110,57 @@ fn test_non_alpha_ignored() {
     let enc1 = hill::encrypt("H I", "3 3 2 5").unwrap();
     let enc2 = hill::encrypt("HI", "3 3 2 5").unwrap();
     assert_eq!(enc1, enc2);
+}
+
+#[test]
+fn test_encrypt_equivalent_key_mod_26() {
+    let huge = i64::MAX.to_string();
+    let reduced = i64::MAX.rem_euclid(26).to_string();
+    let got = hill::encrypt("HI", &format!("{huge} 3 2 5")).unwrap();
+    let expected = hill::encrypt("HI", &format!("{reduced} 3 2 5")).unwrap();
+    assert_eq!(got, expected);
+}
+
+#[test]
+fn test_decrypt_equivalent_key_mod_26() {
+    let ciphertext = hill::encrypt("HI", "3 3 2 5").unwrap();
+    let delta = (5i64 - i64::MIN.rem_euclid(26)).rem_euclid(26);
+    let huge = i64::MIN + delta;
+    let got = hill::decrypt(&ciphertext, &format!("3 3 2 {huge}")).unwrap();
+    assert_eq!(got, "HI");
+}
+
+#[test]
+fn test_roundtrip_extreme_matrix_entries() {
+    let key = format!(
+        "{} {} {} {}",
+        congruent(3),
+        congruent(3),
+        congruent(2),
+        congruent(5)
+    );
+    let original = "FLAG";
+    let encrypted = hill::encrypt(original, &key).unwrap();
+    let decrypted = hill::decrypt(&encrypted, &key).unwrap();
+    assert_eq!(&decrypted[..4], original);
+}
+
+#[test]
+fn test_roundtrip_3x3_extreme_matrix_entries() {
+    let key = format!(
+        "{} {} {} {} {} {} {} {} {}",
+        congruent(6),
+        congruent(24),
+        congruent(1),
+        congruent(13),
+        congruent(16),
+        congruent(10),
+        congruent(20),
+        congruent(17),
+        congruent(15)
+    );
+    let original = "ATTACK";
+    let encrypted = hill::encrypt(original, &key).unwrap();
+    let decrypted = hill::decrypt(&encrypted, &key).unwrap();
+    assert_eq!(decrypted, original);
 }
