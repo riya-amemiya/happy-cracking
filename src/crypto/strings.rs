@@ -1,6 +1,9 @@
 use anyhow::{Context, Result};
 use clap::{Subcommand, ValueEnum};
-use std::path::PathBuf;
+use std::io::Read;
+use std::path::{Path, PathBuf};
+
+pub const MAX_STRINGS_BYTES: usize = 16 * 1024 * 1024;
 
 #[derive(Clone, Copy, ValueEnum)]
 pub enum StringEncoding {
@@ -40,10 +43,9 @@ pub fn run(action: StringsAction) -> Result<()> {
                     anyhow::bail!("Provide exactly one of <input> or --file")
                 }
                 (Some(hex_str), None) => {
-                    hex::decode(hex_str.trim()).context("Failed to decode input as hex")?
+                    decode_strings_hex_with_limit(&hex_str, MAX_STRINGS_BYTES)?
                 }
-                (None, Some(path)) => std::fs::read(&path)
-                    .with_context(|| format!("Failed to read file: {}", path.display()))?,
+                (None, Some(path)) => read_strings_bytes_with_limit(&path, MAX_STRINGS_BYTES)?,
             };
 
             match encoding {
@@ -69,6 +71,34 @@ pub fn run(action: StringsAction) -> Result<()> {
         }
     }
     Ok(())
+}
+
+pub fn read_strings_bytes_with_limit(path: &Path, max_bytes: usize) -> Result<Vec<u8>> {
+    let max_bytes = max_bytes.min(MAX_STRINGS_BYTES);
+    let file = std::fs::File::open(path)
+        .with_context(|| format!("Failed to open file: {}", path.display()))?;
+    let mut buf = Vec::new();
+    file.take((max_bytes as u64).saturating_add(1))
+        .read_to_end(&mut buf)
+        .with_context(|| format!("Failed to read file: {}", path.display()))?;
+    if buf.len() > max_bytes {
+        anyhow::bail!(
+            "Input exceeds maximum size of {max_bytes} bytes to prevent Denial of Service"
+        );
+    }
+    Ok(buf)
+}
+
+pub fn decode_strings_hex_with_limit(hex_str: &str, max_bytes: usize) -> Result<Vec<u8>> {
+    let hex_str = hex_str.trim();
+    let max_bytes = max_bytes.min(MAX_STRINGS_BYTES);
+    let max_chars = max_bytes.saturating_mul(2);
+    if hex_str.len() > max_chars {
+        anyhow::bail!(
+            "Input exceeds maximum size of {max_bytes} bytes to prevent Denial of Service"
+        );
+    }
+    hex::decode(hex_str).context("Failed to decode input as hex")
 }
 
 pub fn extract_ascii(data: &[u8], min_len: usize) -> Result<Vec<String>> {
