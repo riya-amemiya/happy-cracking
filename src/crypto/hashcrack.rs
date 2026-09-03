@@ -11,6 +11,8 @@ const MAX_BRUTE_SPACE: u128 = 1_000_000_000;
 
 const MAX_CHARSET_LEN: usize = 256;
 
+pub const MAX_BRUTE_LEN: usize = 32;
+
 /// Stack buffer for ASCII mask/brute candidates (`?l`/`?u`/`?d`/`?s`/`?a`/`?h`).
 /// 32 bytes covers typical CTF masks; longer or non-ASCII inputs fall back to `String`.
 const MAX_STACK_MASK: usize = 32;
@@ -431,6 +433,9 @@ pub fn brute_force(
     }
     if max_len < min_len {
         anyhow::bail!("--max-len ({max_len}) must be >= --min-len ({min_len})");
+    }
+    if max_len > MAX_BRUTE_LEN {
+        anyhow::bail!("Maximum candidate length {max_len} exceeds the limit of {MAX_BRUTE_LEN}");
     }
 
     let base = chars.len() as u128;
