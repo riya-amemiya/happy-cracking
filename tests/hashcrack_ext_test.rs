@@ -17,6 +17,15 @@ fn apply_rule_identity_lower_append() {
 }
 
 #[test]
+fn apply_rule_toggle_duplicate_and_unicode() {
+    assert_eq!(apply_rule("AbC", "t"), "aBc");
+    assert_eq!(apply_rule("", "lurd"), "");
+    assert_eq!(apply_rule("a猫b", "r"), "b猫a");
+    assert_eq!(apply_rule("Straße", "t"), "sTRAßE");
+    assert_eq!(apply_rule("ab", "dd"), "abababab");
+}
+
+#[test]
 fn rule_attack_finds_capitalized_word() {
     let plain = "Admin";
     let target = compute_hash(HashAlgo::Md5, plain);
