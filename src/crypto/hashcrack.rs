@@ -661,59 +661,67 @@ fn run_hybrid(
     Ok(())
 }
 
+fn utf8_from_bytes(bytes: Vec<u8>) -> String {
+    String::from_utf8(bytes).expect("ASCII-safe byte edits preserve UTF-8")
+}
+
 /// Apply a minimal hashcat-like rule to a word.
 /// Supported: `:` identity, `l` lower, `u` upper, `c` capitalize, `t` toggle,
 /// `r` reverse, `d` duplicate, `$X` append, `^X` prepend.
 #[must_use]
 pub fn apply_rule(word: &str, rule: &str) -> String {
     let mut out = word.to_string();
-    let chars: Vec<char> = rule.chars().collect();
-    let mut i = 0usize;
-    while i < chars.len() {
-        match chars[i] {
-            'l' => out = out.to_ascii_lowercase(),
-            'u' => out = out.to_ascii_uppercase(),
+    let mut chars = rule.chars();
+    while let Some(c) = chars.next() {
+        match c {
+            'l' => out.make_ascii_lowercase(),
+            'u' => out.make_ascii_uppercase(),
             'c' => {
-                let mut cs: Vec<char> = out.chars().collect();
-                if let Some(first) = cs.first_mut() {
-                    *first = first.to_ascii_uppercase();
+                let mut bytes = std::mem::take(&mut out).into_bytes();
+                bytes.make_ascii_lowercase();
+                if let Some(b) = bytes.first_mut() {
+                    b.make_ascii_uppercase();
                 }
-                for ch in cs.iter_mut().skip(1) {
-                    *ch = ch.to_ascii_lowercase();
-                }
-                out = cs.into_iter().collect();
+                out = utf8_from_bytes(bytes);
             }
             't' => {
-                out = out
-                    .chars()
-                    .map(|c| {
-                        if c.is_ascii_uppercase() {
-                            c.to_ascii_lowercase()
-                        } else {
-                            c.to_ascii_uppercase()
-                        }
-                    })
-                    .collect();
+                let mut bytes = std::mem::take(&mut out).into_bytes();
+                for b in &mut bytes {
+                    if b.is_ascii_uppercase() {
+                        b.make_ascii_lowercase();
+                    } else {
+                        b.make_ascii_uppercase();
+                    }
+                }
+                out = utf8_from_bytes(bytes);
             }
-            'r' => out = out.chars().rev().collect(),
-            'd' => out = format!("{out}{out}"),
+            'r' => {
+                if out.is_ascii() {
+                    let mut bytes = std::mem::take(&mut out).into_bytes();
+                    bytes.reverse();
+                    out = utf8_from_bytes(bytes);
+                } else {
+                    out = out.chars().rev().collect();
+                }
+            }
+            'd' => {
+                let n = out.len();
+                let mut bytes = std::mem::take(&mut out).into_bytes();
+                bytes.extend_from_within(0..n);
+                out = utf8_from_bytes(bytes);
+            }
             '$' => {
-                i += 1;
-                if i < chars.len() {
-                    out.push(chars[i]);
+                if let Some(ch) = chars.next() {
+                    out.push(ch);
                 }
             }
             '^' => {
-                i += 1;
-                if i < chars.len() {
-                    out.insert(0, chars[i]);
+                if let Some(ch) = chars.next() {
+                    out.insert(0, ch);
                 }
             }
-            _ => {
-                // Unknown rule atom: ignore
-            }
+            _ => {}
         }
-        i += 1;
     }
     out
 }
