@@ -1,6 +1,6 @@
 use happy_cracking::crypto::hashcrack::{
-    self, HashAlgo, SaltPosition, brute_force, compute_hash, find_in_candidates, lookup_in_pairs,
-    parse_table_line,
+    self, HashAlgo, MAX_BRUTE_LEN, SaltPosition, brute_force, compute_hash, find_in_candidates,
+    lookup_in_pairs, parse_table_line,
 };
 
 fn candidates() -> Vec<String> {
@@ -265,6 +265,54 @@ fn test_brute_force_oversized_space_errors() {
         SaltPosition::Suffix,
     );
     assert!(result.is_err());
+}
+
+#[test]
+fn test_brute_force_rejects_max_len_above_cap() {
+    let err = brute_force(
+        "5d41402abc4b2a76b9719d911017c592",
+        HashAlgo::Md5,
+        "a",
+        1,
+        MAX_BRUTE_LEN + 1,
+        None,
+        SaltPosition::Suffix,
+    )
+    .unwrap_err();
+    assert!(err.to_string().contains(&MAX_BRUTE_LEN.to_string()));
+}
+
+#[test]
+fn test_brute_force_accepts_max_len_at_cap() {
+    let target = compute_hash(HashAlgo::Md5, "a");
+    let found = brute_force(
+        &target,
+        HashAlgo::Md5,
+        "a",
+        1,
+        MAX_BRUTE_LEN,
+        None,
+        SaltPosition::Suffix,
+    )
+    .unwrap();
+    assert_eq!(found, Some("a".to_string()));
+}
+
+#[cfg(target_pointer_width = "64")]
+#[test]
+fn test_brute_force_rejects_len_beyond_u32() {
+    let len = 1usize << 32;
+    let err = brute_force(
+        "5d41402abc4b2a76b9719d911017c592",
+        HashAlgo::Md5,
+        "ab",
+        len,
+        len,
+        None,
+        SaltPosition::Suffix,
+    )
+    .unwrap_err();
+    assert!(err.to_string().contains(&MAX_BRUTE_LEN.to_string()));
 }
 
 #[test]

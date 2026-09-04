@@ -52,6 +52,28 @@ fn brute_attack_not_found_returns_none() {
 }
 
 #[test]
+fn brute_attack_rejects_max_len_above_cap() {
+    let bytes = make_encrypted_zip("xx", "flag{zip_cracked}");
+    let err = zipcrack::brute_attack(&bytes, "a", 1, zipcrack::MAX_BRUTE_LEN + 1).unwrap_err();
+    assert!(
+        err.to_string()
+            .contains(&zipcrack::MAX_BRUTE_LEN.to_string())
+    );
+}
+
+#[cfg(target_pointer_width = "64")]
+#[test]
+fn brute_attack_rejects_len_beyond_u32() {
+    let bytes = make_encrypted_zip("xx", "flag{zip_cracked}");
+    let len = 1usize << 32;
+    let err = zipcrack::brute_attack(&bytes, "ab", len, len).unwrap_err();
+    assert!(
+        err.to_string()
+            .contains(&zipcrack::MAX_BRUTE_LEN.to_string())
+    );
+}
+
+#[test]
 fn brute_attack_oversized_space_errors() {
     let bytes = make_encrypted_zip("xx", "flag{zip_cracked}");
 
