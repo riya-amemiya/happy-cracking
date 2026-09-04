@@ -1,6 +1,6 @@
 use happy_cracking::crypto::hashcrack::{
-    HashAlgo, apply_rule, builtin_rules, compute_hash, expand_mask, hybrid_attack, mask_attack,
-    rule_attack,
+    HashAlgo, MAX_RULE_CANDIDATE_LEN, apply_rule, builtin_rules, compute_hash, expand_mask,
+    hybrid_attack, mask_attack, rule_attack,
 };
 
 #[test]
@@ -23,6 +23,27 @@ fn apply_rule_toggle_duplicate_and_unicode() {
     assert_eq!(apply_rule("a猫b", "r"), "b猫a");
     assert_eq!(apply_rule("Straße", "t"), "sTRAßE");
     assert_eq!(apply_rule("ab", "dd"), "abababab");
+}
+
+#[test]
+fn apply_rule_duplicate_caps_candidate_length() {
+    let out = apply_rule("x", &"d".repeat(20));
+    assert!(out.len() <= MAX_RULE_CANDIDATE_LEN);
+    assert_eq!(out.len(), MAX_RULE_CANDIDATE_LEN);
+}
+
+#[test]
+fn apply_rule_duplicate_accepts_candidate_at_cap() {
+    let word = "a".repeat(MAX_RULE_CANDIDATE_LEN / 2);
+    let out = apply_rule(&word, "d");
+    assert_eq!(out.len(), MAX_RULE_CANDIDATE_LEN);
+}
+
+#[test]
+fn apply_rule_append_and_prepend_cap_candidate_length() {
+    let word = "a".repeat(MAX_RULE_CANDIDATE_LEN);
+    assert_eq!(apply_rule(&word, "$b$c").len(), MAX_RULE_CANDIDATE_LEN);
+    assert_eq!(apply_rule(&word, "^x^y").len(), MAX_RULE_CANDIDATE_LEN);
 }
 
 #[test]
