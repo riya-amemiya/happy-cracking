@@ -1,7 +1,18 @@
 use happy_cracking::crypto::hashcrack::{
     self, HashAlgo, MAX_BRUTE_LEN, SaltPosition, brute_force, compute_hash, find_in_candidates,
-    lookup_in_pairs, parse_table_line,
+    lookup_in_pairs, parse_table_line, read_wordlist_buf_with_limit,
 };
+use std::fs;
+use std::path::PathBuf;
+use std::time::{SystemTime, UNIX_EPOCH};
+
+fn scratch_wordlist(tag: &str) -> PathBuf {
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    std::env::temp_dir().join(format!("hashcrack_wl_{tag}_{}_{nanos}", std::process::id()))
+}
 
 fn candidates() -> Vec<String> {
     ["apple", "banana", "hello", "secret", "password"]
@@ -427,4 +438,29 @@ fn test_lookup_table_file_roundtrip() {
     let found = lookup_in_pairs(target, pairs);
     std::fs::remove_file(&path).unwrap();
     assert_eq!(found, Some("hello".to_string()));
+}
+
+#[test]
+fn read_wordlist_buf_with_limit_rejects_oversized_file() {
+    let path = scratch_wordlist("oversize");
+    fs::write(&path, vec![b'a'; 32]).unwrap();
+    let err = read_wordlist_buf_with_limit(&path, 16).unwrap_err();
+    let _ = fs::remove_file(&path);
+    assert!(err.to_string().contains("Denial of Service"));
+}
+
+#[test]
+fn read_wordlist_buf_with_limit_accepts_file_at_limit() {
+    let path = scratch_wordlist("at_limit");
+    fs::write(&path, "hello\nsecret\n").unwrap();
+    let got = read_wordlist_buf_with_limit(&path, 13).unwrap();
+    let _ = fs::remove_file(&path);
+    assert_eq!(got, "hello\nsecret\n");
+}
+
+#[cfg(unix)]
+#[test]
+fn read_wordlist_buf_with_limit_bounds_device_without_eof() {
+    let err = read_wordlist_buf_with_limit(std::path::Path::new("/dev/zero"), 64).unwrap_err();
+    assert!(err.to_string().contains("Denial of Service"));
 }
