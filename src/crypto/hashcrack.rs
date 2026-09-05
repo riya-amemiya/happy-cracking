@@ -17,6 +17,8 @@ pub const MAX_BRUTE_LEN: usize = 32;
 /// 32 bytes covers typical CTF masks; longer or non-ASCII inputs fall back to `String`.
 const MAX_STACK_MASK: usize = 32;
 
+pub const MAX_RULE_CANDIDATE_LEN: usize = 256;
+
 #[derive(Clone, Copy, ValueEnum)]
 pub enum HashAlgo {
     Md5,
@@ -711,17 +713,24 @@ pub fn apply_rule(word: &str, rule: &str) -> String {
             }
             'd' => {
                 let n = out.len();
+                if n.saturating_mul(2) > MAX_RULE_CANDIDATE_LEN {
+                    continue;
+                }
                 let mut bytes = std::mem::take(&mut out).into_bytes();
                 bytes.extend_from_within(0..n);
                 out = utf8_from_bytes(bytes);
             }
             '$' => {
-                if let Some(ch) = chars.next() {
+                if let Some(ch) = chars.next()
+                    && out.len() < MAX_RULE_CANDIDATE_LEN
+                {
                     out.push(ch);
                 }
             }
             '^' => {
-                if let Some(ch) = chars.next() {
+                if let Some(ch) = chars.next()
+                    && out.len() < MAX_RULE_CANDIDATE_LEN
+                {
                     out.insert(0, ch);
                 }
             }
