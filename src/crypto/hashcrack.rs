@@ -5,7 +5,8 @@ use md5::Md5;
 use rayon::prelude::*;
 use sha1::Sha1;
 use sha2::{Digest, Sha256, Sha512};
-use std::path::PathBuf;
+use std::io::Read;
+use std::path::{Path, PathBuf};
 
 const MAX_BRUTE_SPACE: u128 = 1_000_000_000;
 
@@ -18,6 +19,8 @@ pub const MAX_BRUTE_LEN: usize = 32;
 const MAX_STACK_MASK: usize = 32;
 
 pub const MAX_RULE_CANDIDATE_LEN: usize = 256;
+
+pub const MAX_WORDLIST_BYTES: usize = 256 * 1024 * 1024;
 
 #[derive(Clone, Copy, ValueEnum)]
 pub enum HashAlgo {
@@ -211,7 +214,7 @@ pub fn run(action: HashcrackAction) -> Result<()> {
             wordlist,
             rules,
             algo,
-        } => run_rule(&hash, &wordlist, rules.as_ref(), algo),
+        } => run_rule(&hash, &wordlist, rules.as_deref(), algo),
         HashcrackAction::Mask { hash, mask, algo } => run_mask(&hash, &mask, algo),
         HashcrackAction::Hybrid {
             hash,
@@ -226,7 +229,7 @@ pub fn run(action: HashcrackAction) -> Result<()> {
 
 fn run_dict(
     hash: &str,
-    wordlist: &PathBuf,
+    wordlist: &Path,
     algo: Option<HashAlgo>,
     salt: Option<&str>,
     pos: SaltPosition,
@@ -376,13 +379,27 @@ fn preset_charset(preset: CharsetPreset) -> &'static str {
     }
 }
 
-fn read_wordlist_buf(path: &PathBuf) -> Result<String> {
-    let bytes = std::fs::read(path)
+pub fn read_wordlist_buf_with_limit(path: &Path, max_bytes: usize) -> Result<String> {
+    let max_bytes = max_bytes.min(MAX_WORDLIST_BYTES);
+    let file = std::fs::File::open(path)
         .with_context(|| format!("Failed to read wordlist: {}", path.display()))?;
-    Ok(match String::from_utf8(bytes) {
+    let mut buf = Vec::new();
+    file.take((max_bytes as u64).saturating_add(1))
+        .read_to_end(&mut buf)
+        .with_context(|| format!("Failed to read wordlist: {}", path.display()))?;
+    if buf.len() > max_bytes {
+        anyhow::bail!(
+            "Wordlist exceeds maximum size of {max_bytes} bytes to prevent Denial of Service"
+        );
+    }
+    Ok(match String::from_utf8(buf) {
         Ok(s) => s,
         Err(e) => String::from_utf8_lossy(e.as_bytes()).into_owned(),
     })
+}
+
+fn read_wordlist_buf(path: &Path) -> Result<String> {
+    read_wordlist_buf_with_limit(path, MAX_WORDLIST_BYTES)
 }
 
 fn wordlist_lines(buf: &str) -> Vec<&str> {
@@ -591,8 +608,8 @@ const BUILTIN_RULES: &[&str] = &[
 
 fn run_rule(
     hash: &str,
-    wordlist: &PathBuf,
-    rules_path: Option<&PathBuf>,
+    wordlist: &Path,
+    rules_path: Option<&Path>,
     algo: Option<HashAlgo>,
 ) -> Result<()> {
     let target = normalize_hash(hash);
@@ -638,7 +655,7 @@ fn run_mask(hash: &str, mask: &str, algo: HashAlgo) -> Result<()> {
 
 fn run_hybrid(
     hash: &str,
-    wordlist: &PathBuf,
+    wordlist: &Path,
     algo: Option<HashAlgo>,
     min_digits: u32,
     max_digits: u32,
