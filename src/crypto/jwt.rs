@@ -2,7 +2,8 @@ use anyhow::{Context, Result};
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use clap::Subcommand;
 use sha2::{Digest, Sha256, Sha384, Sha512};
-use std::path::PathBuf;
+use std::io::Read;
+use std::path::{Path, PathBuf};
 
 #[derive(Subcommand)]
 pub enum JwtAction {
@@ -94,8 +95,7 @@ pub fn run(action: JwtAction) -> Result<()> {
             println!("{forged}");
         }
         JwtAction::Confuse { token, key, alg } => {
-            let key_bytes = std::fs::read(&key)
-                .with_context(|| format!("Failed to read key file: {}", key.display()))?;
+            let key_bytes = read_jwt_bytes_with_limit(&key, MAX_JWT_KEY_BYTES)?;
             let forged = forge_alg_confusion(&token, &key_bytes, &alg)?;
             println!("{forged}");
         }
@@ -116,6 +116,10 @@ pub struct JwtParts {
 /// with input. Typical JWTs are a few kilobytes; 64 KiB still covers oversized
 /// CTF tokens (embedded certs, large claims).
 pub const MAX_JWT_LEN: usize = 64 * 1024;
+
+pub const MAX_JWT_WORDLIST_BYTES: usize = 256 * 1024 * 1024;
+
+pub const MAX_JWT_KEY_BYTES: usize = 1024 * 1024;
 
 fn split_jwt(token: &str) -> Result<[&str; 3]> {
     let token = token.trim();
@@ -293,11 +297,26 @@ fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
     diff == 0
 }
 
-pub fn crack_hmac_secret(token: &str, wordlist: &PathBuf) -> Result<Option<String>> {
+pub fn read_jwt_bytes_with_limit(path: &Path, max_bytes: usize) -> Result<Vec<u8>> {
+    let max_bytes = max_bytes.min(MAX_JWT_WORDLIST_BYTES);
+    let file = std::fs::File::open(path)
+        .with_context(|| format!("Failed to open file: {}", path.display()))?;
+    let mut buf = Vec::new();
+    file.take((max_bytes as u64).saturating_add(1))
+        .read_to_end(&mut buf)
+        .with_context(|| format!("Failed to read file: {}", path.display()))?;
+    if buf.len() > max_bytes {
+        anyhow::bail!(
+            "Input exceeds maximum size of {max_bytes} bytes to prevent Denial of Service"
+        );
+    }
+    Ok(buf)
+}
+
+pub fn crack_hmac_secret(token: &str, wordlist: &Path) -> Result<Option<String>> {
     let (alg, msg, expected) = prepare_hs_crack(token)?;
 
-    let bytes = std::fs::read(wordlist)
-        .with_context(|| format!("Failed to read wordlist: {}", wordlist.display()))?;
+    let bytes = read_jwt_bytes_with_limit(wordlist, MAX_JWT_WORDLIST_BYTES)?;
     for line in bytes.split(|&b| b == b'\n') {
         let line = line.strip_suffix(b"\r").unwrap_or(line);
         if line.is_empty() {
