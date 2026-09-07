@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 use clap::Subcommand;
 use num_bigint::{BigInt, BigUint, ToBigInt};
 use num_integer::Integer;
-use num_traits::{One, Zero};
+use num_traits::{One, ToPrimitive, Zero};
 use std::collections::HashMap;
 
 use crate::crypto::primes;
@@ -146,7 +146,7 @@ pub fn run(action: EcAction) -> Result<()> {
     Ok(())
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ECPoint {
     Infinity,
     Affine { x: BigInt, y: BigInt },
@@ -334,11 +334,12 @@ fn bsgs_ecdlp(
         );
     }
 
-    let mut table: HashMap<String, BigUint> = HashMap::new();
+    let mut table: HashMap<ECPoint, BigUint> =
+        HashMap::with_capacity(m_val.to_usize().unwrap_or(0));
     let mut baby = ECPoint::Infinity;
     let mut j = BigUint::zero();
     while j < m_val {
-        table.insert(format_point(&baby), j.clone());
+        table.insert(baby.clone(), j.clone());
         baby = point_add(&baby, generator, a, p)?;
         j += BigUint::one();
     }
@@ -349,7 +350,7 @@ fn bsgs_ecdlp(
     let mut gamma = target.clone();
     let mut i = BigUint::zero();
     while i < m_val {
-        if let Some(j_val) = table.get(&format_point(&gamma)) {
+        if let Some(j_val) = table.get(&gamma) {
             // k = i*m + j mod order
             let k = (&i * &m_val + j_val) % order;
             return Ok(k);
