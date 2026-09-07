@@ -1,7 +1,18 @@
 use happy_cracking::crypto::zipcrack;
+use std::fs;
 use std::io::{Cursor, Write};
+use std::path::PathBuf;
+use std::time::{SystemTime, UNIX_EPOCH};
 use zip::AesMode;
 use zip::write::{FileOptions, ZipWriter};
+
+fn scratch_file(tag: &str) -> PathBuf {
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    std::env::temp_dir().join(format!("zipcrack_{tag}_{}_{nanos}", std::process::id()))
+}
 
 fn make_encrypted_zip(password: &str, content: &str) -> Vec<u8> {
     let mut buf = Cursor::new(Vec::new());
@@ -99,4 +110,47 @@ fn verify_password_streams_larger_member_without_failing() {
     let bytes = make_encrypted_zip("hunter2", &content);
     assert!(zipcrack::verify_password(&bytes, "hunter2"));
     assert!(!zipcrack::verify_password(&bytes, "wrongpass"));
+}
+
+#[test]
+fn read_zipcrack_bytes_with_limit_rejects_oversized_file() {
+    let path = scratch_file("oversize");
+    fs::write(&path, vec![b'a'; 32]).unwrap();
+    let err = zipcrack::read_zipcrack_bytes_with_limit(&path, 16).unwrap_err();
+    let _ = fs::remove_file(&path);
+    assert!(err.to_string().contains("Denial of Service"));
+}
+
+#[test]
+fn read_zipcrack_bytes_with_limit_accepts_file_at_limit() {
+    let path = scratch_file("at_limit");
+    let data = b"PK\x03\x04tiny";
+    fs::write(&path, data).unwrap();
+    let got = zipcrack::read_zipcrack_bytes_with_limit(&path, data.len()).unwrap();
+    let _ = fs::remove_file(&path);
+    assert_eq!(got, data);
+}
+
+#[test]
+fn dict_run_reads_zip_and_wordlist_under_limit() {
+    let zip_path = scratch_file("dict_zip");
+    let wl_path = scratch_file("dict_wl");
+    let bytes = make_encrypted_zip("s3cr3t", "flag{zip_cracked}");
+    fs::write(&zip_path, &bytes).unwrap();
+    fs::write(&wl_path, "wrong\ns3cr3t\n").unwrap();
+    zipcrack::run(zipcrack::ZipcrackAction::Dict {
+        file: zip_path.clone(),
+        wordlist: wl_path.clone(),
+    })
+    .unwrap();
+    let _ = fs::remove_file(&zip_path);
+    let _ = fs::remove_file(&wl_path);
+}
+
+#[cfg(unix)]
+#[test]
+fn read_zipcrack_bytes_with_limit_bounds_device_without_eof() {
+    let err = zipcrack::read_zipcrack_bytes_with_limit(std::path::Path::new("/dev/zero"), 64)
+        .unwrap_err();
+    assert!(err.to_string().contains("Denial of Service"));
 }
