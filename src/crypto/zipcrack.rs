@@ -2,17 +2,16 @@ use anyhow::{Context, Result};
 use clap::Subcommand;
 use rayon::prelude::*;
 use std::io::{self, Cursor, Read};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 const MAX_BRUTE_SPACE: u128 = 1_000_000_000;
 
 pub const MAX_BRUTE_LEN: usize = 32;
 
-/// Maximum uncompressed bytes consumed while checking one zip member's password.
-///
-/// SECURITY: Fully buffering decompressed members (`read_to_end`) lets a zip bomb
-/// advertise a tiny compressed size and expand to gigabytes of RAM. Streaming into
-/// `io::sink` with this cap keeps verification memory-bounded.
+pub const MAX_ZIP_BYTES: usize = 64 * 1024 * 1024;
+
+pub const MAX_WORDLIST_BYTES: usize = 256 * 1024 * 1024;
+
 const MAX_VERIFY_UNCOMPRESSED: u64 = 16 * 1024 * 1024;
 
 #[derive(Subcommand)]
@@ -50,10 +49,12 @@ pub enum ZipcrackAction {
 pub fn run(action: ZipcrackAction) -> Result<()> {
     match action {
         ZipcrackAction::Dict { file, wordlist } => {
-            let bytes = std::fs::read(&file)
-                .with_context(|| format!("Failed to read zip file: {}", file.display()))?;
-            let list = std::fs::read_to_string(&wordlist)
-                .with_context(|| format!("Failed to read wordlist: {}", wordlist.display()))?;
+            let bytes = read_zipcrack_bytes_with_limit(&file, MAX_ZIP_BYTES)?;
+            let list_bytes = read_zipcrack_bytes_with_limit(&wordlist, MAX_WORDLIST_BYTES)?;
+            let list = match String::from_utf8(list_bytes) {
+                Ok(s) => s,
+                Err(e) => String::from_utf8_lossy(e.as_bytes()).into_owned(),
+            };
             let words: Vec<&str> = list
                 .lines()
                 .map(str::trim)
@@ -71,8 +72,7 @@ pub fn run(action: ZipcrackAction) -> Result<()> {
             min_len,
             max_len,
         } => {
-            let bytes = std::fs::read(&file)
-                .with_context(|| format!("Failed to read zip file: {}", file.display()))?;
+            let bytes = read_zipcrack_bytes_with_limit(&file, MAX_ZIP_BYTES)?;
 
             match brute_attack(&bytes, &charset, min_len, max_len)? {
                 Some(password) => println!("Found password: {password}"),
@@ -80,8 +80,7 @@ pub fn run(action: ZipcrackAction) -> Result<()> {
             }
         }
         ZipcrackAction::Info { file } => {
-            let bytes = std::fs::read(&file)
-                .with_context(|| format!("Failed to read zip file: {}", file.display()))?;
+            let bytes = read_zipcrack_bytes_with_limit(&file, MAX_ZIP_BYTES)?;
 
             for entry in list_entries(&bytes)? {
                 println!(
@@ -126,9 +125,6 @@ fn verify_password_with_limit(zip_bytes: &[u8], password: &str, max_uncompressed
             return false;
         };
 
-        // Discard decompressed bytes; stop before a zip bomb can exhaust memory.
-        // Reading one extra byte past the cap distinguishes "fully consumed"
-        // (CRC checked on EOF) from "hit the limit mid-stream" (reject).
         let mut limited = entry.take(max_uncompressed.saturating_add(1));
         match io::copy(&mut limited, &mut io::sink()) {
             Ok(n) if n <= max_uncompressed => {}
@@ -223,6 +219,22 @@ pub fn list_entries(zip_bytes: &[u8]) -> Result<Vec<EntryInfo>> {
         });
     }
     Ok(entries)
+}
+
+pub fn read_zipcrack_bytes_with_limit(path: &Path, max_bytes: usize) -> Result<Vec<u8>> {
+    let max_bytes = max_bytes.min(MAX_WORDLIST_BYTES);
+    let file = std::fs::File::open(path)
+        .with_context(|| format!("Failed to open file: {}", path.display()))?;
+    let mut buf = Vec::new();
+    file.take((max_bytes as u64).saturating_add(1))
+        .read_to_end(&mut buf)
+        .with_context(|| format!("Failed to read file: {}", path.display()))?;
+    if buf.len() > max_bytes {
+        anyhow::bail!(
+            "Input exceeds maximum size of {max_bytes} bytes to prevent Denial of Service"
+        );
+    }
+    Ok(buf)
 }
 
 #[cfg(test)]
