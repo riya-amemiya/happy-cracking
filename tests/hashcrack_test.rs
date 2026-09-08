@@ -1,6 +1,6 @@
 use happy_cracking::crypto::hashcrack::{
-    self, HashAlgo, MAX_BRUTE_LEN, SaltPosition, brute_force, compute_hash, find_in_candidates,
-    lookup_in_pairs, parse_table_line, read_wordlist_buf_with_limit,
+    HashAlgo, MAX_BRUTE_LEN, SaltPosition, brute_force, compute_hash, find_in_candidates,
+    lookup_in_pairs, lookup_in_table_file, parse_table_line, read_wordlist_buf_with_limit,
 };
 use std::fs;
 use std::path::PathBuf;
@@ -429,15 +429,13 @@ fn test_lookup_table_file_roundtrip() {
         writeln!(file, "5d41402abc4b2a76b9719d911017c592 hello").unwrap();
     }
     let target = "5d41402abc4b2a76b9719d911017c592";
-
-    let content = std::fs::read_to_string(&path).unwrap();
-    let pairs: Vec<(String, String)> = content
-        .lines()
-        .filter_map(hashcrack::parse_table_line)
-        .collect();
-    let found = lookup_in_pairs(target, pairs);
+    let found = lookup_in_table_file(target, &path).unwrap();
+    let miss = lookup_in_table_file("ffffffffffffffffffffffffffffffff", &path).unwrap();
+    let mixed_case = lookup_in_table_file("5D41402ABC4B2A76B9719D911017C592", &path).unwrap();
     std::fs::remove_file(&path).unwrap();
     assert_eq!(found, Some("hello".to_string()));
+    assert_eq!(miss, None);
+    assert_eq!(mixed_case, Some("hello".to_string()));
 }
 
 #[test]

@@ -5,7 +5,7 @@ use md5::Md5;
 use rayon::prelude::*;
 use sha1::Sha1;
 use sha2::{Digest, Sha256, Sha512};
-use std::io::Read;
+use std::io::{BufRead, Read};
 use std::path::{Path, PathBuf};
 
 const MAX_BRUTE_SPACE: u128 = 1_000_000_000;
@@ -276,9 +276,8 @@ fn run_brute(
     Ok(())
 }
 
-fn run_lookup(hash: &str, table: &PathBuf) -> Result<()> {
-    let target = normalize_hash(hash);
-    match lookup_in_table_file(&target, table)? {
+fn run_lookup(hash: &str, table: &Path) -> Result<()> {
+    match lookup_in_table_file(hash, table)? {
         Some(plain) => println!("Found: {plain}"),
         None => println!("Not found"),
     }
@@ -543,16 +542,16 @@ where
     I: IntoIterator<Item = (S, S)>,
     S: AsRef<str> + 'a,
 {
-    let target = normalize_hash(target);
+    let target = target.trim();
     for (hash, plain) in pairs {
-        if normalize_hash(hash.as_ref()) == target {
+        if hash.as_ref().trim().eq_ignore_ascii_case(target) {
             return Some(plain.as_ref().to_string());
         }
     }
     None
 }
 
-pub fn parse_table_line(line: &str) -> Option<(String, String)> {
+fn table_line_parts(line: &str) -> Option<(&str, &str)> {
     let line = line.trim();
     if line.is_empty() {
         return None;
@@ -567,22 +566,31 @@ pub fn parse_table_line(line: &str) -> Option<(String, String)> {
     if hash.is_empty() {
         return None;
     }
-    Some((hash.to_string(), plain.to_string()))
+    Some((hash, plain))
 }
 
-fn lookup_in_table_file(target: &str, path: &PathBuf) -> Result<Option<String>> {
-    use std::io::BufRead;
+#[must_use]
+pub fn parse_table_line(line: &str) -> Option<(String, String)> {
+    table_line_parts(line).map(|(hash, plain)| (hash.to_string(), plain.to_string()))
+}
+
+pub fn lookup_in_table_file(target: &str, path: &Path) -> Result<Option<String>> {
     let file = std::fs::File::open(path)
         .with_context(|| format!("Failed to open table: {}", path.display()))?;
-    let target = normalize_hash(target);
-    let reader = std::io::BufReader::new(file);
-    for line in reader.lines() {
-        let line = line.context("Failed to read table line")?;
-        if let Some((hash, plain)) = parse_table_line(&line)
-            && normalize_hash(&hash) == target
+    let target = target.trim();
+    let mut reader = std::io::BufReader::new(file);
+    let mut line = String::new();
+    while reader
+        .read_line(&mut line)
+        .context("Failed to read table line")?
+        != 0
+    {
+        if let Some((hash, plain)) = table_line_parts(&line)
+            && hash.eq_ignore_ascii_case(target)
         {
-            return Ok(Some(plain));
+            return Ok(Some(plain.to_string()));
         }
+        line.clear();
     }
     Ok(None)
 }
