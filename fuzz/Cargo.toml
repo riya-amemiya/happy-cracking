@@ -1,0 +1,76 @@
+[package]
+name = "happy-cracking-fuzz"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+
+[dependencies.happy-cracking]
+path = ".."
+
+[workspace]
+members = ["."]
+
+[profile.release]
+debug = 1
+
+[[bin]]
+name = "jwt_decode"
+path = "fuzz_targets/jwt_decode.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "autodecode"
+path = "fuzz_targets/autodecode.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "chain"
+path = "fuzz_targets/chain.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "encodings_decode"
+path = "fuzz_targets/encodings_decode.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "hexdump_reverse"
+path = "fuzz_targets/hexdump_reverse.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "padding"
+path = "fuzz_targets/padding.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "hashid_identify"
+path = "fuzz_targets/hashid_identify.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "filetype_identify"
+path = "fuzz_targets/filetype_identify.rs"
+test = false
+doc = false
+bench = false
