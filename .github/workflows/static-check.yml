@@ -63,3 +63,6 @@ jobs:
 
       - name: Clippy
         run: cargo clippy --workspace -- -D warnings
+
+      - name: Check format (fuzz)
+        run: cargo +nightly fmt --manifest-path fuzz/Cargo.toml -- --check

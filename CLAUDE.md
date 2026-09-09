@@ -196,6 +196,25 @@ cargo run --bin hgrep -- <args>
 cargo run --bin hfind -- <args>
 ```
 
+## Fuzzing (ClusterFuzzLite / cargo-fuzz)
+
+Fuzz targets live in `fuzz/fuzz_targets/` and are built by ClusterFuzzLite from `.clusterfuzzlite/`. They are a nested Cargo workspace and are not part of `cargo test --workspace`.
+
+```bash
+# One-time
+rustup toolchain install nightly --profile minimal
+cargo +nightly install cargo-fuzz --locked
+
+# Build and smoke-run a target
+cargo +nightly fuzz build
+cargo +nightly fuzz run jwt_decode -- -runs=1000
+
+# Reproduce a crash file saved by cargo-fuzz
+cargo +nightly fuzz run jwt_decode fuzz/artifacts/jwt_decode/crash-<hash>
+```
+
+ClusterFuzzLite GitHub Actions use `language: rust` and AddressSanitizer only. Do not add `undefined` or `memory` sanitizers.
+
 ## CLI Usage Examples
 
 ### Encoding
