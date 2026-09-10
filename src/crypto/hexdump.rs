@@ -105,7 +105,7 @@ pub fn dump_bytes(data: &[u8]) -> String {
 }
 
 pub fn reverse(hex_dump: &str) -> Result<Vec<u8>> {
-    let mut result = Vec::new();
+    let mut result = Vec::with_capacity(hex_dump.len() / 4);
     for line in hex_dump.lines() {
         let line = line.trim();
         if line.is_empty() {
@@ -127,9 +127,29 @@ pub fn reverse(hex_dump: &str) -> Result<Vec<u8>> {
             after_colon
         };
 
-        let hex_chars: String = hex_part.chars().filter(char::is_ascii_hexdigit).collect();
-        let bytes = hex::decode(&hex_chars).context("Failed to decode hex in dump")?;
-        result.extend_from_slice(&bytes);
+        append_hex_pairs(hex_part.as_bytes(), &mut result)
+            .context("Failed to decode hex in dump")?;
     }
     Ok(result)
+}
+
+fn append_hex_pairs(hex_part: &[u8], out: &mut Vec<u8>) -> Result<()> {
+    let mut hi: Option<u8> = None;
+    for &b in hex_part {
+        let nibble = match b {
+            b'0'..=b'9' => b - b'0',
+            b'a'..=b'f' => b - b'a' + 10,
+            b'A'..=b'F' => b - b'A' + 10,
+            _ => continue,
+        };
+        if let Some(h) = hi.take() {
+            out.push((h << 4) | nibble);
+        } else {
+            hi = Some(nibble);
+        }
+    }
+    if hi.is_some() {
+        anyhow::bail!("odd number of hex digits");
+    }
+    Ok(())
 }
