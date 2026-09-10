@@ -73,8 +73,22 @@ pub fn run(action: XorAction) -> Result<()> {
     }
 }
 
+pub const MAX_XOR_BYTES: usize = 16 * 1024 * 1024;
+
+pub fn decode_xor_hex_with_limit(hex_str: &str, max_bytes: usize) -> Result<Vec<u8>> {
+    let hex_str = hex_str.trim();
+    let max_bytes = max_bytes.min(MAX_XOR_BYTES);
+    let max_chars = max_bytes.saturating_mul(2);
+    if hex_str.len() > max_chars {
+        anyhow::bail!(
+            "Input exceeds maximum size of {max_bytes} bytes to prevent Denial of Service"
+        );
+    }
+    hex::decode(hex_str).context("Failed to decode input hex")
+}
+
 fn run_cipher(input: &str, key: &str, ascii_key: bool) -> Result<()> {
-    let input_bytes = hex::decode(input.trim()).context("Failed to decode input hex")?;
+    let input_bytes = decode_xor_hex_with_limit(input, MAX_XOR_BYTES)?;
 
     let key_bytes = if ascii_key {
         key.as_bytes().to_vec()
@@ -93,7 +107,7 @@ fn run_cipher(input: &str, key: &str, ascii_key: bool) -> Result<()> {
 }
 
 fn run_bruteforce(input: &str, printable_only: bool) -> Result<()> {
-    let input_bytes = hex::decode(input.trim()).context("Failed to decode input hex")?;
+    let input_bytes = decode_xor_hex_with_limit(input, MAX_XOR_BYTES)?;
 
     for (key, result) in single_byte_xor_bruteforce(&input_bytes) {
         if printable_only {
@@ -114,7 +128,7 @@ fn run_keylength(input: &str, max_len: usize, top: usize) -> Result<()> {
     if max_len > MAX_KEY_LENGTH {
         check_key_length(max_len)?;
     }
-    let input_bytes = hex::decode(input.trim()).context("Failed to decode input hex")?;
+    let input_bytes = decode_xor_hex_with_limit(input, MAX_XOR_BYTES)?;
 
     let results = detect_key_length(&input_bytes, max_len);
     if results.is_empty() {
@@ -156,11 +170,8 @@ pub fn xor_bytes(data: &[u8], key: &[u8]) -> Vec<u8> {
     out
 }
 
-#[must_use]
-pub fn single_byte_xor_bruteforce(data: &[u8]) -> Vec<(u8, Vec<u8>)> {
-    (0..=255)
-        .map(|key| (key, xor_bytes(data, &[key])))
-        .collect()
+pub fn single_byte_xor_bruteforce(data: &[u8]) -> impl Iterator<Item = (u8, Vec<u8>)> + '_ {
+    (0u8..=255).map(|key| (key, xor_bytes(data, &[key])))
 }
 
 fn hamming_distance(a: &[u8], b: &[u8]) -> u32 {
@@ -170,11 +181,6 @@ fn hamming_distance(a: &[u8], b: &[u8]) -> u32 {
         .sum()
 }
 
-/// Maximum XOR repeating-key length to analyse.
-///
-/// SECURITY: `--max-len` and `--key-length` are user-controlled loop bounds.
-/// `detect_key_length` is O(n * `max_len`) Hamming-distance work; without a hard
-/// cap a huge `--max-len` plus a large ciphertext is a CPU Denial of Service.
 pub const MAX_KEY_LENGTH: usize = 256;
 
 pub fn check_key_length(len: usize) -> Result<()> {
@@ -217,8 +223,6 @@ pub fn detect_key_length(data: &[u8], max_len: usize) -> Vec<(usize, f64)> {
         })
         .collect();
 
-    // SECURITY: Use unwrap_or(Equal) instead of unwrap() to prevent panic on NaN values.
-    // partial_cmp returns None for NaN comparisons; treating them as equal avoids a DoS vector.
     results.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
     results
 }
@@ -230,7 +234,7 @@ fn run_crack(input: &str, max_len: usize, top: usize, key_length: Option<usize>)
     if let Some(k) = key_length {
         check_key_length(k)?;
     }
-    let input_bytes = hex::decode(input.trim()).context("Failed to decode input hex")?;
+    let input_bytes = decode_xor_hex_with_limit(input, MAX_XOR_BYTES)?;
     if input_bytes.is_empty() {
         anyhow::bail!("Input is empty");
     }
@@ -265,7 +269,7 @@ fn run_crack(input: &str, max_len: usize, top: usize, key_length: Option<usize>)
 }
 
 fn run_crib(input: &str, crib: &str, limit: usize) -> Result<()> {
-    let input_bytes = hex::decode(input.trim()).context("Failed to decode input hex")?;
+    let input_bytes = decode_xor_hex_with_limit(input, MAX_XOR_BYTES)?;
     let crib_bytes = crib.as_bytes();
     if crib_bytes.is_empty() {
         anyhow::bail!("Crib must not be empty");

@@ -39,9 +39,7 @@ fn single_byte_xor_bruteforce_contains_original() {
     let key = 0x42u8;
     let encrypted: Vec<u8> = original.iter().map(|&b| b ^ key).collect();
 
-    let results = xor::single_byte_xor_bruteforce(&encrypted);
-
-    let found = results.iter().find(|(k, _)| *k == key);
+    let found = xor::single_byte_xor_bruteforce(&encrypted).find(|(k, _)| *k == key);
     assert!(found.is_some());
 
     let (_, decrypted) = found.unwrap();
@@ -51,8 +49,42 @@ fn single_byte_xor_bruteforce_contains_original() {
 #[test]
 fn single_byte_xor_bruteforce_returns_256_results() {
     let data = b"test";
-    let results = xor::single_byte_xor_bruteforce(data);
-    assert_eq!(results.len(), 256);
+    assert_eq!(xor::single_byte_xor_bruteforce(data).count(), 256);
+}
+
+#[test]
+fn decode_xor_hex_with_limit_rejects_oversized_dump() {
+    let err = xor::decode_xor_hex_with_limit("41424344", 2).unwrap_err();
+    assert!(err.to_string().contains("Denial of Service"));
+}
+
+#[test]
+fn decode_xor_hex_with_limit_accepts_dump_at_limit() {
+    let data = xor::decode_xor_hex_with_limit("4142", 2).unwrap();
+    assert_eq!(data, b"AB");
+}
+
+#[test]
+fn decode_xor_hex_with_limit_accepts_empty() {
+    let data = xor::decode_xor_hex_with_limit("", 16).unwrap();
+    assert!(data.is_empty());
+}
+
+#[test]
+fn decode_xor_hex_with_limit_rejects_invalid_hex() {
+    let err = xor::decode_xor_hex_with_limit("zz", 16).unwrap_err();
+    assert!(!err.to_string().contains("Denial of Service"));
+}
+
+#[test]
+fn bruteforce_run_reads_hex_under_limit() {
+    let original = b"flag";
+    let encrypted: Vec<u8> = original.iter().map(|&b| b ^ 0x42).collect();
+    xor::run(xor::XorAction::Bruteforce {
+        input: hex::encode(&encrypted),
+        printable: true,
+    })
+    .unwrap();
 }
 
 #[test]
