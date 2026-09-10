@@ -1,6 +1,7 @@
 use happy_cracking::crypto::hashcrack::{
     HashAlgo, MAX_BRUTE_LEN, SaltPosition, brute_force, compute_hash, find_in_candidates,
-    lookup_in_pairs, lookup_in_table_file, parse_table_line, read_wordlist_buf_with_limit,
+    lookup_in_pairs, lookup_in_table_file, lookup_in_table_file_with_limit, parse_table_line,
+    read_wordlist_buf_with_limit,
 };
 use std::fs;
 use std::path::PathBuf;
@@ -436,6 +437,35 @@ fn test_lookup_table_file_roundtrip() {
     assert_eq!(found, Some("hello".to_string()));
     assert_eq!(miss, None);
     assert_eq!(mixed_case, Some("hello".to_string()));
+}
+
+#[test]
+fn lookup_in_table_file_with_limit_rejects_oversized_file() {
+    let path = scratch_wordlist("table_oversize");
+    fs::write(&path, vec![b'a'; 32]).unwrap();
+    let err = lookup_in_table_file_with_limit("deadbeef", &path, 16).unwrap_err();
+    let _ = fs::remove_file(&path);
+    assert!(err.to_string().contains("Denial of Service"));
+}
+
+#[test]
+fn lookup_in_table_file_with_limit_accepts_file_at_limit() {
+    let path = scratch_wordlist("table_at_limit");
+    let data = "5d41402abc4b2a76b9719d911017c592 hello";
+    fs::write(&path, data).unwrap();
+    let found =
+        lookup_in_table_file_with_limit("5d41402abc4b2a76b9719d911017c592", &path, data.len())
+            .unwrap();
+    let _ = fs::remove_file(&path);
+    assert_eq!(found, Some("hello".to_string()));
+}
+
+#[cfg(unix)]
+#[test]
+fn lookup_in_table_file_with_limit_bounds_device_without_eof() {
+    let err = lookup_in_table_file_with_limit("deadbeef", std::path::Path::new("/dev/zero"), 64)
+        .unwrap_err();
+    assert!(err.to_string().contains("Denial of Service"));
 }
 
 #[test]
