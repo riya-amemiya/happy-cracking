@@ -77,3 +77,40 @@ fn test_flag_format_roundtrip() {
     let reversed = hexdump::reverse(&dumped).unwrap();
     assert_eq!(String::from_utf8(reversed).unwrap(), original);
 }
+
+#[test]
+fn test_reverse_empty() {
+    assert!(hexdump::reverse("").unwrap().is_empty());
+}
+
+#[test]
+fn test_reverse_uppercase_hex() {
+    let reversed = hexdump::reverse("00000000: 4865 6C6C 6F").unwrap();
+    assert_eq!(reversed, b"Hello");
+}
+
+#[test]
+fn test_reverse_without_ascii_column() {
+    let reversed = hexdump::reverse("00000000: 48656c6c6f").unwrap();
+    assert_eq!(reversed, b"Hello");
+}
+
+#[test]
+fn test_reverse_skips_lines_without_colon() {
+    let reversed = hexdump::reverse("not a dump line\n00000000: 41\n").unwrap();
+    assert_eq!(reversed, b"A");
+}
+
+#[test]
+fn test_reverse_odd_hex_digits_errors() {
+    let err = hexdump::reverse("00000000: 486").unwrap_err().to_string();
+    assert!(err.contains("Failed to decode hex in dump"));
+}
+
+#[test]
+fn test_reverse_all_byte_values_roundtrip() {
+    let original: Vec<u8> = (0..=255).collect();
+    let dumped = hexdump::dump_bytes(&original);
+    let reversed = hexdump::reverse(&dumped).unwrap();
+    assert_eq!(reversed, original);
+}
