@@ -1,4 +1,7 @@
-use happy_cracking::crypto::portscan::{self, COMMON_PORTS, is_common_port, parse_nmap_output};
+use happy_cracking::crypto::portscan::{
+    self, COMMON_PORTS, is_common_port, parse_nmap_output, read_nmap_scan_output_with_limit,
+};
+use std::io::Cursor;
 
 #[test]
 fn common_ports_include_ftp_ssh_http() {
@@ -183,4 +186,31 @@ fn run_nmap_rejects_dangerous_extra_args_without_spawning() {
         msg.contains("output-file") || msg.contains("extra args") || msg.contains("-o"),
         "validation error should mention extra args, got: {msg}"
     );
+}
+
+#[test]
+fn read_nmap_scan_output_with_limit_rejects_oversized_file() {
+    let err = read_nmap_scan_output_with_limit(Cursor::new(vec![b'A'; 32]), 16).unwrap_err();
+    assert!(err.to_string().contains("Denial of Service"));
+}
+
+#[test]
+fn read_nmap_scan_output_with_limit_accepts_file_at_limit() {
+    let data = b"22/tcp open ssh\n";
+    let got = read_nmap_scan_output_with_limit(Cursor::new(data.as_slice()), data.len()).unwrap();
+    assert_eq!(got, data);
+}
+
+#[test]
+fn read_nmap_scan_output_with_limit_accepts_empty() {
+    let got = read_nmap_scan_output_with_limit(Cursor::new(b""), 16).unwrap();
+    assert!(got.is_empty());
+}
+
+#[cfg(unix)]
+#[test]
+fn read_nmap_scan_output_with_limit_bounds_device_without_eof() {
+    let file = std::fs::File::open("/dev/zero").unwrap();
+    let err = read_nmap_scan_output_with_limit(file, 64).unwrap_err();
+    assert!(err.to_string().contains("Denial of Service"));
 }

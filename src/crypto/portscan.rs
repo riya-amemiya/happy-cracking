@@ -1,8 +1,9 @@
 use anyhow::{Context, Result};
 use clap::Subcommand;
 use std::collections::{BTreeMap, BTreeSet};
+use std::io::Read;
 use std::path::PathBuf;
-use std::process::Command;
+use std::process::{Command, Stdio};
 
 /// Well-known ports that CTF / recon workflows usually care about first.
 pub const COMMON_PORTS: &[(u16, &str)] = &[
@@ -74,7 +75,6 @@ pub fn run(action: PortscanAction) -> Result<()> {
     match action {
         PortscanAction::Parse { file, all } => {
             let text = if file == "-" {
-                use std::io::Read;
                 let mut buf = String::new();
                 std::io::stdin()
                     .read_to_string(&mut buf)
@@ -123,12 +123,24 @@ const MAX_NMAP_TARGET_LEN: usize = 1024;
 /// Max length of the `--args` string forwarded to nmap.
 const MAX_NMAP_EXTRA_ARGS_LEN: usize = 4096;
 
+pub const MAX_NMAP_SCAN_OUTPUT_BYTES: usize = 16 * 1024 * 1024;
+
+pub fn read_nmap_scan_output_with_limit<R: Read>(reader: R, max_bytes: usize) -> Result<Vec<u8>> {
+    let max_bytes = max_bytes.min(MAX_NMAP_SCAN_OUTPUT_BYTES);
+    let mut buf = Vec::new();
+    reader
+        .take((max_bytes as u64).saturating_add(1))
+        .read_to_end(&mut buf)
+        .context("Failed to read nmap output")?;
+    if buf.len() > max_bytes {
+        anyhow::bail!(
+            "Input exceeds maximum size of {max_bytes} bytes to prevent Denial of Service"
+        );
+    }
+    Ok(buf)
+}
+
 /// nmap flags that read/write files or load NSE scripts when passed via `--args`.
-///
-/// SECURITY: `Command` does not invoke a shell, but nmap still honors argv flags.
-/// Target validation already rejects option-like hosts (`-oN`, `-iL`). Extra
-/// `--args` tokens were still forwarded verbatim, which could redirect scan
-/// output, read unexpected files, or load attacker-controlled NSE scripts.
 const DANGEROUS_NMAP_FLAGS: &[&str] = &[
     "-iL",
     "--excludefile",
@@ -143,10 +155,6 @@ const DANGEROUS_NMAP_FLAGS: &[&str] = &[
 ];
 
 /// Reject option-like or otherwise unsafe nmap target strings.
-///
-/// `Command` does not invoke a shell, but nmap still parses argv flags.
-/// A target such as `-oN` or `-iL` would be treated as an option rather than
-/// a host, which can redirect output or read unexpected files.
 pub fn validate_nmap_target(target: &str) -> Result<()> {
     let target = target.trim();
     if target.is_empty() {
@@ -206,14 +214,37 @@ pub fn run_nmap(target: &str, extra_args: Option<&str>) -> Result<String> {
         cmd.arg("100");
     }
     cmd.arg(target);
-    let output = cmd
-        .output()
+    cmd.stdout(Stdio::piped());
+    cmd.stderr(Stdio::piped());
+    let mut child = cmd
+        .spawn()
         .context("Failed to execute nmap (is it installed and on PATH?)")?;
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        anyhow::bail!("nmap exited with {}: {}", output.status, stderr.trim());
+    let stdout = child
+        .stdout
+        .take()
+        .context("Failed to capture nmap stdout")?;
+    let stderr = child
+        .stderr
+        .take()
+        .context("Failed to capture nmap stderr")?;
+    let stderr_thread = std::thread::spawn(move || {
+        read_nmap_scan_output_with_limit(stderr, MAX_NMAP_SCAN_OUTPUT_BYTES)
+    });
+    let stdout_result = read_nmap_scan_output_with_limit(stdout, MAX_NMAP_SCAN_OUTPUT_BYTES);
+    let stderr_result = stderr_thread
+        .join()
+        .unwrap_or_else(|_| Err(anyhow::anyhow!("nmap stderr reader failed")));
+    if stdout_result.is_err() || stderr_result.is_err() {
+        let _ = child.kill();
     }
-    Ok(String::from_utf8_lossy(&output.stdout).into_owned())
+    let status = child.wait().context("Failed to wait for nmap")?;
+    let stdout_bytes = stdout_result?;
+    let stderr_bytes = stderr_result?;
+    if !status.success() {
+        let stderr = String::from_utf8_lossy(&stderr_bytes);
+        anyhow::bail!("nmap exited with {}: {}", status, stderr.trim());
+    }
+    Ok(String::from_utf8_lossy(&stdout_bytes).into_owned())
 }
 
 /// Parse normal (-oN), greppable (-oG), or XML (-oX) nmap output.
