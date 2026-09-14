@@ -575,16 +575,32 @@ pub fn parse_table_line(line: &str) -> Option<(String, String)> {
 }
 
 pub fn lookup_in_table_file(target: &str, path: &Path) -> Result<Option<String>> {
+    lookup_in_table_file_with_limit(target, path, MAX_WORDLIST_BYTES)
+}
+
+pub fn lookup_in_table_file_with_limit(
+    target: &str,
+    path: &Path,
+    max_bytes: usize,
+) -> Result<Option<String>> {
+    let max_bytes = max_bytes.min(MAX_WORDLIST_BYTES);
     let file = std::fs::File::open(path)
         .with_context(|| format!("Failed to open table: {}", path.display()))?;
+    let mut reader = std::io::BufReader::new(file.take((max_bytes as u64).saturating_add(1)));
     let target = target.trim();
-    let mut reader = std::io::BufReader::new(file);
     let mut line = String::new();
+    let mut consumed = 0usize;
     while reader
         .read_line(&mut line)
         .context("Failed to read table line")?
         != 0
     {
+        consumed = consumed.saturating_add(line.len());
+        if consumed > max_bytes {
+            anyhow::bail!(
+                "Table exceeds maximum size of {max_bytes} bytes to prevent Denial of Service"
+            );
+        }
         if let Some((hash, plain)) = table_line_parts(&line)
             && hash.eq_ignore_ascii_case(target)
         {

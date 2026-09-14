@@ -5,7 +5,7 @@ mod source;
 mod walk;
 
 use std::cell::RefCell;
-use std::fs::{self, File};
+use std::fs::File;
 use std::io::{self, Read, Write};
 use std::os::unix::ffi::{OsStrExt, OsStringExt};
 use std::path::Path;
@@ -26,6 +26,25 @@ thread_local! {
     static SLOT: RefCell<(Vec<u8>, Vec<u8>)> = const { RefCell::new((Vec::new(), Vec::new())) };
 }
 
+pub const MAX_PATTERN_FILE_BYTES: usize = 16 * 1024 * 1024;
+
+pub fn read_pattern_file_with_limit(path: &Path, max_bytes: usize) -> io::Result<Vec<u8>> {
+    let max_bytes = max_bytes.min(MAX_PATTERN_FILE_BYTES);
+    let file = File::open(path)?;
+    let mut buf = Vec::new();
+    file.take((max_bytes as u64).saturating_add(1))
+        .read_to_end(&mut buf)?;
+    if buf.len() > max_bytes {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!(
+                "pattern file exceeds maximum size of {max_bytes} bytes to prevent Denial of Service"
+            ),
+        ));
+    }
+    Ok(buf)
+}
+
 #[must_use]
 pub fn run() -> ExitCode {
     let mut cli = Cli::parse();
@@ -37,7 +56,7 @@ pub fn run() -> ExitCode {
             .map(|p| p.as_os_str().as_bytes().to_vec())
             .collect();
         if let Some(f) = &cli.pattern_file {
-            match fs::read(f) {
+            match read_pattern_file_with_limit(f, MAX_PATTERN_FILE_BYTES) {
                 Ok(data) if !data.is_empty() => {
                     let body = data.strip_suffix(b"\n").unwrap_or(&data);
                     ps.extend(

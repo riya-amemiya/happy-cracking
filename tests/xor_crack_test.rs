@@ -2,11 +2,89 @@ use happy_cracking::crypto::xor::{
     self, XorAction, best_single_byte_key, crack_repeating_key, crib_drag, english_score, xor_bytes,
 };
 
+fn legacy_english_score(data: &[u8]) -> f64 {
+    if data.is_empty() {
+        return f64::NEG_INFINITY;
+    }
+    let mut score = 0.0f64;
+    let mut letters = 0usize;
+    let mut spaces = 0usize;
+    for &b in data {
+        match b {
+            b'a'..=b'z' | b'A'..=b'Z' => {
+                letters += 1;
+                score += 1.0;
+                match b.to_ascii_lowercase() {
+                    b'e' | b't' | b'a' | b'o' | b'i' | b'n' => score += 0.5,
+                    b's' | b'h' | b'r' | b'd' | b'l' | b'u' => score += 0.25,
+                    _ => {}
+                }
+            }
+            b' ' => {
+                spaces += 1;
+                score += 1.2;
+            }
+            b'0'..=b'9'
+            | b'.'
+            | b','
+            | b'\''
+            | b'!'
+            | b'?'
+            | b'-'
+            | b'_'
+            | b'{'
+            | b'}'
+            | b':'
+            | b'/'
+            | b'\\'
+            | b'@'
+            | b'#' => score += 0.3,
+            0x21..=0x7e => score += 0.1,
+            b'\n' | b'\r' | b'\t' => score += 0.05,
+            _ => score -= 2.0,
+        }
+    }
+    score += (letters as f64 / data.len() as f64) * 10.0;
+    score += (spaces as f64 / data.len() as f64) * 8.0;
+    score
+}
+
 #[test]
 fn english_score_prefers_plaintext() {
     let good = english_score(b"The quick brown fox jumps over the lazy dog");
     let bad = english_score(b"\x01\x02\x03\x04\x05\x06\x07\x08\x09\x0a");
     assert!(good > bad);
+}
+
+#[test]
+fn english_score_matches_legacy_rules() {
+    let pangram = b"The quick brown fox jumps over the lazy dog";
+    let mixed: Vec<u8> = (0u8..=255).collect();
+    for sample in [
+        &b""[..],
+        b"A",
+        b" ",
+        b"\n\t\r",
+        b"ETAOIN",
+        b"flag{test}",
+        pangram,
+        mixed.as_slice(),
+    ] {
+        let got = english_score(sample);
+        let want = legacy_english_score(sample);
+        assert_eq!(
+            got, want,
+            "score mismatch on {sample:?}: got {got} want {want}"
+        );
+    }
+}
+
+#[test]
+fn best_single_byte_empty_matches_legacy() {
+    let (key, score, plain) = best_single_byte_key(b"");
+    assert_eq!(key, 0);
+    assert!(score.is_infinite() && score.is_sign_negative());
+    assert!(plain.is_empty());
 }
 
 #[test]

@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 use clap::Subcommand;
 use std::collections::{BTreeMap, BTreeSet};
 use std::io::Read;
-use std::path::PathBuf;
+use std::path::Path;
 use std::process::{Command, Stdio};
 
 /// Well-known ports that CTF / recon workflows usually care about first.
@@ -75,14 +75,9 @@ pub fn run(action: PortscanAction) -> Result<()> {
     match action {
         PortscanAction::Parse { file, all } => {
             let text = if file == "-" {
-                let mut buf = String::new();
-                std::io::stdin()
-                    .read_to_string(&mut buf)
-                    .context("Failed to read stdin")?;
-                buf
+                read_nmap_output_with_limit(std::io::stdin(), MAX_NMAP_OUTPUT_BYTES)?
             } else {
-                std::fs::read_to_string(PathBuf::from(&file))
-                    .with_context(|| format!("Failed to read {file}"))?
+                read_nmap_file_with_limit(Path::new(&file), MAX_NMAP_OUTPUT_BYTES)?
             };
             let ports = parse_nmap_output(&text);
             print_ports(&ports, all);
@@ -117,16 +112,10 @@ pub fn common_service_name(port: u16) -> Option<&'static str> {
         .map(|(_, name)| *name)
 }
 
-/// Max length of a target specifier (hostname, address, CIDR, or short list).
-const MAX_NMAP_TARGET_LEN: usize = 1024;
+pub const MAX_NMAP_OUTPUT_BYTES: usize = 16 * 1024 * 1024;
 
-/// Max length of the `--args` string forwarded to nmap.
-const MAX_NMAP_EXTRA_ARGS_LEN: usize = 4096;
-
-pub const MAX_NMAP_SCAN_OUTPUT_BYTES: usize = 16 * 1024 * 1024;
-
-pub fn read_nmap_scan_output_with_limit<R: Read>(reader: R, max_bytes: usize) -> Result<Vec<u8>> {
-    let max_bytes = max_bytes.min(MAX_NMAP_SCAN_OUTPUT_BYTES);
+pub fn read_nmap_output_with_limit<R: Read>(reader: R, max_bytes: usize) -> Result<String> {
+    let max_bytes = max_bytes.min(MAX_NMAP_OUTPUT_BYTES);
     let mut buf = Vec::new();
     reader
         .take((max_bytes as u64).saturating_add(1))
@@ -137,8 +126,20 @@ pub fn read_nmap_scan_output_with_limit<R: Read>(reader: R, max_bytes: usize) ->
             "Input exceeds maximum size of {max_bytes} bytes to prevent Denial of Service"
         );
     }
-    Ok(buf)
+    Ok(String::from_utf8_lossy(&buf).into_owned())
 }
+
+pub fn read_nmap_file_with_limit(path: &Path, max_bytes: usize) -> Result<String> {
+    let file =
+        std::fs::File::open(path).with_context(|| format!("Failed to read {}", path.display()))?;
+    read_nmap_output_with_limit(file, max_bytes)
+}
+
+/// Max length of a target specifier (hostname, address, CIDR, or short list).
+const MAX_NMAP_TARGET_LEN: usize = 1024;
+
+/// Max length of the `--args` string forwarded to nmap.
+const MAX_NMAP_EXTRA_ARGS_LEN: usize = 4096;
 
 /// nmap flags that read/write files or load NSE scripts when passed via `--args`.
 const DANGEROUS_NMAP_FLAGS: &[&str] = &[
@@ -227,10 +228,9 @@ pub fn run_nmap(target: &str, extra_args: Option<&str>) -> Result<String> {
         .stderr
         .take()
         .context("Failed to capture nmap stderr")?;
-    let stderr_thread = std::thread::spawn(move || {
-        read_nmap_scan_output_with_limit(stderr, MAX_NMAP_SCAN_OUTPUT_BYTES)
-    });
-    let stdout_result = read_nmap_scan_output_with_limit(stdout, MAX_NMAP_SCAN_OUTPUT_BYTES);
+    let stderr_thread =
+        std::thread::spawn(move || read_nmap_output_with_limit(stderr, MAX_NMAP_OUTPUT_BYTES));
+    let stdout_result = read_nmap_output_with_limit(stdout, MAX_NMAP_OUTPUT_BYTES);
     let stderr_result = stderr_thread
         .join()
         .unwrap_or_else(|_| Err(anyhow::anyhow!("nmap stderr reader failed")));
@@ -238,13 +238,12 @@ pub fn run_nmap(target: &str, extra_args: Option<&str>) -> Result<String> {
         let _ = child.kill();
     }
     let status = child.wait().context("Failed to wait for nmap")?;
-    let stdout_bytes = stdout_result?;
-    let stderr_bytes = stderr_result?;
+    let stdout_text = stdout_result?;
+    let stderr_text = stderr_result?;
     if !status.success() {
-        let stderr = String::from_utf8_lossy(&stderr_bytes);
-        anyhow::bail!("nmap exited with {}: {}", status, stderr.trim());
+        anyhow::bail!("nmap exited with {}: {}", status, stderr_text.trim());
     }
-    Ok(String::from_utf8_lossy(&stdout_bytes).into_owned())
+    Ok(stdout_text)
 }
 
 /// Parse normal (-oN), greppable (-oG), or XML (-oX) nmap output.
