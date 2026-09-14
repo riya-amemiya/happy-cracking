@@ -1,4 +1,19 @@
-use happy_cracking::crypto::portscan::{self, COMMON_PORTS, is_common_port, parse_nmap_output};
+use happy_cracking::crypto::portscan::{
+    self, COMMON_PORTS, PortscanAction, is_common_port, parse_nmap_output,
+    read_nmap_file_with_limit, read_nmap_output_with_limit,
+};
+use std::fs;
+use std::io::Cursor;
+use std::path::PathBuf;
+use std::time::{SystemTime, UNIX_EPOCH};
+
+fn scratch_file(tag: &str) -> PathBuf {
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    std::env::temp_dir().join(format!("portscan_{tag}_{}_{nanos}", std::process::id()))
+}
 
 #[test]
 fn common_ports_include_ftp_ssh_http() {
@@ -183,4 +198,61 @@ fn run_nmap_rejects_dangerous_extra_args_without_spawning() {
         msg.contains("output-file") || msg.contains("extra args") || msg.contains("-o"),
         "validation error should mention extra args, got: {msg}"
     );
+}
+
+#[test]
+fn read_nmap_output_with_limit_rejects_oversized_file() {
+    let err = read_nmap_output_with_limit(Cursor::new(vec![b'A'; 32]), 16).unwrap_err();
+    assert!(err.to_string().contains("Denial of Service"));
+}
+
+#[test]
+fn read_nmap_output_with_limit_accepts_file_at_limit() {
+    let data = b"22/tcp open ssh\n";
+    let got = read_nmap_output_with_limit(Cursor::new(data.as_slice()), data.len()).unwrap();
+    assert_eq!(got, "22/tcp open ssh\n");
+}
+
+#[test]
+fn read_nmap_output_with_limit_accepts_empty() {
+    let got = read_nmap_output_with_limit(Cursor::new(b""), 16).unwrap();
+    assert_eq!(got, "");
+}
+
+#[test]
+fn read_nmap_file_with_limit_rejects_oversized_file() {
+    let path = scratch_file("oversize");
+    fs::write(&path, vec![b'A'; 32]).unwrap();
+    let err = read_nmap_file_with_limit(&path, 16).unwrap_err();
+    let _ = fs::remove_file(&path);
+    assert!(err.to_string().contains("Denial of Service"));
+}
+
+#[test]
+fn read_nmap_file_with_limit_accepts_file_at_limit() {
+    let path = scratch_file("at_limit");
+    let data = b"22/tcp open ssh\n";
+    fs::write(&path, data).unwrap();
+    let got = read_nmap_file_with_limit(&path, data.len()).unwrap();
+    let _ = fs::remove_file(&path);
+    assert_eq!(got, "22/tcp open ssh\n");
+}
+
+#[test]
+fn parse_run_reads_file_under_limit() {
+    let path = scratch_file("run");
+    fs::write(&path, "22/tcp   open  ssh\n80/tcp   open  http\n").unwrap();
+    portscan::run(PortscanAction::Parse {
+        file: path.to_string_lossy().into_owned(),
+        all: true,
+    })
+    .unwrap();
+    let _ = fs::remove_file(&path);
+}
+
+#[cfg(unix)]
+#[test]
+fn read_nmap_file_with_limit_bounds_device_without_eof() {
+    let err = read_nmap_file_with_limit(std::path::Path::new("/dev/zero"), 64).unwrap_err();
+    assert!(err.to_string().contains("Denial of Service"));
 }

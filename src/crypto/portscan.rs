@@ -1,7 +1,8 @@
 use anyhow::{Context, Result};
 use clap::Subcommand;
 use std::collections::{BTreeMap, BTreeSet};
-use std::path::PathBuf;
+use std::io::Read;
+use std::path::Path;
 use std::process::Command;
 
 /// Well-known ports that CTF / recon workflows usually care about first.
@@ -74,15 +75,9 @@ pub fn run(action: PortscanAction) -> Result<()> {
     match action {
         PortscanAction::Parse { file, all } => {
             let text = if file == "-" {
-                use std::io::Read;
-                let mut buf = String::new();
-                std::io::stdin()
-                    .read_to_string(&mut buf)
-                    .context("Failed to read stdin")?;
-                buf
+                read_nmap_output_with_limit(std::io::stdin(), MAX_NMAP_OUTPUT_BYTES)?
             } else {
-                std::fs::read_to_string(PathBuf::from(&file))
-                    .with_context(|| format!("Failed to read {file}"))?
+                read_nmap_file_with_limit(Path::new(&file), MAX_NMAP_OUTPUT_BYTES)?
             };
             let ports = parse_nmap_output(&text);
             print_ports(&ports, all);
@@ -115,6 +110,29 @@ pub fn common_service_name(port: u16) -> Option<&'static str> {
         .iter()
         .find(|(p, _)| *p == port)
         .map(|(_, name)| *name)
+}
+
+pub const MAX_NMAP_OUTPUT_BYTES: usize = 16 * 1024 * 1024;
+
+pub fn read_nmap_output_with_limit<R: Read>(reader: R, max_bytes: usize) -> Result<String> {
+    let max_bytes = max_bytes.min(MAX_NMAP_OUTPUT_BYTES);
+    let mut buf = Vec::new();
+    reader
+        .take((max_bytes as u64).saturating_add(1))
+        .read_to_end(&mut buf)
+        .context("Failed to read nmap output")?;
+    if buf.len() > max_bytes {
+        anyhow::bail!(
+            "Input exceeds maximum size of {max_bytes} bytes to prevent Denial of Service"
+        );
+    }
+    Ok(String::from_utf8_lossy(&buf).into_owned())
+}
+
+pub fn read_nmap_file_with_limit(path: &Path, max_bytes: usize) -> Result<String> {
+    let file =
+        std::fs::File::open(path).with_context(|| format!("Failed to read {}", path.display()))?;
+    read_nmap_output_with_limit(file, max_bytes)
 }
 
 /// Max length of a target specifier (hostname, address, CIDR, or short list).
