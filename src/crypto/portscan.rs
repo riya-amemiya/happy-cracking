@@ -3,7 +3,7 @@ use clap::Subcommand;
 use std::collections::{BTreeMap, BTreeSet};
 use std::io::Read;
 use std::path::Path;
-use std::process::Command;
+use std::process::{Command, Stdio};
 
 /// Well-known ports that CTF / recon workflows usually care about first.
 pub const COMMON_PORTS: &[(u16, &str)] = &[
@@ -142,11 +142,6 @@ const MAX_NMAP_TARGET_LEN: usize = 1024;
 const MAX_NMAP_EXTRA_ARGS_LEN: usize = 4096;
 
 /// nmap flags that read/write files or load NSE scripts when passed via `--args`.
-///
-/// SECURITY: `Command` does not invoke a shell, but nmap still honors argv flags.
-/// Target validation already rejects option-like hosts (`-oN`, `-iL`). Extra
-/// `--args` tokens were still forwarded verbatim, which could redirect scan
-/// output, read unexpected files, or load attacker-controlled NSE scripts.
 const DANGEROUS_NMAP_FLAGS: &[&str] = &[
     "-iL",
     "--excludefile",
@@ -161,10 +156,6 @@ const DANGEROUS_NMAP_FLAGS: &[&str] = &[
 ];
 
 /// Reject option-like or otherwise unsafe nmap target strings.
-///
-/// `Command` does not invoke a shell, but nmap still parses argv flags.
-/// A target such as `-oN` or `-iL` would be treated as an option rather than
-/// a host, which can redirect output or read unexpected files.
 pub fn validate_nmap_target(target: &str) -> Result<()> {
     let target = target.trim();
     if target.is_empty() {
@@ -224,14 +215,35 @@ pub fn run_nmap(target: &str, extra_args: Option<&str>) -> Result<String> {
         cmd.arg("100");
     }
     cmd.arg(target);
-    let output = cmd
-        .output()
+    cmd.stdout(Stdio::piped());
+    cmd.stderr(Stdio::piped());
+    let mut child = cmd
+        .spawn()
         .context("Failed to execute nmap (is it installed and on PATH?)")?;
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        anyhow::bail!("nmap exited with {}: {}", output.status, stderr.trim());
+    let stdout = child
+        .stdout
+        .take()
+        .context("Failed to capture nmap stdout")?;
+    let stderr = child
+        .stderr
+        .take()
+        .context("Failed to capture nmap stderr")?;
+    let stderr_thread =
+        std::thread::spawn(move || read_nmap_output_with_limit(stderr, MAX_NMAP_OUTPUT_BYTES));
+    let stdout_result = read_nmap_output_with_limit(stdout, MAX_NMAP_OUTPUT_BYTES);
+    let stderr_result = stderr_thread
+        .join()
+        .unwrap_or_else(|_| Err(anyhow::anyhow!("nmap stderr reader failed")));
+    if stdout_result.is_err() || stderr_result.is_err() {
+        let _ = child.kill();
     }
-    Ok(String::from_utf8_lossy(&output.stdout).into_owned())
+    let status = child.wait().context("Failed to wait for nmap")?;
+    let stdout_text = stdout_result?;
+    let stderr_text = stderr_result?;
+    if !status.success() {
+        anyhow::bail!("nmap exited with {}: {}", status, stderr_text.trim());
+    }
+    Ok(stdout_text)
 }
 
 /// Parse normal (-oN), greppable (-oG), or XML (-oX) nmap output.
