@@ -313,9 +313,62 @@ pub struct CribHit {
     pub plaintext_window: String,
 }
 
-/// English-ish scoring for byte sequences (higher is better).
-#[must_use]
-pub fn english_score(data: &[u8]) -> f64 {
+const fn english_byte_score(b: u8) -> f64 {
+    match b {
+        b'e' | b't' | b'a' | b'o' | b'i' | b'n' | b'E' | b'T' | b'A' | b'O' | b'I' | b'N' => 1.5,
+        b's' | b'h' | b'r' | b'd' | b'l' | b'u' | b'S' | b'H' | b'R' | b'D' | b'L' | b'U' => 1.25,
+        b'a'..=b'z' | b'A'..=b'Z' => 1.0,
+        b' ' => 1.2,
+        b'0'..=b'9'
+        | b'.'
+        | b','
+        | b'\''
+        | b'!'
+        | b'?'
+        | b'-'
+        | b'_'
+        | b'{'
+        | b'}'
+        | b':'
+        | b'/'
+        | b'\\'
+        | b'@'
+        | b'#' => 0.3,
+        0x21..=0x7e => 0.1,
+        b'\n' | b'\r' | b'\t' => 0.05,
+        _ => -2.0,
+    }
+}
+
+const ENGLISH_BYTE_SCORE: [f64; 256] = {
+    let mut table = [0.0; 256];
+    let mut i = 0;
+    while i < 256 {
+        table[i] = english_byte_score(i as u8);
+        i += 1;
+    }
+    table
+};
+
+const ENGLISH_IS_LETTER: [u8; 256] = {
+    let mut table = [0u8; 256];
+    let mut i = 0;
+    while i < 256 {
+        if (i as u8).is_ascii_alphabetic() {
+            table[i] = 1;
+        }
+        i += 1;
+    }
+    table
+};
+
+const ENGLISH_IS_SPACE: [u8; 256] = {
+    let mut table = [0u8; 256];
+    table[b' ' as usize] = 1;
+    table
+};
+
+fn score_xored(data: &[u8], key: u8) -> f64 {
     if data.is_empty() {
         return f64::NEG_INFINITY;
     }
@@ -323,61 +376,33 @@ pub fn english_score(data: &[u8]) -> f64 {
     let mut letters = 0usize;
     let mut spaces = 0usize;
     for &b in data {
-        match b {
-            b'a'..=b'z' | b'A'..=b'Z' => {
-                letters += 1;
-                score += 1.0;
-                // ETAOIN SHRDLU bonus
-                match b.to_ascii_lowercase() {
-                    b'e' | b't' | b'a' | b'o' | b'i' | b'n' => score += 0.5,
-                    b's' | b'h' | b'r' | b'd' | b'l' | b'u' => score += 0.25,
-                    _ => {}
-                }
-            }
-            b' ' => {
-                spaces += 1;
-                score += 1.2;
-            }
-            b'0'..=b'9'
-            | b'.'
-            | b','
-            | b'\''
-            | b'!'
-            | b'?'
-            | b'-'
-            | b'_'
-            | b'{'
-            | b'}'
-            | b':'
-            | b'/'
-            | b'\\'
-            | b'@'
-            | b'#' => score += 0.3,
-            0x21..=0x7e => score += 0.1,
-            b'\n' | b'\r' | b'\t' => score += 0.05,
-            _ => score -= 2.0,
-        }
+        let p = b ^ key;
+        score += ENGLISH_BYTE_SCORE[p as usize];
+        letters += usize::from(ENGLISH_IS_LETTER[p as usize]);
+        spaces += usize::from(ENGLISH_IS_SPACE[p as usize]);
     }
-    score += (letters as f64 / data.len() as f64) * 10.0;
-    score += (spaces as f64 / data.len() as f64) * 8.0;
-    score
+    let n = data.len() as f64;
+    score + (letters as f64 / n) * 10.0 + (spaces as f64 / n) * 8.0
+}
+
+/// English-ish scoring for byte sequences (higher is better).
+#[must_use]
+pub fn english_score(data: &[u8]) -> f64 {
+    score_xored(data, 0)
 }
 
 #[must_use]
 pub fn best_single_byte_key(data: &[u8]) -> (u8, f64, Vec<u8>) {
     let mut best_key = 0u8;
     let mut best_score = f64::NEG_INFINITY;
-    let mut best_plain = Vec::new();
     for key in 0u8..=255 {
-        let plain = xor_bytes(data, &[key]);
-        let score = english_score(&plain);
+        let score = score_xored(data, key);
         if score > best_score {
             best_score = score;
             best_key = key;
-            best_plain = plain;
         }
     }
-    (best_key, best_score, best_plain)
+    (best_key, best_score, xor_bytes(data, &[best_key]))
 }
 
 /// Recover repeating-key XOR. Tries the top Hamming-distance key lengths
