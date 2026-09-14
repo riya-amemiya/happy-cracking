@@ -1,3 +1,4 @@
+use happy_cracking::hgrep::read_pattern_file_with_limit;
 use std::ffi::OsStr;
 use std::fs;
 use std::io::Write;
@@ -1427,5 +1428,63 @@ fn text_flag_prints_binary_content_and_quiet_prints_nothing() {
     let quiet_list = run(&["-qL", "zzz", name]);
     assert!(quiet_list.stdout.is_empty(), "got {:?}", quiet_list.stdout);
     assert_eq!(quiet_list.code, 0);
+    fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn read_pattern_file_with_limit_rejects_oversized_file() {
+    let dir = scratch("pat_oversize");
+    let path = dir.join("patterns.txt");
+    fs::write(&path, vec![b'a'; 32]).unwrap();
+    let err = read_pattern_file_with_limit(&path, 16).unwrap_err();
+    fs::remove_dir_all(&dir).unwrap();
+    assert!(err.to_string().contains("Denial of Service"));
+}
+
+#[test]
+fn read_pattern_file_with_limit_accepts_file_at_limit() {
+    let dir = scratch("pat_at_limit");
+    let path = dir.join("patterns.txt");
+    let data = b"beta\n";
+    fs::write(&path, data).unwrap();
+    let got = read_pattern_file_with_limit(&path, data.len()).unwrap();
+    fs::remove_dir_all(&dir).unwrap();
+    assert_eq!(got, data);
+}
+
+#[cfg(unix)]
+#[test]
+fn read_pattern_file_with_limit_bounds_device_without_eof() {
+    let err = read_pattern_file_with_limit(Path::new("/dev/zero"), 64).unwrap_err();
+    assert!(err.to_string().contains("Denial of Service"));
+}
+
+#[test]
+fn pattern_file_run_reads_under_limit() {
+    let dir = scratch("pat_run_ok");
+    put(&dir, "patterns.txt", b"beta\n");
+    put(&dir, "s.txt", b"alpha\nbeta\n");
+    let out = run(&[
+        "-f",
+        dir.join("patterns.txt").to_str().unwrap(),
+        dir.join("s.txt").to_str().unwrap(),
+    ]);
+    assert_eq!(out.stdout, "beta\n");
+    assert_eq!(out.code, 0);
+    fs::remove_dir_all(&dir).unwrap();
+}
+
+#[cfg(unix)]
+#[test]
+fn pattern_file_run_rejects_device_without_eof() {
+    let dir = scratch("pat_run_devzero");
+    put(&dir, "s.txt", b"alpha\n");
+    let out = run(&["-f", "/dev/zero", dir.join("s.txt").to_str().unwrap()]);
+    assert_eq!(out.code, 2);
+    assert!(
+        out.stderr.contains("Denial of Service"),
+        "got {:?}",
+        out.stderr
+    );
     fs::remove_dir_all(&dir).unwrap();
 }
