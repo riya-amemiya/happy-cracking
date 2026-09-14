@@ -513,6 +513,22 @@ fn gitignore_reports_an_unreadable_rule_file() {
     fs::remove_dir_all(&dir).unwrap();
 }
 
+#[cfg(unix)]
+#[test]
+fn gitignore_rejects_device_without_eof() {
+    let dir = scratch("gitignore_devzero");
+    seed(&dir, &["a.txt"]);
+    std::os::unix::fs::symlink("/dev/zero", dir.join(".gitignore")).unwrap();
+    let out = run(&["-rl", "--gitignore", "needle", dir.to_str().unwrap()]);
+    assert_eq!(out.code, 2, "stderr {:?}", out.stderr);
+    assert!(
+        out.stderr.contains("Denial of Service"),
+        "got {:?}",
+        out.stderr
+    );
+    fs::remove_dir_all(&dir).unwrap();
+}
+
 #[test]
 fn gitignore_matches_across_a_newline_in_a_path() {
     let dir = scratch("gitignore_newline");
