@@ -6,8 +6,6 @@ use super::{
     affine, atbash, autodecode, cipherid, frequency, railfence, rot, substitution, vigenere,
 };
 
-const FLAG_PATTERNS: &[&str] = &["flag{", "FLAG{", "ctf{", "CTF{", "picoctf{", "HK{", "hk{"];
-
 const COMMON_WORDS: &[&str] = &[
     "the", "be", "to", "of", "and", "a", "in", "that", "have", "it", "for", "not", "on", "with",
     "he", "as", "you", "do", "at", "this", "but", "his", "by", "from", "they", "we", "flag", "is",
@@ -241,18 +239,27 @@ fn try_classic_ciphers(
 
 #[must_use]
 pub fn looks_like_flag(text: &str) -> bool {
-    let lower = text.to_ascii_lowercase();
-    if FLAG_PATTERNS
-        .iter()
-        .any(|p| lower.contains(&p.to_ascii_lowercase()))
-    {
-        return true;
+    let bytes = text.as_bytes();
+    let mut saw_open = false;
+    let mut saw_close = false;
+    for (i, &b) in bytes.iter().enumerate() {
+        if b == b'}' {
+            saw_close = true;
+            continue;
+        }
+        if b != b'{' {
+            continue;
+        }
+        saw_open = true;
+        if (i >= 4 && bytes[i - 4..i].eq_ignore_ascii_case(b"flag"))
+            || (i >= 3 && bytes[i - 3..i].eq_ignore_ascii_case(b"ctf"))
+            || (i >= 7 && bytes[i - 7..i].eq_ignore_ascii_case(b"picoctf"))
+            || (i >= 2 && bytes[i - 2..i].eq_ignore_ascii_case(b"hk"))
+        {
+            return true;
+        }
     }
-    // Generic brace flag form like xxx{...}
-    text.chars().any(|c| c == '{')
-        && text.chars().any(|c| c == '}')
-        && text.len() >= 8
-        && text.len() <= 200
+    saw_open && saw_close && (8..=200).contains(&text.len())
 }
 
 /// Higher score = more likely English / CTF plaintext.
@@ -268,18 +275,32 @@ pub fn score_plaintext(text: &str) -> f64 {
         score += 1000.0;
     }
 
-    let printable = text
-        .chars()
-        .filter(|c| !c.is_control() || *c == '\n' || *c == '\t' || *c == '\r')
-        .count();
+    let mut printable = 0usize;
+    let mut spaces = 0usize;
+    let mut letters = 0usize;
+    for c in text.chars() {
+        if !c.is_control() || c == '\n' || c == '\t' || c == '\r' {
+            printable += 1;
+        }
+        if c == ' ' {
+            spaces += 1;
+        }
+        if c.is_ascii_alphabetic() {
+            letters += 1;
+        }
+    }
     score += (printable as f64 / text.len() as f64) * 50.0;
 
     let lower = text.to_ascii_lowercase();
-    for word in COMMON_WORDS {
-        if lower
-            .split(|c: char| !c.is_ascii_alphabetic())
-            .any(|w| w == *word)
+    let mut found = [false; COMMON_WORDS.len()];
+    for token in lower.split(|c: char| !c.is_ascii_alphabetic()) {
+        if token.is_empty() {
+            continue;
+        }
+        if let Some(i) = COMMON_WORDS.iter().position(|&w| w == token)
+            && !found[i]
         {
+            found[i] = true;
             score += 8.0;
         }
     }
@@ -290,10 +311,8 @@ pub fn score_plaintext(text: &str) -> f64 {
         score += (200.0 / (1.0 + chi)).min(80.0);
     }
 
-    let spaces = text.chars().filter(|c| *c == ' ').count() as f64;
-    let letters = text.chars().filter(char::is_ascii_alphabetic).count() as f64;
-    if letters > 0.0 {
-        score += (spaces / letters * 20.0).min(15.0);
+    if letters > 0 {
+        score += (spaces as f64 / letters as f64 * 20.0).min(15.0);
     }
 
     let non_print = text.len() - printable;
