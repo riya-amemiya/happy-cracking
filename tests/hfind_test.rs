@@ -117,7 +117,7 @@ fn names(root: &Path, args: &[&str]) -> Vec<String> {
     let mut i = 0;
     while i < args.len() {
         match args[i] {
-            "-H" | "-L" | "-P" | "--gitignore" => {
+            "-H" | "-L" | "-P" | "--gitignore" | "--no-ignore" => {
                 full.push(args[i]);
                 i += 1;
             }
@@ -183,6 +183,7 @@ fn help_uses_binary_name() {
     assert_eq!(hfind.code, 0);
     assert!(hfind.stdout.contains("hfind"), "{}", hfind.stdout);
     assert!(hfind.stdout.contains("--gitignore"), "{}", hfind.stdout);
+    assert!(hfind.stdout.contains("--no-ignore"), "{}", hfind.stdout);
     let home = sandbox();
     let out = Command::new(env!("CARGO_BIN_EXE_hfd"))
         .env("HOME", home)
@@ -760,9 +761,26 @@ fn gitignore_off_lists_git() {
     let dir = git_repo("git_off");
     put(&dir, ".git/config", b"");
     put(&dir, "a.txt", b"");
-    let got = names(&dir, &[]);
+    let got = names(&dir, &["--no-ignore"]);
     assert!(got.contains(&".git".to_string()), "{got:?}");
     assert!(got.contains(&".git/config".to_string()), "{got:?}");
+    fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn gitignore_is_on_by_default() {
+    let dir = git_repo("git_default");
+    put(&dir, ".gitignore", b"*.log\n");
+    put(&dir, ".git/config", b"");
+    put(&dir, "a.txt", b"");
+    put(&dir, "a.log", b"");
+    let got = names(&dir, &[]);
+    assert!(
+        !got.iter().any(|n| n == ".git" || n.starts_with(".git/")),
+        "{got:?}"
+    );
+    assert!(got.contains(&"a.txt".to_string()), "{got:?}");
+    assert!(!got.contains(&"a.log".to_string()), "{got:?}");
     fs::remove_dir_all(&dir).unwrap();
 }
 

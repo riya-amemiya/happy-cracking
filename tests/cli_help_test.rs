@@ -50,6 +50,10 @@ fn help_lists_hfind_companion() {
         help.contains("hg"),
         "top-level help should mention the hg alias, got {help}"
     );
+    assert!(
+        help.contains("hrg"),
+        "top-level help should mention the hrg alias, got {help}"
+    );
 }
 
 #[test]

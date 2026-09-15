@@ -20,19 +20,20 @@ fn sandbox() -> &'static Path {
 }
 
 fn hg() -> Command {
-    let home = sandbox();
-    let mut cmd = Command::new(env!("CARGO_BIN_EXE_hg"));
-    cmd.env("HOME", home)
-        .env("XDG_CONFIG_HOME", home)
-        .env("GIT_CONFIG_GLOBAL", home.join("absent-config"))
-        .env("GIT_CONFIG_SYSTEM", home.join("absent-system"))
-        .env("GIT_CONFIG_NOSYSTEM", "1");
-    cmd
+    bin(env!("CARGO_BIN_EXE_hg"))
+}
+
+fn hrg() -> Command {
+    bin(env!("CARGO_BIN_EXE_hrg"))
 }
 
 fn hgrep() -> Command {
+    bin(env!("CARGO_BIN_EXE_hgrep"))
+}
+
+fn bin(path: &str) -> Command {
     let home = sandbox();
-    let mut cmd = Command::new(env!("CARGO_BIN_EXE_hgrep"));
+    let mut cmd = Command::new(path);
     cmd.env("HOME", home)
         .env("XDG_CONFIG_HOME", home)
         .env("GIT_CONFIG_GLOBAL", home.join("absent-config"))
@@ -226,5 +227,18 @@ fn hg_no_ignore_walk_does_not_panic_when_a_large_file_splits() {
         let found = rels(&out.stdout, &dir);
         assert_eq!(found.len(), 72, "got {found:?} stderr {:?}", out.stderr);
     }
+    fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn hrg_matches_hg_directory_search() {
+    let dir = scratch("hrg");
+    put(&dir, ".gitignore", b"drop.log\n");
+    put(&dir, "keep.txt", b"needle\n");
+    put(&dir, "drop.log", b"needle\n");
+    let via_hg = run(hg(), &["-l", "needle", dir.to_str().unwrap()]);
+    let via_hrg = run(hrg(), &["-l", "needle", dir.to_str().unwrap()]);
+    assert_eq!(rels(&via_hrg.stdout, &dir), rels(&via_hg.stdout, &dir));
+    assert_eq!(rels(&via_hrg.stdout, &dir), ["keep.txt"]);
     fs::remove_dir_all(&dir).unwrap();
 }

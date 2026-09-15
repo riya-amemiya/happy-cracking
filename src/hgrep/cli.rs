@@ -87,7 +87,7 @@ pub(crate) struct Cli {
     pub(crate) gitignore: bool,
     #[arg(
         long = "no-ignore",
-        help = "Do not skip gitignored paths (hg directory search applies gitignore by default)"
+        help = "Do not skip gitignored paths (hg/hrg directory search applies gitignore by default)"
     )]
     pub(crate) no_ignore: bool,
     #[arg(
@@ -126,17 +126,22 @@ pub(crate) struct Cli {
     pub(crate) operands: Vec<OsString>,
 }
 
-pub(crate) fn invoked_as_hg() -> bool {
+pub(crate) fn invoked_as_rg_style() -> bool {
     std::env::args_os()
         .next()
-        .is_some_and(|argv0| Path::new(&argv0).file_name() == Some(OsStr::new("hg")))
+        .is_some_and(|argv0| is_rg_style_name(&argv0))
 }
 
-pub(crate) fn apply_search_defaults(cli: &mut Cli, is_hg: bool, stdin_is_tty: bool) {
+fn is_rg_style_name(argv0: &OsStr) -> bool {
+    let name = Path::new(argv0).file_name();
+    name == Some(OsStr::new("hg")) || name == Some(OsStr::new("hrg"))
+}
+
+pub(crate) fn apply_search_defaults(cli: &mut Cli, is_rg_style: bool, stdin_is_tty: bool) {
     if cli.no_ignore {
         cli.gitignore = false;
     }
-    if !is_hg {
+    if !is_rg_style {
         return;
     }
     if cli.operands.is_empty() && (stdin_is_tty || cli.recursive) {
@@ -157,6 +162,14 @@ pub(crate) fn apply_search_defaults(cli: &mut Cli, is_hg: bool, stdin_is_tty: bo
 mod tests {
     use super::*;
     use clap::Parser;
+
+    #[test]
+    fn rg_style_names_are_hg_and_hrg() {
+        assert!(is_rg_style_name(OsStr::new("hg")));
+        assert!(is_rg_style_name(OsStr::new("/usr/bin/hrg")));
+        assert!(!is_rg_style_name(OsStr::new("hgrep")));
+        assert!(!is_rg_style_name(OsStr::new("hfind")));
+    }
 
     #[test]
     fn hg_empty_tty_searches_dot_with_gitignore() {

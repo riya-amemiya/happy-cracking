@@ -125,10 +125,11 @@ This produces `target/release/happy-cracking` and the companion binaries `target
 | ------- | ------------------------------------------------ |
 | `hgrep` | Parallel grep-compatible line matcher            |
 | `hg`    | `hgrep` alias that searches directories like rg  |
-| `hfind` | Parallel find-compatible walker                  |
+| `hrg`   | Same as `hg`                                     |
+| `hfind` | Parallel find-compatible walker (gitignore on)   |
 | `hfd`   | Alias for `hfind`                                |
 
-`hgrep` and `hfind` are separate binaries installed alongside `happy-cracking`. They are listed at the bottom of `happy-cracking --help`. `hg` is another argv0 for `hgrep` that recursively searches directory operands (gitignore on by default). `hfd` is another argv0 for `hfind`.
+`hgrep` and `hfind` are separate binaries installed alongside `happy-cracking`. They are listed at the bottom of `happy-cracking --help`. `hg` and `hrg` are argv0 aliases for `hgrep` that recursively search directory operands (gitignore on by default). `hfd` is another argv0 for `hfind`, which also honors gitignore by default.
 
 ## Usage
 
@@ -345,6 +346,7 @@ hgrep -r --gitignore TODO .
 hgrep --help
 hg needle src/
 hg --no-ignore needle src/
+hrg needle src/
 ```
 
 ### hfind
@@ -353,7 +355,7 @@ hg --no-ignore needle src/
 hfind .
 hfind -L src -name '*.rs'
 hfind . -type f -size -10k
-hfind --gitignore . -name '*.log'
+hfind --no-ignore . -name '*.log'
 hfind --help
 hfd . -print0
 ```
