@@ -1,5 +1,5 @@
-use std::fs;
-use std::io;
+use std::fs::File;
+use std::io::{self, Read};
 use std::path::Path;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -35,6 +35,25 @@ const POSIX_CLASSES: [&str; 12] = [
 ];
 
 const IGNORE_SIZE_LIMIT: usize = if cfg!(test) { 256 } else { 1 << 28 };
+
+pub const MAX_IGNORE_FILE_BYTES: usize = 16 * 1024 * 1024;
+
+pub fn read_ignore_file_with_limit(path: &Path, max_bytes: usize) -> io::Result<Vec<u8>> {
+    let max_bytes = max_bytes.min(MAX_IGNORE_FILE_BYTES);
+    let file = File::open(path)?;
+    let mut buf = Vec::new();
+    file.take((max_bytes as u64).saturating_add(1))
+        .read_to_end(&mut buf)?;
+    if buf.len() > max_bytes {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!(
+                "ignore file exceeds maximum size of {max_bytes} bytes to prevent Denial of Service"
+            ),
+        ));
+    }
+    Ok(buf)
+}
 
 const HEX_DIGITS: &[u8; 16] = b"0123456789ABCDEF";
 
@@ -226,7 +245,7 @@ pub fn load_ignore(
     quiet: bool,
     prog: &str,
 ) -> Option<Arc<Ignore>> {
-    let data = match fs::read(path) {
+    let data = match read_ignore_file_with_limit(path, MAX_IGNORE_FILE_BYTES) {
         Ok(d) => d,
         Err(e) => {
             if e.kind() != io::ErrorKind::NotFound {
@@ -273,6 +292,7 @@ pub fn load_ignore(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
     use std::time::{SystemTime, UNIX_EPOCH};
 
     #[test]
@@ -388,5 +408,65 @@ mod tests {
         assert!(!ig.ignored(b"logs", false));
         assert!(ig.ignored(b"tmp", false));
         assert!(!ig.ignored(b"keep.txt", false));
+    }
+
+    #[test]
+    fn read_ignore_file_with_limit_rejects_oversized_file() {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!(
+            "hfind_ignore_oversize_{}_{nanos}",
+            std::process::id()
+        ));
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("ignore");
+        fs::write(&path, vec![b'a'; 32]).unwrap();
+        let err = read_ignore_file_with_limit(&path, 16).unwrap_err();
+        fs::remove_dir_all(&dir).unwrap();
+        assert!(err.to_string().contains("Denial of Service"));
+    }
+
+    #[test]
+    fn read_ignore_file_with_limit_accepts_file_at_limit() {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!(
+            "hfind_ignore_at_limit_{}_{nanos}",
+            std::process::id()
+        ));
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("ignore");
+        let data = b"*.log\n";
+        fs::write(&path, data).unwrap();
+        let got = read_ignore_file_with_limit(&path, data.len()).unwrap();
+        fs::remove_dir_all(&dir).unwrap();
+        assert_eq!(got, data);
+    }
+
+    #[test]
+    fn read_ignore_file_with_limit_accepts_empty() {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let dir =
+            std::env::temp_dir().join(format!("hfind_ignore_empty_{}_{nanos}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("ignore");
+        fs::write(&path, b"").unwrap();
+        let got = read_ignore_file_with_limit(&path, 16).unwrap();
+        fs::remove_dir_all(&dir).unwrap();
+        assert!(got.is_empty());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn read_ignore_file_with_limit_bounds_device_without_eof() {
+        let err = read_ignore_file_with_limit(Path::new("/dev/zero"), 64).unwrap_err();
+        assert!(err.to_string().contains("Denial of Service"));
     }
 }
