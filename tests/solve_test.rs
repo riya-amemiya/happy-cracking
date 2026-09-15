@@ -6,8 +6,15 @@ use happy_cracking::crypto::substitution;
 #[test]
 fn looks_like_flag_detects_flag_brace() {
     assert!(looks_like_flag("flag{hello_world}"));
+    assert!(looks_like_flag("FLAG{hello}"));
     assert!(looks_like_flag("CTF{abc}"));
+    assert!(looks_like_flag("picoctf{xyz}"));
+    assert!(looks_like_flag("HK{x}"));
+    assert!(looks_like_flag("hk{x}"));
+    assert!(looks_like_flag("xxxx{yyyy}"));
+    assert!(looks_like_flag("flag{"));
     assert!(!looks_like_flag("nope"));
+    assert!(!looks_like_flag("{x}"));
 }
 
 #[test]
