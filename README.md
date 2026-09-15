@@ -124,11 +124,12 @@ This produces `target/release/happy-cracking` and the companion binaries `target
 | Command | Description                                      |
 | ------- | ------------------------------------------------ |
 | `hgrep` | Parallel grep-compatible line matcher            |
-| `hg`    | Alias for `hgrep`                                |
-| `hfind` | Parallel find-compatible walker                  |
+| `hg`    | `hgrep` alias that searches directories like rg  |
+| `hrg`   | Same as `hg`                                     |
+| `hfind` | Parallel find-compatible walker (gitignore on)   |
 | `hfd`   | Alias for `hfind`                                |
 
-`hgrep` and `hfind` are separate binaries installed alongside `happy-cracking`. They are listed at the bottom of `happy-cracking --help`. `hg` is another argv0 for `hgrep`. `hfd` is another argv0 for `hfind`.
+`hgrep` and `hfind` are separate binaries installed alongside `happy-cracking`. They are listed at the bottom of `happy-cracking --help`. `hg` and `hrg` are argv0 aliases for `hgrep` that recursively search directory operands (gitignore on by default). `hfd` is another argv0 for `hfind`, which also honors gitignore by default.
 
 ## Usage
 
@@ -339,11 +340,13 @@ The `chain` command supports the following operations: `base64-encode`, `base64-
 ### hgrep
 
 ```bash
-hgrep needle src/
+hgrep -r needle src/
 hgrep -n -i flag firmware.bin
 hgrep -r --gitignore TODO .
 hgrep --help
 hg needle src/
+hg --no-ignore needle src/
+hrg needle src/
 ```
 
 ### hfind
@@ -352,7 +355,7 @@ hg needle src/
 hfind .
 hfind -L src -name '*.rs'
 hfind . -type f -size -10k
-hfind --gitignore . -name '*.log'
+hfind --no-ignore . -name '*.log'
 hfind --help
 hfd . -print0
 ```

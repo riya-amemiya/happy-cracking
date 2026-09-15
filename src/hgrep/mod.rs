@@ -6,7 +6,7 @@ mod walk;
 
 use std::cell::RefCell;
 use std::fs::File;
-use std::io::{self, Read, Write};
+use std::io::{self, IsTerminal, Read, Write};
 use std::os::unix::ffi::{OsStrExt, OsStringExt};
 use std::path::Path;
 use std::process::ExitCode;
@@ -16,7 +16,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use crate::hc_internal::outbuf;
 use clap::Parser;
 
-use cli::Cli;
+use cli::{Cli, apply_search_defaults, invoked_as_rg_style};
 use matcher::build_matcher;
 use search::{Job, may_stop_early, report, search_buf, search_exists, selected};
 use source::{from_file, open_source};
@@ -48,6 +48,7 @@ pub fn read_pattern_file_with_limit(path: &Path, max_bytes: usize) -> io::Result
 #[must_use]
 pub fn run() -> ExitCode {
     let mut cli = Cli::parse();
+    apply_search_defaults(&mut cli, invoked_as_rg_style(), io::stdin().is_terminal());
 
     let patterns: Vec<Vec<u8>> = if !cli.patterns.is_empty() || cli.pattern_file.is_some() {
         let mut ps: Vec<Vec<u8>> = cli
@@ -149,8 +150,7 @@ fn process_path(
     if job.cli.quiet && found.load(Ordering::Relaxed) {
         return;
     }
-    SLOT.with(|slot| {
-        let (read_buf, out) = &mut *slot.borrow_mut();
+    with_thread_bufs(|read_buf, out| {
         out.clear();
         let name = path.as_os_str().as_bytes();
         let count = stream_or_search(
@@ -172,6 +172,21 @@ fn process_path(
         if !out.is_empty() {
             outbuf::push(sink, out, None);
         }
+    });
+}
+
+fn with_thread_bufs(f: impl FnOnce(&mut Vec<u8>, &mut Vec<u8>)) {
+    SLOT.with(|slot| {
+        if let Ok(mut pair) = slot.try_borrow_mut() {
+            let (read_buf, out) = &mut *pair;
+            f(read_buf, out);
+            return;
+        }
+        // Nested rayon work on this thread (a large-file split joining while
+        // the directory walk still holds the slot) needs a private pair.
+        let mut read_buf = Vec::new();
+        let mut out = Vec::new();
+        f(&mut read_buf, &mut out);
     });
 }
 

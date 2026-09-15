@@ -23,6 +23,10 @@ name = "hg"
 path = "src/bin/hg.rs"
 
 [[bin]]
+name = "hrg"
+path = "src/bin/hrg.rs"
+
+[[bin]]
 name = "hfind"
 path = "src/bin/hfind.rs"
 

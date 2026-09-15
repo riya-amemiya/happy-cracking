@@ -1,5 +1,5 @@
-use std::ffi::OsString;
-use std::path::PathBuf;
+use std::ffi::{OsStr, OsString};
+use std::path::{Path, PathBuf};
 
 use clap::{ArgAction, Parser};
 
@@ -86,6 +86,11 @@ pub(crate) struct Cli {
     )]
     pub(crate) gitignore: bool,
     #[arg(
+        long = "no-ignore",
+        help = "Do not skip gitignored paths (hg/hrg directory search applies gitignore by default)"
+    )]
+    pub(crate) no_ignore: bool,
+    #[arg(
         short = 'H',
         long = "with-filename",
         help = "Prefix each match with the file name"
@@ -119,4 +124,87 @@ pub(crate) struct Cli {
         help = "Pattern then files, or files only when -e or -f is set"
     )]
     pub(crate) operands: Vec<OsString>,
+}
+
+pub(crate) fn invoked_as_rg_style() -> bool {
+    std::env::args_os()
+        .next()
+        .is_some_and(|argv0| is_rg_style_name(&argv0))
+}
+
+fn is_rg_style_name(argv0: &OsStr) -> bool {
+    let name = Path::new(argv0).file_name();
+    name == Some(OsStr::new("hg")) || name == Some(OsStr::new("hrg"))
+}
+
+pub(crate) fn apply_search_defaults(cli: &mut Cli, is_rg_style: bool, stdin_is_tty: bool) {
+    if cli.no_ignore {
+        cli.gitignore = false;
+    }
+    if !is_rg_style {
+        return;
+    }
+    if cli.operands.is_empty() && (stdin_is_tty || cli.recursive) {
+        cli.operands.push(OsString::from("."));
+    }
+    if cli.operands.is_empty() {
+        return;
+    }
+    if cli.recursive || cli.operands.iter().any(|p| Path::new(p).is_dir()) {
+        cli.recursive = true;
+        if !cli.no_ignore {
+            cli.gitignore = true;
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use clap::Parser;
+
+    #[test]
+    fn rg_style_names_are_hg_and_hrg() {
+        assert!(is_rg_style_name(OsStr::new("hg")));
+        assert!(is_rg_style_name(OsStr::new("/usr/bin/hrg")));
+        assert!(!is_rg_style_name(OsStr::new("hgrep")));
+        assert!(!is_rg_style_name(OsStr::new("hfind")));
+    }
+
+    #[test]
+    fn hg_empty_tty_searches_dot_with_gitignore() {
+        let mut cli = Cli::parse_from(["hg", "-e", "needle"]);
+        apply_search_defaults(&mut cli, true, true);
+        assert_eq!(cli.operands, [OsString::from(".")]);
+        assert!(cli.recursive);
+        assert!(cli.gitignore);
+        assert!(!cli.no_ignore);
+    }
+
+    #[test]
+    fn hg_empty_pipe_stays_on_stdin() {
+        let mut cli = Cli::parse_from(["hg", "-e", "needle"]);
+        apply_search_defaults(&mut cli, true, false);
+        assert!(cli.operands.is_empty());
+        assert!(!cli.recursive);
+        assert!(!cli.gitignore);
+    }
+
+    #[test]
+    fn hgrep_empty_tty_stays_on_stdin() {
+        let mut cli = Cli::parse_from(["hgrep", "-e", "needle"]);
+        apply_search_defaults(&mut cli, false, true);
+        assert!(cli.operands.is_empty());
+        assert!(!cli.recursive);
+        assert!(!cli.gitignore);
+    }
+
+    #[test]
+    fn hg_no_ignore_keeps_gitignore_off_on_a_directory() {
+        let mut cli = Cli::parse_from(["hg", "--no-ignore", "-e", "needle", "."]);
+        apply_search_defaults(&mut cli, true, false);
+        assert!(cli.recursive);
+        assert!(!cli.gitignore);
+        assert!(cli.no_ignore);
+    }
 }

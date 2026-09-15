@@ -44,7 +44,7 @@ where
 {
     let mut args = args.into_iter().peekable();
     let mut follow = Follow::Never;
-    let mut gitignore = false;
+    let mut gitignore = true;
     loop {
         match args.peek().map(|s| s.as_bytes()) {
             Some(b"-H") => {
@@ -61,6 +61,10 @@ where
             }
             Some(b"--gitignore") => {
                 gitignore = true;
+                args.next();
+            }
+            Some(b"--no-ignore") => {
+                gitignore = false;
                 args.next();
             }
             Some(b"--help") => return Ok(Outcome::Help(name)),
@@ -98,7 +102,8 @@ Global options:
   -H             Follow symbolic links on the command line only
   -L             Follow symbolic links
   -P             Never follow symbolic links (default)
-  --gitignore    Skip .gitignore, .git/info/exclude, and core.excludesFile (honors core.ignorecase; always skips .git)
+  --gitignore    Skip gitignored paths (default; like fd)
+  --no-ignore    Do not skip gitignored paths
   --help         Print help
 
 Tests:
@@ -172,7 +177,7 @@ mod tests {
         assert!(as_help(parse(Vec::<OsString>::new(), "hfind".into()).unwrap()).is_none());
         let p = as_run(parse(Vec::<OsString>::new(), "hfind".into()).unwrap()).unwrap();
         assert_eq!(p.roots, [OsString::from(".")]);
-        assert!(!p.gitignore);
+        assert!(p.gitignore);
         assert!(matches!(p.follow, Follow::Never));
         assert_eq!(
             as_help(parse([OsString::from("--help")], "hfd".into()).unwrap()).as_deref(),
@@ -212,5 +217,8 @@ mod tests {
         assert!(matches!(always, Outcome::Run(ref p) if matches!(p.follow, Follow::Always)));
         assert!(help_text("hfind").contains("hfind [options]"));
         assert!(help_text("hfd").contains("--gitignore"));
+        assert!(help_text("hfind").contains("--no-ignore"));
+        let off = parse([OsString::from("--no-ignore")], "hfind".into()).unwrap();
+        assert!(matches!(off, Outcome::Run(ref p) if !p.gitignore));
     }
 }

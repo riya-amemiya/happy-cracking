@@ -149,6 +149,10 @@ fn is_binary(buf: &[u8]) -> bool {
 
 const PARALLEL_THRESHOLD: usize = 1 << 20;
 
+fn split_file_in_pool() -> bool {
+    rayon::current_thread_index().is_none()
+}
+
 fn split_chunks(buf: &[u8], parts: usize) -> Vec<(usize, usize)> {
     let target = buf.len() / parts + 1;
     let mut chunks = Vec::with_capacity(parts + 1);
@@ -228,7 +232,7 @@ fn split_overlap(len: usize, parts: usize, overlap: usize) -> Vec<(usize, usize)
 }
 
 fn exists_parallel(buf: &[u8], matcher: &Matcher, overlap: usize) -> bool {
-    if buf.len() < PARALLEL_THRESHOLD {
+    if buf.len() < PARALLEL_THRESHOLD || !split_file_in_pool() {
         return matcher.is_match(buf);
     }
     let hit = std::sync::atomic::AtomicBool::new(false);
@@ -298,11 +302,13 @@ pub(crate) fn search_buf(buf: &[u8], job: &Job, name: &[u8], out: &mut Vec<u8>) 
         }
         return count;
     }
-    let count = if buf.len() >= PARALLEL_THRESHOLD && limit_of(job.cli) == u64::MAX {
-        search_split(buf, job, name, out)
-    } else {
-        search_slice(buf, job, name, 0, out)
-    };
+    let count =
+        if buf.len() >= PARALLEL_THRESHOLD && limit_of(job.cli) == u64::MAX && split_file_in_pool()
+        {
+            search_split(buf, job, name, out)
+        } else {
+            search_slice(buf, job, name, 0, out)
+        };
     if count > 0 && binary && job.emit_lines {
         out.truncate(before);
         out.extend_from_slice(b"Binary file ");
