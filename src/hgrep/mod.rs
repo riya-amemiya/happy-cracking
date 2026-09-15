@@ -6,7 +6,7 @@ mod walk;
 
 use std::cell::RefCell;
 use std::fs::File;
-use std::io::{self, Read, Write};
+use std::io::{self, IsTerminal, Read, Write};
 use std::os::unix::ffi::{OsStrExt, OsStringExt};
 use std::path::Path;
 use std::process::ExitCode;
@@ -16,7 +16,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use crate::hc_internal::outbuf;
 use clap::Parser;
 
-use cli::Cli;
+use cli::{Cli, apply_search_defaults, invoked_as_hg};
 use matcher::build_matcher;
 use search::{Job, may_stop_early, report, search_buf, search_exists, selected};
 use source::{from_file, open_source};
@@ -48,6 +48,7 @@ pub fn read_pattern_file_with_limit(path: &Path, max_bytes: usize) -> io::Result
 #[must_use]
 pub fn run() -> ExitCode {
     let mut cli = Cli::parse();
+    apply_search_defaults(&mut cli, invoked_as_hg(), io::stdin().is_terminal());
 
     let patterns: Vec<Vec<u8>> = if !cli.patterns.is_empty() || cli.pattern_file.is_some() {
         let mut ps: Vec<Vec<u8>> = cli

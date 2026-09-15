@@ -124,11 +124,11 @@ This produces `target/release/happy-cracking` and the companion binaries `target
 | Command | Description                                      |
 | ------- | ------------------------------------------------ |
 | `hgrep` | Parallel grep-compatible line matcher            |
-| `hg`    | Alias for `hgrep`                                |
+| `hg`    | `hgrep` alias that searches directories like rg  |
 | `hfind` | Parallel find-compatible walker                  |
 | `hfd`   | Alias for `hfind`                                |
 
-`hgrep` and `hfind` are separate binaries installed alongside `happy-cracking`. They are listed at the bottom of `happy-cracking --help`. `hg` is another argv0 for `hgrep`. `hfd` is another argv0 for `hfind`.
+`hgrep` and `hfind` are separate binaries installed alongside `happy-cracking`. They are listed at the bottom of `happy-cracking --help`. `hg` is another argv0 for `hgrep` that recursively searches directory operands (gitignore on by default). `hfd` is another argv0 for `hfind`.
 
 ## Usage
 
@@ -339,11 +339,12 @@ The `chain` command supports the following operations: `base64-encode`, `base64-
 ### hgrep
 
 ```bash
-hgrep needle src/
+hgrep -r needle src/
 hgrep -n -i flag firmware.bin
 hgrep -r --gitignore TODO .
 hgrep --help
 hg needle src/
+hg --no-ignore needle src/
 ```
 
 ### hfind
