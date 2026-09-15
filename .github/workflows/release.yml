@@ -19,7 +19,8 @@ on:
   push:
     tags:
       # Existing releases use unprefixed semver tags (0.12.0, not v0.12.0).
-      - "[0-9].*.*"
+      # Use * (not [0-9]) so versions >= 10.0.0 still match.
+      - "*.*.*"
   workflow_dispatch:
     inputs:
       dry_run:
