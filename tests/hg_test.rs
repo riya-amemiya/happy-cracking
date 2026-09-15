@@ -199,3 +199,32 @@ fn hg_file_operand_does_not_require_a_tree_walk() {
     assert_eq!(out.code, 0);
     fs::remove_dir_all(&dir).unwrap();
 }
+
+#[test]
+fn hg_no_ignore_walk_does_not_panic_when_a_large_file_splits() {
+    let dir = scratch("nested_rayon");
+    let mut big = vec![b'x'; 2 * 1024 * 1024];
+    big.extend_from_slice(b"needle\n");
+    for i in 0..8 {
+        put(&dir, &format!("big{i}.txt"), &big);
+    }
+    for i in 0..64 {
+        put(&dir, &format!("small/s{i}.txt"), b"needle\n");
+    }
+
+    for _ in 0..8 {
+        let out = run(
+            hg(),
+            &["--no-ignore", "-l", "needle", dir.to_str().unwrap()],
+        );
+        assert_eq!(out.code, 0, "stderr {:?}", out.stderr);
+        assert!(
+            !out.stderr.contains("RefCell"),
+            "walker re-entered a thread-local buffer: {:?}",
+            out.stderr
+        );
+        let found = rels(&out.stdout, &dir);
+        assert_eq!(found.len(), 72, "got {found:?} stderr {:?}", out.stderr);
+    }
+    fs::remove_dir_all(&dir).unwrap();
+}

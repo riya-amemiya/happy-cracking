@@ -150,8 +150,7 @@ fn process_path(
     if job.cli.quiet && found.load(Ordering::Relaxed) {
         return;
     }
-    SLOT.with(|slot| {
-        let (read_buf, out) = &mut *slot.borrow_mut();
+    with_thread_bufs(|read_buf, out| {
         out.clear();
         let name = path.as_os_str().as_bytes();
         let count = stream_or_search(
@@ -173,6 +172,21 @@ fn process_path(
         if !out.is_empty() {
             outbuf::push(sink, out, None);
         }
+    });
+}
+
+fn with_thread_bufs(f: impl FnOnce(&mut Vec<u8>, &mut Vec<u8>)) {
+    SLOT.with(|slot| {
+        if let Ok(mut pair) = slot.try_borrow_mut() {
+            let (read_buf, out) = &mut *pair;
+            f(read_buf, out);
+            return;
+        }
+        // Nested rayon work on this thread (a large-file split joining while
+        // the directory walk still holds the slot) needs a private pair.
+        let mut read_buf = Vec::new();
+        let mut out = Vec::new();
+        f(&mut read_buf, &mut out);
     });
 }
 
