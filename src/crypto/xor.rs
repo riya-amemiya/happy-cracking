@@ -183,6 +183,8 @@ fn hamming_distance(a: &[u8], b: &[u8]) -> u32 {
 
 pub const MAX_KEY_LENGTH: usize = 256;
 
+const KEYLEN_HAMMING_SAMPLE_BYTES: usize = 4096;
+
 pub fn check_key_length(len: usize) -> Result<()> {
     if len == 0 {
         anyhow::bail!("Key length must be at least 1");
@@ -209,7 +211,7 @@ pub fn detect_key_length(data: &[u8], max_len: usize) -> Vec<(usize, f64)> {
                 return None;
             }
 
-            let num_pairs = num_blocks - 1;
+            let num_pairs = (num_blocks - 1).min((KEYLEN_HAMMING_SAMPLE_BYTES / key_len).max(4));
             let total_distance: u32 = (0..num_pairs)
                 .map(|i| {
                     let block_a = &data[i * key_len..(i + 1) * key_len];
