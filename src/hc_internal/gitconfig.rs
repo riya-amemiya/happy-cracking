@@ -1,5 +1,6 @@
 use std::ffi::OsStr;
-use std::fs;
+use std::fs::File;
+use std::io::{self, Read};
 use std::os::unix::ffi::{OsStrExt, OsStringExt};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -32,6 +33,24 @@ struct Scope<'a> {
 }
 
 const CONFIG_INCLUDE_DEPTH: u32 = 10;
+pub const MAX_GITCONFIG_FILE_BYTES: usize = 16 * 1024 * 1024;
+
+pub fn read_config_file_with_limit(path: &Path, max_bytes: usize) -> io::Result<Vec<u8>> {
+    let max_bytes = max_bytes.min(MAX_GITCONFIG_FILE_BYTES);
+    let file = File::open(path)?;
+    let mut buf = Vec::new();
+    file.take((max_bytes as u64).saturating_add(1))
+        .read_to_end(&mut buf)?;
+    if buf.len() > max_bytes {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!(
+                "gitconfig file exceeds maximum size of {max_bytes} bytes to prevent Denial of Service"
+            ),
+        ));
+    }
+    Ok(buf)
+}
 
 fn skip_line(data: &[u8], from: usize) -> usize {
     memchr(b'\n', &data[from..]).map_or(data.len(), |i| from + i + 1)
@@ -303,7 +322,8 @@ fn by_branch(cond: &[u8], scope: &Scope) -> bool {
     let Some(gitdir) = scope.gitdir else {
         return false;
     };
-    let Ok(head) = fs::read(gitdir.join("HEAD")) else {
+    let Ok(head) = read_config_file_with_limit(&gitdir.join("HEAD"), MAX_GITCONFIG_FILE_BYTES)
+    else {
         return false;
     };
     let line = head
@@ -414,7 +434,7 @@ fn apply_config(data: &[u8], scope: &Scope, cfg: &mut GitConfig) {
 }
 
 fn read_config_file(path: &Path, gitdir: Option<&Path>, depth: u32, cfg: &mut GitConfig) {
-    let Ok(data) = fs::read(path) else {
+    let Ok(data) = read_config_file_with_limit(path, MAX_GITCONFIG_FILE_BYTES) else {
         return;
     };
     let scope = Scope {
@@ -438,7 +458,7 @@ struct RawConfig {
 }
 
 fn push_source(out: &mut Vec<RawConfig>, path: &Path) {
-    if let Ok(data) = fs::read(path) {
+    if let Ok(data) = read_config_file_with_limit(path, MAX_GITCONFIG_FILE_BYTES) {
         out.push(RawConfig {
             dir: path.parent().unwrap_or(Path::new(".")).to_path_buf(),
             data,
@@ -500,7 +520,7 @@ fn resolve_gitdir(repo: &Path) -> Option<PathBuf> {
     if dot.is_dir() {
         return Some(dot);
     }
-    let data = fs::read(&dot).ok()?;
+    let data = read_config_file_with_limit(&dot, MAX_GITCONFIG_FILE_BYTES).ok()?;
     let line = data.split(|&b| b == b'\n').next()?;
     let raw = line.strip_prefix(b"gitdir:")?.trim_ascii_end();
     let target = raw.strip_prefix(b" ").unwrap_or(raw).trim_ascii_end();
@@ -509,7 +529,9 @@ fn resolve_gitdir(repo: &Path) -> Option<PathBuf> {
     }
     let named = PathBuf::from(OsStr::from_bytes(target));
     let gitdir = join_or_abs(repo, named);
-    let Ok(shared) = fs::read(gitdir.join("commondir")) else {
+    let Ok(shared) =
+        read_config_file_with_limit(&gitdir.join("commondir"), MAX_GITCONFIG_FILE_BYTES)
+    else {
         return Some(gitdir);
     };
     let common = shared
@@ -556,6 +578,7 @@ pub fn repo_sources(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
     use std::os::unix::ffi::OsStrExt;
     use std::sync::atomic::AtomicBool;
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -890,5 +913,65 @@ mod tests {
         let errors = AtomicBool::new(false);
         let _ = repo_sources(&dir.join("repo"), &errors, true, "hc-internal");
         fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn read_config_file_with_limit_rejects_oversized_file() {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!(
+            "hfind_gitcfg_oversize_{}_{nanos}",
+            std::process::id()
+        ));
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("config");
+        fs::write(&path, vec![b'a'; 32]).unwrap();
+        let err = read_config_file_with_limit(&path, 16).unwrap_err();
+        fs::remove_dir_all(&dir).unwrap();
+        assert!(err.to_string().contains("Denial of Service"));
+    }
+
+    #[test]
+    fn read_config_file_with_limit_accepts_file_at_limit() {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!(
+            "hfind_gitcfg_at_limit_{}_{nanos}",
+            std::process::id()
+        ));
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("config");
+        let data = b"[core]\n\tignorecase = true\n";
+        fs::write(&path, data).unwrap();
+        let got = read_config_file_with_limit(&path, data.len()).unwrap();
+        fs::remove_dir_all(&dir).unwrap();
+        assert_eq!(got, data);
+    }
+
+    #[test]
+    fn read_config_file_with_limit_accepts_empty() {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let dir =
+            std::env::temp_dir().join(format!("hfind_gitcfg_empty_{}_{nanos}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("config");
+        fs::write(&path, b"").unwrap();
+        let got = read_config_file_with_limit(&path, 16).unwrap();
+        fs::remove_dir_all(&dir).unwrap();
+        assert!(got.is_empty());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn read_config_file_with_limit_bounds_device_without_eof() {
+        let err = read_config_file_with_limit(Path::new("/dev/zero"), 64).unwrap_err();
+        assert!(err.to_string().contains("Denial of Service"));
     }
 }

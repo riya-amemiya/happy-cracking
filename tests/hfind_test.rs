@@ -1188,6 +1188,32 @@ fn gitignore_reads_gitconfig_when_global_unset() {
     fs::remove_dir_all(&dir).unwrap();
 }
 
+#[cfg(unix)]
+#[test]
+fn gitconfig_global_bounds_device_without_eof() {
+    let dir = git_repo("gitconfig_devzero");
+    put(&dir, "keep.md", b"");
+    let out = run_env(
+        &[("GIT_CONFIG_GLOBAL", OsStr::new("/dev/zero"))],
+        &["--gitignore", dir.to_str().unwrap(), "-name", "keep.md"],
+    );
+    assert_eq!(out.code, 0, "stderr {:?}", out.stderr);
+    assert_eq!(listed(&out.stdout, &dir), ["keep.md"], "{}", out.stdout);
+    fs::remove_dir_all(&dir).unwrap();
+}
+
+#[cfg(unix)]
+#[test]
+fn gitdir_pointer_bounds_device_without_eof() {
+    let dir = scratch("gitdir_devzero");
+    put(&dir, "keep.md", b"");
+    std::os::unix::fs::symlink("/dev/zero", dir.join(".git")).unwrap();
+    let out = run(&["--gitignore", dir.to_str().unwrap(), "-name", "keep.md"]);
+    assert_eq!(out.code, 0, "stderr {:?}", out.stderr);
+    assert_eq!(listed(&out.stdout, &dir), ["keep.md"], "{}", out.stdout);
+    fs::remove_dir_all(&dir).unwrap();
+}
+
 #[test]
 fn gitignore_git_pointer_and_commondir() {
     let dir = git_repo("gitfile");
