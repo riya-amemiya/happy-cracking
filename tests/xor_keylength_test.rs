@@ -69,6 +69,23 @@ fn detect_key_length_short_input() {
 }
 
 #[test]
+fn detect_key_length_repeating_key_large() {
+    let plaintext = b"HELLO WORLD HELLO WORLD HELLO WORLD HELLO WORLD".repeat(1400);
+    let key = b"ABC";
+    let encrypted = xor::xor_bytes(&plaintext, key);
+
+    let results = xor::detect_key_length(&encrypted, 20);
+    let top_lengths: Vec<usize> = results.iter().take(5).map(|&(len, _)| len).collect();
+    assert!(
+        top_lengths.contains(&3)
+            || top_lengths.contains(&6)
+            || top_lengths.contains(&9)
+            || top_lengths.contains(&12),
+        "Expected key length 3 or multiple in top results, got {top_lengths:?}"
+    );
+}
+
+#[test]
 fn detect_key_length_returns_sorted() {
     let plaintext = b"The quick brown fox jumps over the lazy dog. The quick brown fox jumps.";
     let key = b"SECRETKEY";
