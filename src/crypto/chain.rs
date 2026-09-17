@@ -4,7 +4,7 @@ use clap::Subcommand;
 use crate::crypto;
 
 const MAX_OPERATIONS: usize = 50;
-const MAX_OUTPUT_SIZE: usize = 50 * 1024 * 1024; // 50MB
+pub const MAX_OUTPUT_SIZE: usize = 50 * 1024 * 1024;
 
 #[derive(Subcommand)]
 pub enum ChainAction {
@@ -52,6 +52,10 @@ fn apply_operation(input: &str, op: &str) -> Result<String> {
 }
 
 pub fn chain(input: &str, ops: &str) -> Result<String> {
+    chain_with_limit(input, ops, MAX_OUTPUT_SIZE)
+}
+
+pub fn chain_with_limit(input: &str, ops: &str, max_output: usize) -> Result<String> {
     if ops.trim().is_empty() {
         return Ok(input.to_string());
     }
@@ -64,13 +68,17 @@ pub fn chain(input: &str, ops: &str) -> Result<String> {
     ops.split(',')
         .map(str::trim)
         .try_fold(input.to_string(), |current, op| {
-            if current.len() > MAX_OUTPUT_SIZE {
-                anyhow::bail!(
-                    "Output size limit exceeded: {} bytes (limit: {} bytes)",
-                    current.len(),
-                    MAX_OUTPUT_SIZE
-                );
-            }
-            apply_operation(&current, op).with_context(|| format!("Failed at operation '{op}'"))
+            check_output_size(current.len(), max_output)?;
+            let next = apply_operation(&current, op)
+                .with_context(|| format!("Failed at operation '{op}'"))?;
+            check_output_size(next.len(), max_output)?;
+            Ok(next)
         })
+}
+
+fn check_output_size(len: usize, max_output: usize) -> Result<()> {
+    if len > max_output {
+        anyhow::bail!("Output size limit exceeded: {len} bytes (limit: {max_output} bytes)");
+    }
+    Ok(())
 }

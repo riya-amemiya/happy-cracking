@@ -103,3 +103,24 @@ fn chain_too_many_operations_errors() {
             .contains("Too many operations")
     );
 }
+
+#[test]
+fn chain_rejects_expanding_op_over_output_limit() {
+    let encoded = happy_cracking::crypto::binary::encode("hello");
+    assert!(encoded.len() > 20);
+    let err = chain::chain_with_limit("hello", "binary-encode", 20).unwrap_err();
+    assert!(err.to_string().contains("Output size limit exceeded"));
+}
+
+#[test]
+fn chain_allows_expanding_op_under_output_limit() {
+    let expected = happy_cracking::crypto::binary::encode("hello");
+    let result = chain::chain_with_limit("hello", "binary-encode", expected.len()).unwrap();
+    assert_eq!(result, expected);
+}
+
+#[test]
+fn chain_rejects_input_over_output_limit() {
+    let err = chain::chain_with_limit("hello", "rot13", 4).unwrap_err();
+    assert!(err.to_string().contains("Output size limit exceeded"));
+}
