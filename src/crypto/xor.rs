@@ -154,6 +154,9 @@ pub fn xor_bytes(data: &[u8], key: &[u8]) -> Vec<u8> {
     if key.is_empty() {
         return data.to_vec();
     }
+    if let [k] = key {
+        return data.iter().map(|&b| b ^ k).collect();
+    }
     let mut out = Vec::with_capacity(data.len());
     let key_len = key.len();
 
