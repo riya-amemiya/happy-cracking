@@ -9,6 +9,20 @@ fn xor_bytes_single_key() {
 }
 
 #[test]
+fn xor_bytes_single_byte_matches_bytewise_on_long_buffer() {
+    let data: Vec<u8> = (0..=255).cycle().take(300).collect();
+    let result = xor::xor_bytes(&data, &[0x5a]);
+    let expected: Vec<u8> = data.iter().map(|&b| b ^ 0x5a).collect();
+    assert_eq!(result, expected);
+}
+
+#[test]
+fn xor_bytes_single_byte_empty_data() {
+    let result = xor::xor_bytes(b"", &[0x41]);
+    assert!(result.is_empty());
+}
+
+#[test]
 fn xor_bytes_roundtrip() {
     let data = b"Secret message";
     let key = b"KEY";
