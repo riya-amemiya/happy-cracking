@@ -102,6 +102,34 @@ fn bruteforce_run_reads_hex_under_limit() {
 }
 
 #[test]
+fn single_byte_xor_is_printable_matches_allocated_filter() {
+    let data: Vec<u8> = (0u8..=255).cycle().take(64).collect();
+    let expected: Vec<u8> = xor::single_byte_xor_bruteforce(&data)
+        .filter(|(_, result)| result.iter().all(|&b| b.is_ascii_graphic() || b == b' '))
+        .map(|(k, _)| k)
+        .collect();
+    let got: Vec<u8> = (0u8..=255)
+        .filter(|&key| xor::single_byte_xor_is_printable(&data, key))
+        .collect();
+    assert_eq!(got, expected);
+}
+
+#[test]
+fn single_byte_xor_is_printable_accepts_known_plaintext() {
+    let original = b"flag{xor}";
+    let key = 0x42u8;
+    let encrypted: Vec<u8> = original.iter().map(|&b| b ^ key).collect();
+    assert!(xor::single_byte_xor_is_printable(&encrypted, key));
+    assert!(!xor::single_byte_xor_is_printable(&encrypted, key ^ 0xff));
+}
+
+#[test]
+fn single_byte_xor_is_printable_empty_is_vacuously_true() {
+    assert!(xor::single_byte_xor_is_printable(b"", 0x00));
+    assert!(xor::single_byte_xor_is_printable(b"", 0xff));
+}
+
+#[test]
 fn xor_bytes_empty_key() {
     let data = b"Hello";
     let key = b"";

@@ -109,14 +109,21 @@ fn run_cipher(input: &str, key: &str, ascii_key: bool) -> Result<()> {
 fn run_bruteforce(input: &str, printable_only: bool) -> Result<()> {
     let input_bytes = decode_xor_hex_with_limit(input, MAX_XOR_BYTES)?;
 
-    for (key, result) in single_byte_xor_bruteforce(&input_bytes) {
-        if printable_only {
-            if result.iter().all(|&b| b.is_ascii_graphic() || b == b' ')
-                && let Ok(s) = std::str::from_utf8(&result)
-            {
+    if printable_only {
+        for key in 0u8..=255 {
+            if !single_byte_xor_is_printable(&input_bytes, key) {
+                continue;
+            }
+            let result = xor_bytes(&input_bytes, &[key]);
+            if let Ok(s) = std::str::from_utf8(&result) {
                 println!("Key 0x{key:02x}: {s}");
             }
-        } else if let Ok(s) = std::str::from_utf8(&result) {
+        }
+        return Ok(());
+    }
+
+    for (key, result) in single_byte_xor_bruteforce(&input_bytes) {
+        if let Ok(s) = std::str::from_utf8(&result) {
             println!("Key 0x{key:02x}: {s}");
         }
     }
@@ -175,6 +182,14 @@ pub fn xor_bytes(data: &[u8], key: &[u8]) -> Vec<u8> {
 
 pub fn single_byte_xor_bruteforce(data: &[u8]) -> impl Iterator<Item = (u8, Vec<u8>)> + '_ {
     (0u8..=255).map(|key| (key, xor_bytes(data, &[key])))
+}
+
+#[must_use]
+pub fn single_byte_xor_is_printable(data: &[u8], key: u8) -> bool {
+    data.iter().all(|&b| {
+        let p = b ^ key;
+        p.is_ascii_graphic() || p == b' '
+    })
 }
 
 fn hamming_distance(a: &[u8], b: &[u8]) -> u32 {
