@@ -76,10 +76,24 @@ pub fn run(action: DhAction) -> Result<()> {
     Ok(())
 }
 
+pub const MAX_DH_BITS: u64 = 16_384;
+
+fn check_max_bits(n: &BigUint, name: &str) -> Result<()> {
+    if n.bits() > MAX_DH_BITS {
+        anyhow::bail!(
+            "{name} exceeds the maximum allowed size of {MAX_DH_BITS} bits to prevent Denial of Service"
+        );
+    }
+    Ok(())
+}
+
 pub fn compute_pubkey(g: &BigUint, a: &BigUint, p: &BigUint) -> Result<BigUint> {
     if p.is_zero() {
         anyhow::bail!("Modulus p must be non-zero");
     }
+    check_max_bits(g, "Generator g")?;
+    check_max_bits(a, "Private key a")?;
+    check_max_bits(p, "Modulus p")?;
     Ok(g.modpow(a, p))
 }
 
@@ -87,6 +101,9 @@ pub fn compute_shared_secret(public_key: &BigUint, a: &BigUint, p: &BigUint) -> 
     if p.is_zero() {
         anyhow::bail!("Modulus p must be non-zero");
     }
+    check_max_bits(public_key, "Public key")?;
+    check_max_bits(a, "Private key a")?;
+    check_max_bits(p, "Modulus p")?;
     Ok(public_key.modpow(a, p))
 }
 
@@ -107,6 +124,9 @@ pub fn baby_step_giant_step(
     if order.is_zero() {
         anyhow::bail!("Order must be non-zero");
     }
+    check_max_bits(g, "Generator g")?;
+    check_max_bits(target, "Target")?;
+    check_max_bits(p, "Modulus p")?;
 
     let m = order.sqrt() + BigUint::one();
 
