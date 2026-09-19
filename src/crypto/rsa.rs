@@ -211,6 +211,7 @@ pub fn run(action: RsaAction) -> Result<()> {
         }
         RsaAction::PollardRho { n } => {
             let n = n.parse::<BigUint>().context("Invalid number for n")?;
+            check_max_bits(&n, "Modulus n")?;
             let (p, q) = crate::crypto::primes::pollard_rho_biguint(&n)?;
             println!("p = {p}");
             println!("q = {q}");
@@ -278,6 +279,11 @@ pub fn auto_attack(
     }
     if e.is_zero() {
         anyhow::bail!("Exponent e must be non-zero");
+    }
+    check_max_bits(n, "Modulus n")?;
+    check_max_bits(e, "Exponent e")?;
+    if let Some(ct) = c {
+        check_max_bits(ct, "Ciphertext")?;
     }
 
     if let Some(ct) = c
@@ -347,12 +353,26 @@ fn finish_with_factors(
     })
 }
 
+pub const MAX_RSA_BITS: u64 = 16_384;
+
+fn check_max_bits(n: &BigUint, name: &str) -> Result<()> {
+    if n.bits() > MAX_RSA_BITS {
+        anyhow::bail!(
+            "{name} exceeds the maximum allowed size of {MAX_RSA_BITS} bits to prevent Denial of Service"
+        );
+    }
+    Ok(())
+}
+
 // Rejects p == 0 or q == 0 because BigUint subtraction would panic on the
 // resulting negative intermediate.
 pub fn compute_d(p: &BigUint, q: &BigUint, e: &BigUint) -> Result<BigUint> {
     if p.is_zero() || q.is_zero() {
         anyhow::bail!("RSA primes p and q must be non-zero");
     }
+    check_max_bits(p, "Prime p")?;
+    check_max_bits(q, "Prime q")?;
+    check_max_bits(e, "Exponent e")?;
     let phi = (p - BigUint::one()) * (q - BigUint::one());
     big_modinv(e, &phi)
 }
@@ -393,6 +413,9 @@ pub fn big_modpow(base: &BigUint, exp: &BigUint, modulus: &BigUint) -> Result<Bi
     if modulus.is_zero() {
         anyhow::bail!("Modulus must be non-zero");
     }
+    check_max_bits(base, "Base")?;
+    check_max_bits(exp, "Exponent")?;
+    check_max_bits(modulus, "Modulus")?;
     Ok(base.modpow(exp, modulus))
 }
 
@@ -413,6 +436,7 @@ pub fn fermat_factor(n: &BigUint, max_iter: u64) -> Result<(BigUint, BigUint)> {
             "Fermat iteration limit exceeds the maximum allowed of {MAX_FERMAT_ITERS} to prevent DoS"
         );
     }
+    check_max_bits(n, "Modulus n")?;
 
     if n <= &BigUint::one() {
         anyhow::bail!("Cannot factorize n <= 1");
@@ -454,6 +478,8 @@ pub fn wiener_attack(e: &BigUint, n: &BigUint) -> Result<BigUint> {
     if n.is_zero() {
         anyhow::bail!("Modulus must be non-zero");
     }
+    check_max_bits(e, "Exponent e")?;
+    check_max_bits(n, "Modulus n")?;
 
     let convergents = continued_fraction_convergents(e, n);
 
@@ -682,6 +708,7 @@ pub fn pollard_p1(n: &BigUint, b: u64) -> Result<(BigUint, BigUint)> {
             "Smoothness bound B exceeds the maximum allowed limit of {MAX_POLLARD_P1_BOUND} to prevent DoS"
         );
     }
+    check_max_bits(n, "Modulus n")?;
 
     if n <= &BigUint::one() {
         anyhow::bail!("Cannot factorize n <= 1");
