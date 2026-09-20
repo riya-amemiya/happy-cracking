@@ -1,5 +1,5 @@
 use happy_cracking::crypto::ec::{self, EcAction};
-use num_bigint::BigUint;
+use num_bigint::{BigInt, BigUint};
 use num_traits::ToPrimitive;
 use std::str::FromStr;
 
@@ -82,4 +82,61 @@ fn test_point_order_dos_large_p() {
     assert!(
         err_msg.contains("limit exceeded") || err_msg.contains("Point order calculation limit")
     );
+}
+
+#[test]
+fn test_point_add_rejects_oversized_modulus() {
+    let pt = ec::ECPoint::Affine {
+        x: BigInt::from(2),
+        y: BigInt::from(4),
+    };
+    let a = BigInt::from(1);
+    let p: BigInt = BigInt::from(1) << ec::MAX_EC_BITS;
+    let err = ec::point_add(&pt, &pt, &a, &p).unwrap_err();
+    assert!(err.to_string().contains("exceeds the maximum allowed"));
+}
+
+#[test]
+fn test_scalar_multiply_rejects_oversized_scalar() {
+    let pt = ec::ECPoint::Affine {
+        x: BigInt::from(2),
+        y: BigInt::from(4),
+    };
+    let a = BigInt::from(1);
+    let p = BigInt::from(11);
+    let n = BigUint::from(1u32) << ec::MAX_EC_BITS;
+    let err = ec::scalar_multiply(&pt, &n, &a, &p).unwrap_err();
+    assert!(err.to_string().contains("exceeds the maximum allowed"));
+}
+
+#[test]
+fn test_scalar_multiply_accepts_modulus_at_bit_limit() {
+    let pt = ec::ECPoint::Infinity;
+    let a = BigInt::from(1);
+    let p: BigInt = BigInt::from(1) << (ec::MAX_EC_BITS - 1);
+    assert_eq!(p.bits(), ec::MAX_EC_BITS);
+    assert_eq!(
+        ec::scalar_multiply(&pt, &BigUint::from(5u32), &a, &p).unwrap(),
+        ec::ECPoint::Infinity
+    );
+}
+
+#[test]
+fn test_parse_point_rejects_oversized_coordinate() {
+    let x: BigInt = BigInt::from(1) << ec::MAX_EC_BITS;
+    let err = ec::parse_point(&format!("{x},1")).unwrap_err();
+    assert!(err.to_string().contains("exceeds the maximum allowed"));
+}
+
+#[test]
+fn test_cli_add_rejects_oversized_curve_param() {
+    let action = EcAction::Add {
+        point1: "2,4".to_string(),
+        point2: "2,4".to_string(),
+        a: (BigInt::from(1) << ec::MAX_EC_BITS).to_string(),
+        b: "6".to_string(),
+        p: "11".to_string(),
+    };
+    let err = ec::run(action).unwrap_err();
+    assert!(err.to_string().contains("exceeds the maximum allowed"));
 }
