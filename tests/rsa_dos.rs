@@ -85,3 +85,46 @@ fn test_fermat_factor_dos_large_iters() {
     let err_msg = res.unwrap_err().to_string();
     assert!(err_msg.contains("prevent DoS") || err_msg.contains("maximum allowed"));
 }
+
+#[test]
+fn test_modpow_rejects_oversized_modulus() {
+    let base = BigUint::from(65u32);
+    let exp = BigUint::from(17u32);
+    let n = BigUint::from(1u32) << rsa::MAX_RSA_BITS;
+    let err = rsa::big_modpow(&base, &exp, &n).unwrap_err();
+    assert!(err.to_string().contains("exceeds the maximum allowed"));
+}
+
+#[test]
+fn test_modpow_rejects_oversized_exponent() {
+    let base = BigUint::from(65u32);
+    let exp = BigUint::from(1u32) << rsa::MAX_RSA_BITS;
+    let n = BigUint::from(3233u32);
+    let err = rsa::big_modpow(&base, &exp, &n).unwrap_err();
+    assert!(err.to_string().contains("exceeds the maximum allowed"));
+}
+
+#[test]
+fn test_modpow_accepts_modulus_at_bit_limit() {
+    let base = BigUint::from(2u32);
+    let exp = BigUint::from(1u32);
+    let n = BigUint::from(1u32) << (rsa::MAX_RSA_BITS - 1);
+    assert_eq!(n.bits(), rsa::MAX_RSA_BITS);
+    assert_eq!(rsa::big_modpow(&base, &exp, &n).unwrap(), base);
+}
+
+#[test]
+fn test_compute_d_rejects_oversized_prime() {
+    let p = BigUint::from(1u32) << rsa::MAX_RSA_BITS;
+    let q = BigUint::from(53u32);
+    let e = BigUint::from(17u32);
+    let err = rsa::compute_d(&p, &q, &e).unwrap_err();
+    assert!(err.to_string().contains("exceeds the maximum allowed"));
+}
+
+#[test]
+fn test_fermat_factor_rejects_oversized_modulus() {
+    let n = BigUint::from(1u32) << rsa::MAX_RSA_BITS;
+    let err = rsa::fermat_factor(&n, 100).unwrap_err();
+    assert!(err.to_string().contains("exceeds the maximum allowed"));
+}
