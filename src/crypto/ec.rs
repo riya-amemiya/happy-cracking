@@ -15,6 +15,27 @@ const MAX_BSGS_ITERATIONS: u64 = 1 << 22;
 // Safety limit for brute force point order calculation.
 const MAX_POINT_ORDER_ITERATIONS: u64 = 1 << 22;
 
+pub const MAX_EC_BITS: u64 = 16_384;
+
+fn check_max_bits(bits: u64, name: &str) -> Result<()> {
+    if bits > MAX_EC_BITS {
+        anyhow::bail!(
+            "{name} exceeds the maximum allowed size of {MAX_EC_BITS} bits to prevent Denial of Service"
+        );
+    }
+    Ok(())
+}
+
+fn check_point_bits(point: &ECPoint) -> Result<()> {
+    match point {
+        ECPoint::Infinity => Ok(()),
+        ECPoint::Affine { x, y } => {
+            check_max_bits(x.bits(), "Point x")?;
+            check_max_bits(y.bits(), "Point y")
+        }
+    }
+}
+
 #[derive(Subcommand)]
 pub enum EcAction {
     #[command(about = "Add two points on an elliptic curve (y^2 = x^3 + ax + b mod p)")]
@@ -169,6 +190,8 @@ pub fn parse_point(s: &str) -> Result<ECPoint> {
         .trim()
         .parse::<BigInt>()
         .context("Invalid y coordinate")?;
+    check_max_bits(x.bits(), "Point x")?;
+    check_max_bits(y.bits(), "Point y")?;
     Ok(ECPoint::Affine { x, y })
 }
 
@@ -196,6 +219,9 @@ pub fn is_on_curve(point: &ECPoint, a: &BigInt, b: &BigInt, p: &BigInt) -> bool 
 }
 
 fn validate_point_on_curve(point: &ECPoint, a: &BigInt, b: &BigInt, p: &BigInt) -> Result<()> {
+    check_max_bits(a.bits(), "Curve parameter a")?;
+    check_max_bits(b.bits(), "Curve parameter b")?;
+    check_max_bits(p.bits(), "Modulus p")?;
     if !is_on_curve(point, a, b, p) {
         anyhow::bail!(
             "Point {} is not on the curve y^2 = x^3 + {}x + {} (mod {})",
@@ -224,6 +250,10 @@ pub fn point_add(p1: &ECPoint, p2: &ECPoint, a: &BigInt, p: &BigInt) -> Result<E
     if p.is_zero() {
         anyhow::bail!("Modulus p must be non-zero");
     }
+    check_max_bits(a.bits(), "Curve parameter a")?;
+    check_max_bits(p.bits(), "Modulus p")?;
+    check_point_bits(p1)?;
+    check_point_bits(p2)?;
     match (p1, p2) {
         (ECPoint::Infinity, _) => Ok(p2.clone()),
         (_, ECPoint::Infinity) => Ok(p1.clone()),
@@ -266,6 +296,7 @@ pub fn scalar_multiply(point: &ECPoint, n: &BigUint, a: &BigInt, p: &BigInt) -> 
     if p.is_zero() {
         anyhow::bail!("Modulus p must be non-zero");
     }
+    check_max_bits(n.bits(), "Scalar n")?;
     if n.is_zero() {
         return Ok(ECPoint::Infinity);
     }
@@ -289,6 +320,9 @@ pub fn point_order(point: &ECPoint, a: &BigInt, p: &BigInt) -> Result<BigUint> {
     if p.is_zero() {
         anyhow::bail!("Modulus p must be non-zero");
     }
+    check_max_bits(a.bits(), "Curve parameter a")?;
+    check_max_bits(p.bits(), "Modulus p")?;
+    check_point_bits(point)?;
     if *point == ECPoint::Infinity {
         return Ok(BigUint::one());
     }
@@ -383,6 +417,7 @@ pub fn pohlig_hellman(
     if p.is_zero() {
         anyhow::bail!("Modulus p must be non-zero");
     }
+    check_max_bits(order.bits(), "Order")?;
     let factors = factor_biguint(order);
 
     if factors.is_empty() {
