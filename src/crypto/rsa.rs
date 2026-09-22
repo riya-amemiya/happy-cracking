@@ -157,6 +157,7 @@ pub fn run(action: RsaAction) -> Result<()> {
             if e == 0 {
                 anyhow::bail!("Exponent e must be non-zero");
             }
+            check_max_bits(&c, "Ciphertext")?;
 
             let m = c.nth_root(e);
             println!("Decimal: {m}");
@@ -589,6 +590,12 @@ pub fn hastad_broadcast(ciphertexts: &[BigUint], moduli: &[BigUint], e: u32) -> 
     if ns.iter().any(num_traits::Zero::is_zero) {
         anyhow::bail!("All moduli must be non-zero");
     }
+    for c in cs {
+        check_max_bits(c, "Ciphertext")?;
+    }
+    for n in ns {
+        check_max_bits(n, "Modulus")?;
+    }
 
     let big_n: BigUint = ns.iter().product();
     let mut x = BigUint::zero();
@@ -620,6 +627,11 @@ pub fn common_modulus_attack(
     if n.is_zero() {
         anyhow::bail!("Modulus must be non-zero");
     }
+    check_max_bits(n, "Modulus n")?;
+    check_max_bits(e1, "Exponent e1")?;
+    check_max_bits(e2, "Exponent e2")?;
+    check_max_bits(c1, "Ciphertext c1")?;
+    check_max_bits(c2, "Ciphertext c2")?;
 
     let e1_int = e1.to_bigint().unwrap();
     let e2_int = e2.to_bigint().unwrap();

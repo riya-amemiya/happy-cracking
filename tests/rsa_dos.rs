@@ -128,3 +128,67 @@ fn test_fermat_factor_rejects_oversized_modulus() {
     let err = rsa::fermat_factor(&n, 100).unwrap_err();
     assert!(err.to_string().contains("exceeds the maximum allowed"));
 }
+
+#[test]
+fn test_common_modulus_rejects_oversized_modulus() {
+    let n = BigUint::from(1u32) << rsa::MAX_RSA_BITS;
+    let e1 = BigUint::from(17u32);
+    let e2 = BigUint::from(19u32);
+    let c1 = BigUint::from(1u32);
+    let c2 = BigUint::from(2u32);
+    let err = rsa::common_modulus_attack(&n, &e1, &e2, &c1, &c2).unwrap_err();
+    assert!(err.to_string().contains("exceeds the maximum allowed"));
+}
+
+#[test]
+fn test_common_modulus_rejects_oversized_exponent() {
+    let n = BigUint::from(3233u32);
+    let e1 = BigUint::from(1u32) << rsa::MAX_RSA_BITS;
+    let e2 = BigUint::from(19u32);
+    let c1 = BigUint::from(1u32);
+    let c2 = BigUint::from(2u32);
+    let err = rsa::common_modulus_attack(&n, &e1, &e2, &c1, &c2).unwrap_err();
+    assert!(err.to_string().contains("exceeds the maximum allowed"));
+}
+
+#[test]
+fn test_hastad_rejects_oversized_modulus() {
+    let huge = BigUint::from(1u32) << rsa::MAX_RSA_BITS;
+    let err = rsa::hastad_broadcast(
+        &[
+            BigUint::from(1u32),
+            BigUint::from(2u32),
+            BigUint::from(3u32),
+        ],
+        &[huge, BigUint::from(5u32), BigUint::from(7u32)],
+        3,
+    )
+    .unwrap_err();
+    assert!(err.to_string().contains("exceeds the maximum allowed"));
+}
+
+#[test]
+fn test_hastad_rejects_oversized_ciphertext() {
+    let huge = BigUint::from(1u32) << rsa::MAX_RSA_BITS;
+    let err = rsa::hastad_broadcast(
+        &[huge, BigUint::from(2u32), BigUint::from(3u32)],
+        &[
+            BigUint::from(5u32),
+            BigUint::from(7u32),
+            BigUint::from(11u32),
+        ],
+        3,
+    )
+    .unwrap_err();
+    assert!(err.to_string().contains("exceeds the maximum allowed"));
+}
+
+#[test]
+fn test_small_e_rejects_oversized_ciphertext() {
+    let action = rsa::RsaAction::SmallE {
+        c: (BigUint::from(1u32) << rsa::MAX_RSA_BITS).to_string(),
+        e: "3".to_string(),
+    };
+    let err = rsa::run(action).unwrap_err();
+    assert!(err.to_string().contains("exceeds the maximum allowed"));
+}
