@@ -1,5 +1,5 @@
 use happy_cracking::crypto::ec::{self, EcAction};
-use num_bigint::{BigInt, BigUint, ToBigInt};
+use num_bigint::{BigInt, BigUint};
 use num_traits::ToPrimitive;
 use std::str::FromStr;
 
@@ -91,9 +91,7 @@ fn test_point_add_rejects_oversized_modulus() {
         y: BigInt::from(4),
     };
     let a = BigInt::from(1);
-    let p = (BigUint::from(1u32) << ec::MAX_EC_BITS)
-        .to_bigint()
-        .unwrap();
+    let p: BigInt = BigInt::from(1) << ec::MAX_EC_BITS;
     let err = ec::point_add(&pt, &pt, &a, &p).unwrap_err();
     assert!(err.to_string().contains("exceeds the maximum allowed"));
 }
@@ -113,35 +111,31 @@ fn test_scalar_multiply_rejects_oversized_scalar() {
 
 #[test]
 fn test_scalar_multiply_accepts_modulus_at_bit_limit() {
-    let pt = ec::ECPoint::Affine {
-        x: BigInt::from(1),
-        y: BigInt::from(1),
-    };
-    let a = BigInt::from(0);
-    let p = (BigUint::from(1u32) << (ec::MAX_EC_BITS - 1))
-        .to_bigint()
-        .unwrap();
+    let pt = ec::ECPoint::Infinity;
+    let a = BigInt::from(1);
+    let p: BigInt = BigInt::from(1) << (ec::MAX_EC_BITS - 1);
     assert_eq!(p.bits(), ec::MAX_EC_BITS);
-    let n = BigUint::from(1u32);
-    assert_eq!(ec::scalar_multiply(&pt, &n, &a, &p).unwrap(), pt);
+    assert_eq!(
+        ec::scalar_multiply(&pt, &BigUint::from(5u32), &a, &p).unwrap(),
+        ec::ECPoint::Infinity
+    );
 }
 
 #[test]
 fn test_parse_point_rejects_oversized_coordinate() {
-    let x = BigUint::from(1u32) << ec::MAX_EC_BITS;
-    let err = ec::parse_point(&format!("{x},0")).unwrap_err();
+    let x: BigInt = BigInt::from(1) << ec::MAX_EC_BITS;
+    let err = ec::parse_point(&format!("{x},1")).unwrap_err();
     assert!(err.to_string().contains("exceeds the maximum allowed"));
 }
 
 #[test]
 fn test_cli_add_rejects_oversized_curve_param() {
-    let p = (BigUint::from(1u32) << ec::MAX_EC_BITS).to_string();
     let action = EcAction::Add {
         point1: "2,4".to_string(),
         point2: "2,4".to_string(),
-        a: "1".to_string(),
+        a: (BigInt::from(1) << ec::MAX_EC_BITS).to_string(),
         b: "6".to_string(),
-        p,
+        p: "11".to_string(),
     };
     let err = ec::run(action).unwrap_err();
     assert!(err.to_string().contains("exceeds the maximum allowed"));
