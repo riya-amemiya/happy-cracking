@@ -117,23 +117,35 @@ pub fn analyze(input: &str, alpha_only: bool) -> FrequencyResult {
             }
         }
     } else {
-        let mut counts: HashMap<char, usize> = HashMap::new();
+        let mut latin1 = [0usize; 256];
+        let mut other: HashMap<char, usize> = HashMap::new();
+
         for c in input.chars() {
-            *counts.entry(c).or_insert(0) += 1;
             total += 1;
+            match u8::try_from(c as u32) {
+                Ok(b) => latin1[b as usize] += 1,
+                Err(_) => *other.entry(c).or_insert(0) += 1,
+            }
         }
 
-        frequencies = counts
-            .into_iter()
-            .map(|(c, count)| {
+        for (i, &count) in latin1.iter().enumerate() {
+            if count > 0 {
                 let percentage = if total > 0 {
                     (count as f64 / total as f64) * 100.0
                 } else {
                     0.0
                 };
-                (c, count, percentage)
-            })
-            .collect();
+                frequencies.push((char::from(i as u8), count, percentage));
+            }
+        }
+        for (c, count) in other {
+            let percentage = if total > 0 {
+                (count as f64 / total as f64) * 100.0
+            } else {
+                0.0
+            };
+            frequencies.push((c, count, percentage));
+        }
     }
 
     frequencies.sort_by_key(|b| std::cmp::Reverse(b.1));

@@ -56,3 +56,40 @@ fn test_analyze_sort_order() {
     assert_eq!(result.frequencies[3].0, 'D');
     assert_eq!(result.frequencies[3].1, 1);
 }
+
+#[test]
+fn test_analyze_latin1_as_chars_not_bytes() {
+    let result = frequency::analyze("éé", false);
+    assert_eq!(result.total_chars, 2);
+    assert_eq!(result.frequencies.len(), 1);
+    assert_eq!(result.frequencies[0].0, 'é');
+    assert_eq!(result.frequencies[0].1, 2);
+}
+
+#[test]
+fn test_analyze_non_latin1_chars() {
+    let result = frequency::analyze("ああa", false);
+    assert_eq!(result.total_chars, 3);
+    assert_eq!(result.frequencies[0].0, 'あ');
+    assert_eq!(result.frequencies[0].1, 2);
+    assert_eq!(result.frequencies[1].0, 'a');
+    assert_eq!(result.frequencies[1].1, 1);
+}
+
+#[test]
+fn test_analyze_counts_whitespace() {
+    let result = frequency::analyze("a a\n", false);
+    assert_eq!(result.total_chars, 4);
+    let space = result
+        .frequencies
+        .iter()
+        .find(|(c, _, _)| *c == ' ')
+        .unwrap();
+    let newline = result
+        .frequencies
+        .iter()
+        .find(|(c, _, _)| *c == '\n')
+        .unwrap();
+    assert_eq!(space.1, 1);
+    assert_eq!(newline.1, 1);
+}
