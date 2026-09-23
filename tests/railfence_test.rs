@@ -16,6 +16,11 @@ fn test_decrypt_3_rails() {
 }
 
 #[test]
+fn test_encrypt_hello_world_3_rails() {
+    assert_eq!(railfence::encrypt("HELLO WORLD", 3).unwrap(), "HOREL OLLWD");
+}
+
+#[test]
 fn test_encrypt_2_rails() {
     assert_eq!(railfence::encrypt("HELLO", 2).unwrap(), "HLOEL");
 }
@@ -32,6 +37,16 @@ fn test_roundtrip() {
         let encrypted = railfence::encrypt(original, rails).unwrap();
         let decrypted = railfence::decrypt(&encrypted, rails).unwrap();
         assert_eq!(decrypted, original, "Failed for {} rails", rails);
+    }
+}
+
+#[test]
+fn test_roundtrip_unicode() {
+    let original = "日本語🚀flag{rail}";
+    for rails in 2..=8 {
+        let encrypted = railfence::encrypt(original, rails).unwrap();
+        let decrypted = railfence::decrypt(&encrypted, rails).unwrap();
+        assert_eq!(decrypted, original, "Failed for {rails} rails");
     }
 }
 
