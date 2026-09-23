@@ -20,7 +20,7 @@ pub enum UuencodeAction {
 pub fn run(action: UuencodeAction) -> Result<()> {
     match action {
         UuencodeAction::Encode { input, filename } => {
-            println!("{}", encode(input.as_bytes(), &filename));
+            println!("{}", encode(input.as_bytes(), &filename)?);
         }
         UuencodeAction::Decode { input } => {
             let bytes = decode(&input)?;
@@ -37,8 +37,29 @@ fn uu_char(value: u8) -> u8 {
     (value & 0x3F) + 0x20
 }
 
-#[must_use]
-pub fn encode(data: &[u8], filename: &str) -> String {
+pub const MAX_UUENCODE_FILENAME_LEN: usize = 255;
+
+pub fn validate_uuencode_filename(filename: &str) -> Result<()> {
+    if filename.is_empty() {
+        anyhow::bail!("uuencode filename must not be empty");
+    }
+    if filename.len() > MAX_UUENCODE_FILENAME_LEN {
+        anyhow::bail!("uuencode filename exceeds maximum length of {MAX_UUENCODE_FILENAME_LEN}");
+    }
+    if filename == "." || filename == ".." {
+        anyhow::bail!("uuencode filename must not be '.' or '..'");
+    }
+    let valid = filename
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_'));
+    if !valid {
+        anyhow::bail!("uuencode filename contains invalid characters");
+    }
+    Ok(())
+}
+
+pub fn encode(data: &[u8], filename: &str) -> Result<String> {
+    validate_uuencode_filename(filename)?;
     let mut out = format!("begin 644 {filename}\n");
 
     for chunk in data.chunks(45) {
@@ -60,7 +81,7 @@ pub fn encode(data: &[u8], filename: &str) -> String {
     out.push('`');
     out.push('\n');
     out.push_str("end\n");
-    out
+    Ok(out)
 }
 
 fn uu_value(c: u8) -> Result<u8> {
