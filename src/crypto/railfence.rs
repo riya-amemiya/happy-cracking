@@ -57,6 +57,26 @@ pub fn check_max_rails(max_rails: usize) -> Result<()> {
     Ok(())
 }
 
+fn visit_zigzag_indices(len: usize, rails: usize, mut visit: impl FnMut(usize)) {
+    let cycle = 2 * (rails - 1);
+    for rail in 0..rails {
+        let mut i = rail;
+        if rail == 0 || rail == rails - 1 {
+            while i < len {
+                visit(i);
+                i += cycle;
+            }
+        } else {
+            let mut down = true;
+            while i < len {
+                visit(i);
+                i += if down { cycle - 2 * rail } else { 2 * rail };
+                down = !down;
+            }
+        }
+    }
+}
+
 pub fn encrypt(input: &str, rails: usize) -> Result<String> {
     if rails < 2 {
         anyhow::bail!("Number of rails must be at least 2");
@@ -73,20 +93,9 @@ pub fn encrypt(input: &str, rails: usize) -> Result<String> {
         return Ok(input.to_string());
     }
 
-    let mut fence: Vec<Vec<char>> = vec![Vec::new(); rails];
-    let mut rail = 0;
-    let mut direction = 1i32;
-
-    for c in chars {
-        fence[rail].push(c);
-        rail = (rail as i32 + direction) as usize;
-
-        if rail == 0 || rail == rails - 1 {
-            direction = -direction;
-        }
-    }
-
-    Ok(fence.into_iter().flatten().collect())
+    let mut out = String::with_capacity(chars.len());
+    visit_zigzag_indices(chars.len(), rails, |i| out.push(chars[i]));
+    Ok(out)
 }
 
 pub fn decrypt(input: &str, rails: usize) -> Result<String> {
@@ -106,38 +115,11 @@ pub fn decrypt(input: &str, rails: usize) -> Result<String> {
         return Ok(input.to_string());
     }
 
-    let mut rail_lengths = vec![0usize; rails];
-    let mut rail = 0;
-    let mut direction = 1i32;
-
-    for _ in 0..len {
-        rail_lengths[rail] += 1;
-        rail = (rail as i32 + direction) as usize;
-        if rail == 0 || rail == rails - 1 {
-            direction = -direction;
-        }
-    }
-
-    let mut fence: Vec<Vec<char>> = Vec::new();
-    let mut pos = 0;
-    for &length in &rail_lengths {
-        fence.push(chars[pos..pos + length].to_vec());
-        pos += length;
-    }
-
-    let mut result = String::new();
-    let mut rail_indices = vec![0usize; rails];
-    rail = 0;
-    direction = 1;
-
-    for _ in 0..len {
-        result.push(fence[rail][rail_indices[rail]]);
-        rail_indices[rail] += 1;
-        rail = (rail as i32 + direction) as usize;
-        if rail == 0 || rail == rails - 1 {
-            direction = -direction;
-        }
-    }
-
-    Ok(result)
+    let mut out = vec!['\0'; len];
+    let mut src = 0usize;
+    visit_zigzag_indices(len, rails, |i| {
+        out[i] = chars[src];
+        src += 1;
+    });
+    Ok(out.into_iter().collect())
 }
