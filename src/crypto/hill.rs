@@ -132,10 +132,31 @@ fn inverse_matrix(m: &[i64], n: usize) -> Result<Vec<i64>> {
     }
 }
 
-fn multiply_matrix_vector(m: &[i64], v: &[i64], n: usize) -> Vec<i64> {
-    (0..n)
-        .map(|r| mod26((0..n).map(|c| m[r * n + c] * v[c]).sum::<i64>()))
-        .collect()
+fn letter(x: i64) -> char {
+    (mod26(x) as u8 + b'A') as char
+}
+
+fn apply_blocks(matrix: &[i64], values: &[i64], n: usize) -> String {
+    let mut result = String::with_capacity(values.len());
+    if n == 2 {
+        for chunk in values.as_chunks::<2>().0 {
+            result.push(letter(matrix[0] * chunk[0] + matrix[1] * chunk[1]));
+            result.push(letter(matrix[2] * chunk[0] + matrix[3] * chunk[1]));
+        }
+    } else {
+        for chunk in values.as_chunks::<3>().0 {
+            result.push(letter(
+                matrix[0] * chunk[0] + matrix[1] * chunk[1] + matrix[2] * chunk[2],
+            ));
+            result.push(letter(
+                matrix[3] * chunk[0] + matrix[4] * chunk[1] + matrix[5] * chunk[2],
+            ));
+            result.push(letter(
+                matrix[6] * chunk[0] + matrix[7] * chunk[1] + matrix[8] * chunk[2],
+            ));
+        }
+    }
+    result
 }
 
 fn prepare_input(input: &str, n: usize) -> Vec<i64> {
@@ -161,17 +182,7 @@ pub fn encrypt(input: &str, key: &str) -> Result<String> {
     }
 
     let values = prepare_input(input, n);
-
-    let result: String = values
-        .chunks(n)
-        .flat_map(|chunk| {
-            multiply_matrix_vector(&matrix, chunk, n)
-                .into_iter()
-                .map(|v| (v as u8 + b'A') as char)
-        })
-        .collect();
-
-    Ok(result)
+    Ok(apply_blocks(&matrix, &values, n))
 }
 
 pub fn decrypt(input: &str, key: &str) -> Result<String> {
@@ -193,14 +204,5 @@ pub fn decrypt(input: &str, key: &str) -> Result<String> {
         anyhow::bail!("Ciphertext length must be a multiple of matrix dimension ({n})");
     }
 
-    let result: String = values
-        .chunks(n)
-        .flat_map(|chunk| {
-            multiply_matrix_vector(&inv, chunk, n)
-                .into_iter()
-                .map(|v| (v as u8 + b'A') as char)
-        })
-        .collect();
-
-    Ok(result)
+    Ok(apply_blocks(&inv, &values, n))
 }
