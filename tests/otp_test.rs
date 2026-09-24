@@ -79,3 +79,20 @@ fn test_known_xor_values() {
     assert_eq!(otp::encrypt("AB", "4142").unwrap(), "0000");
     assert_eq!(otp::decrypt("0000", "4142").unwrap(), "AB");
 }
+
+#[test]
+fn generate_rejects_hex_length_overflow() {
+    let err = otp::run(otp::OtpAction::Generate { length: usize::MAX }).unwrap_err();
+    let msg = err.to_string();
+    assert!(
+        msg.contains("overflow") || msg.contains("hex"),
+        "unexpected error: {msg}"
+    );
+}
+
+#[test]
+fn hex_char_count_matches_byte_length() {
+    assert_eq!(otp::hex_char_count(0).unwrap(), 0);
+    assert_eq!(otp::hex_char_count(16).unwrap(), 32);
+    assert!(otp::hex_char_count(usize::MAX).is_err());
+}
