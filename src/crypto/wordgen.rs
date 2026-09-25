@@ -1,4 +1,5 @@
 use anyhow::{Context, Result};
+use rand::RngExt;
 use std::collections::HashSet;
 use std::io::Write;
 
@@ -164,6 +165,33 @@ pub fn write_masked<W: Write>(
         writer.write_all(candidate.as_bytes())?;
         writer.write_all(b"\n")?;
         increment_digits(&mut digits, chars.len());
+    }
+    Ok(())
+}
+
+pub fn write_random<W: Write>(
+    writer: &mut W,
+    charset: &str,
+    length: usize,
+    count: u64,
+    force: bool,
+) -> Result<()> {
+    let chars = normalize_charset(charset)?;
+    validate_length(length)?;
+    if count == 0 {
+        anyhow::bail!("--count must be at least 1");
+    }
+    validate_candidate_count(u128::from(count), force)?;
+
+    let mut rng = rand::rng();
+    let mut candidate = String::with_capacity(length.saturating_mul(4));
+    for _ in 0..count {
+        candidate.clear();
+        for _ in 0..length {
+            candidate.push(chars[rng.random_range(0..chars.len())]);
+        }
+        writer.write_all(candidate.as_bytes())?;
+        writer.write_all(b"\n")?;
     }
     Ok(())
 }

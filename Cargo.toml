@@ -61,6 +61,7 @@ zip = { version = "8.6.0", default-features = false, features = [
     "aes-crypto",
     "deflate",
 ] }
+rand = "0.10.3"
 
 [target.'cfg(unix)'.dependencies]
 rustix = { version = "1.1.4", features = ["fs"] }

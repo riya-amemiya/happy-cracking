@@ -1,4 +1,4 @@
-use happy_cracking::crypto::wordgen::{write_enumerated, write_masked};
+use happy_cracking::crypto::wordgen::{write_enumerated, write_masked, write_random};
 
 #[test]
 fn enumerate_streams_shorter_lengths_first() {
@@ -45,4 +45,17 @@ fn mask_supports_literal_question_mark() {
 fn mask_rejects_unknown_tokens() {
     let error = write_masked(&mut std::io::sink(), "?x", "ab", false).unwrap_err();
     assert!(error.to_string().contains("Unknown mask token"));
+}
+
+#[test]
+fn random_writes_requested_shape_and_count() {
+    let mut output = Vec::new();
+    write_random(&mut output, "x", 4, 3, false).unwrap();
+    assert_eq!(String::from_utf8(output).unwrap(), "xxxx\nxxxx\nxxxx\n");
+}
+
+#[test]
+fn random_rejects_zero_count() {
+    let error = write_random(&mut std::io::sink(), "ab", 4, 0, false).unwrap_err();
+    assert!(error.to_string().contains("--count"));
 }
