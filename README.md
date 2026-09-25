@@ -86,12 +86,13 @@ This produces `target/release/happy-cracking` and the companion binaries `target
 | `hashcrack` | Recover hashes via dictionary, brute-force, or table lookup (MD5/SHA1/SHA256/SHA512/MD4/NTLM, optional salt, rayon-parallel) |
 | `zipcrack`  | Crack password-protected ZIP archives (ZipCrypto and WinZip AES) via dictionary or brute-force, plus archive info |
 
-### Attack / Recon (2 tools)
+### Attack / Recon (3 tools)
 
 | Command    | Description                                                         |
 | ---------- | ------------------------------------------------------------------- |
 | `solve`    | Aggressive auto-solve: encodings plus classic cipher attacks        |
 | `portscan` | Parse nmap output or scan hosts for common open ports               |
+| `httpload` | Send concurrent HTTP requests and report throughput and latency     |
 
 ### Advanced Crypto (2 tools)
 
@@ -279,6 +280,10 @@ happy-cracking solve run "ZmxhZ3tiNjR9" --aggressive
 # Parse nmap output or scan a host
 happy-cracking portscan parse scan.nmap
 happy-cracking portscan scan 127.0.0.1
+
+# Concurrent HTTP requests
+happy-cracking httpload run http://127.0.0.1:8080/ -n 200 -c 50
+happy-cracking httpload run https://example.com/ -z 10s -c 50 --output-format json
 ```
 
 ### Advanced Crypto
