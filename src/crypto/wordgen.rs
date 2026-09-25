@@ -95,12 +95,14 @@ fn normalize_charset(charset: &str) -> Result<Vec<char>> {
         if matches!(value, '\n' | '\r') {
             anyhow::bail!("--charset must not contain a line break");
         }
-        if seen.insert(value) {
-            if chars.len() == MAX_CHARSET_LEN {
-                anyhow::bail!("--charset contains more than {MAX_CHARSET_LEN} unique characters");
-            }
-            chars.push(value);
+        if seen.contains(&value) {
+            continue;
         }
+        if chars.len() == MAX_CHARSET_LEN {
+            anyhow::bail!("--charset contains more than {MAX_CHARSET_LEN} unique characters");
+        }
+        seen.insert(value);
+        chars.push(value);
     }
 
     if chars.is_empty() {
