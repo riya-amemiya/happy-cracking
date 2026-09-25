@@ -54,6 +54,17 @@ pub fn run(action: AdfgvxAction) -> Result<()> {
 }
 
 const ADFGVX: [char; 6] = ['A', 'D', 'F', 'G', 'V', 'X'];
+const ADFGVX_BYTES: [u8; 6] = *b"ADFGVX";
+const ADFGVX_INDEX: [u8; 256] = {
+    let mut table = [0xFFu8; 256];
+    table[b'A' as usize] = 0;
+    table[b'D' as usize] = 1;
+    table[b'F' as usize] = 2;
+    table[b'G' as usize] = 3;
+    table[b'V' as usize] = 4;
+    table[b'X' as usize] = 5;
+    table
+};
 const DEFAULT_GRID: &str = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
 
 /// Maximum ADFGVX transposition-key length.
@@ -99,26 +110,38 @@ fn build_grid(key: &str) -> Result<Vec<char>> {
     Ok(grid)
 }
 
-fn find_in_grid(grid: &[char], c: char) -> Option<(usize, usize)> {
-    grid.iter()
-        .position(|&g| g == c)
-        .map(|idx| (idx / 6, idx % 6))
+fn columns_in_rank_order(order: &[usize]) -> Vec<usize> {
+    let mut col_at_rank = vec![0usize; order.len()];
+    for (col, &rank) in order.iter().enumerate() {
+        col_at_rank[rank] = col;
+    }
+    col_at_rank
 }
 
 pub fn encrypt(input: &str, key: &str, transposition_key: &str) -> Result<String> {
     check_transposition_key(transposition_key)?;
 
     let grid = build_grid(key)?;
+    let mut lut = [0xFFu8; 256];
+    for (i, &c) in grid.iter().enumerate() {
+        let b = c as u32;
+        if b < 256 {
+            lut[b as usize] = i as u8;
+        }
+    }
 
-    let mut fractionated = String::new();
+    let mut fractionated = Vec::with_capacity(input.len().saturating_mul(2));
     for c in input.to_uppercase().chars() {
         if !c.is_ascii_alphanumeric() {
             continue;
         }
-        let (row, col) =
-            find_in_grid(&grid, c).ok_or_else(|| anyhow::anyhow!("Character '{c}' not in grid"))?;
-        fractionated.push(ADFGVX[row]);
-        fractionated.push(ADFGVX[col]);
+        let idx = lut[c as usize];
+        if idx == 0xFF {
+            anyhow::bail!("Character '{c}' not in grid");
+        }
+        let idx = idx as usize;
+        fractionated.push(ADFGVX_BYTES[idx / 6]);
+        fractionated.push(ADFGVX_BYTES[idx % 6]);
     }
 
     if fractionated.is_empty() {
@@ -126,96 +149,85 @@ pub fn encrypt(input: &str, key: &str, transposition_key: &str) -> Result<String
     }
 
     let tk_len = transposition_key.len();
-    let order = column_order(transposition_key);
-    let chars: Vec<char> = fractionated.chars().collect();
-
-    let num_rows = chars.len().div_ceil(tk_len);
-    let mut columns: Vec<Vec<char>> = vec![Vec::with_capacity(num_rows); tk_len];
-    for row in 0..num_rows {
-        for (col, column) in columns.iter_mut().enumerate() {
+    let ranked = columns_in_rank_order(&column_order(transposition_key));
+    let n = fractionated.len();
+    let num_rows = n.div_ceil(tk_len);
+    let mut result = Vec::with_capacity(n);
+    for &col in &ranked {
+        for row in 0..num_rows {
             let idx = row * tk_len + col;
-            if idx < chars.len() {
-                column.push(chars[idx]);
+            if idx < n {
+                result.push(fractionated[idx]);
             }
         }
     }
 
-    let mut sorted_cols: Vec<usize> = (0..tk_len).collect();
-    sorted_cols.sort_by_key(|&col| order[col]);
-
-    let mut result = String::new();
-    for &col in &sorted_cols {
-        for &c in &columns[col] {
-            result.push(c);
-        }
-    }
-
-    Ok(result)
+    Ok(String::from_utf8(result).expect("ADFGVX ciphertext is ASCII"))
 }
 
 pub fn decrypt(input: &str, key: &str, transposition_key: &str) -> Result<String> {
     check_transposition_key(transposition_key)?;
 
     let grid = build_grid(key)?;
-    let adfgvx_chars: Vec<char> = input
+    let symbols: Vec<u8> = input
         .to_uppercase()
         .chars()
         .filter(|c| ADFGVX.contains(c))
+        .map(|c| c as u8)
         .collect();
 
-    if adfgvx_chars.is_empty() {
+    if symbols.is_empty() {
         return Ok(String::new());
     }
 
     let tk_len = transposition_key.len();
-    let total = adfgvx_chars.len();
+    let total = symbols.len();
+    if !total.is_multiple_of(2) {
+        anyhow::bail!("Invalid ciphertext: fractionated text has odd length");
+    }
+
     let num_rows = total.div_ceil(tk_len);
-    let full_cols = total % tk_len;
-    // If total is exactly divisible, all columns are full
-    let full_cols = if full_cols == 0 { tk_len } else { full_cols };
+    let rem = total % tk_len;
+    let full_cols = if rem == 0 { tk_len } else { rem };
 
-    let order = column_order(transposition_key);
-
-    let mut sorted_cols: Vec<usize> = (0..tk_len).collect();
-    sorted_cols.sort_by_key(|&col| order[col]);
-
-    let mut columns: Vec<Vec<char>> = vec![Vec::new(); tk_len];
+    let ranked = columns_in_rank_order(&column_order(transposition_key));
+    let mut starts = vec![0usize; tk_len];
+    let mut lens = vec![0usize; tk_len];
     let mut pos = 0;
-    for &col in &sorted_cols {
+    for &col in &ranked {
         let col_len = if col < full_cols {
             num_rows
         } else {
             num_rows - 1
         };
-        columns[col] = adfgvx_chars[pos..pos + col_len].to_vec();
+        starts[col] = pos;
+        lens[col] = col_len;
         pos += col_len;
     }
 
-    let mut fractionated = String::new();
+    let mut result = String::with_capacity(total / 2);
+    let mut pending: Option<u8> = None;
     for row in 0..num_rows {
-        for column in &columns {
-            if row < column.len() {
-                fractionated.push(column[row]);
+        for col in 0..tk_len {
+            if row >= lens[col] {
+                continue;
+            }
+            let symbol = symbols[starts[col] + row];
+            match pending.take() {
+                None => pending = Some(symbol),
+                Some(first) => {
+                    let row_i = ADFGVX_INDEX[first as usize];
+                    let col_i = ADFGVX_INDEX[symbol as usize];
+                    if row_i == 0xFF {
+                        anyhow::bail!("Invalid ADFGVX character: {}", first as char);
+                    }
+                    if col_i == 0xFF {
+                        anyhow::bail!("Invalid ADFGVX character: {}", symbol as char);
+                    }
+                    result.push(grid[row_i as usize * 6 + col_i as usize]);
+                }
             }
         }
-    }
-
-    let frac_chars: Vec<char> = fractionated.chars().collect();
-    if !frac_chars.len().is_multiple_of(2) {
-        anyhow::bail!("Invalid ciphertext: fractionated text has odd length");
-    }
-
-    let mut result = String::new();
-    for pair in frac_chars.chunks(2) {
-        let row = ADFGVX
-            .iter()
-            .position(|&c| c == pair[0])
-            .ok_or_else(|| anyhow::anyhow!("Invalid ADFGVX character: {}", pair[0]))?;
-        let col = ADFGVX
-            .iter()
-            .position(|&c| c == pair[1])
-            .ok_or_else(|| anyhow::anyhow!("Invalid ADFGVX character: {}", pair[1]))?;
-        result.push(grid[row * 6 + col]);
     }
 
     Ok(result)
