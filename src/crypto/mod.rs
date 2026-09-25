@@ -62,6 +62,7 @@ pub mod rsa;
 pub mod semaphore;
 pub mod shared;
 pub mod solve;
+pub mod strgen;
 pub mod strings;
 pub mod strtools;
 pub mod substitution;

@@ -352,6 +352,11 @@ enum Commands {
         #[command(subcommand)]
         action: crypto::strtools::StrToolsAction,
     },
+    #[command(about = "Generate strings quickly (random, exhaustive, or masked)")]
+    Strgen {
+        #[command(subcommand)]
+        action: crypto::strgen::StrgenAction,
+    },
     #[command(about = "Number base conversion (2-36)")]
     Numconv {
         #[command(subcommand)]
@@ -467,6 +472,7 @@ fn main() -> Result<()> {
         Commands::Math { action } => crypto::mathtools::run(action)?,
         Commands::Primes { action } => crypto::primes::run(action)?,
         Commands::Str { action } => crypto::strtools::run(action)?,
+        Commands::Strgen { action } => crypto::strgen::run(action)?,
         Commands::Numconv { action } => crypto::numbersys::run(action)?,
         Commands::Chain { action } => crypto::chain::run(action)?,
         Commands::Hexdump { action } => crypto::hexdump::run(action)?,

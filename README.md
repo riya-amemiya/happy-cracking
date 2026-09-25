@@ -100,7 +100,7 @@ This produces `target/release/happy-cracking` and the companion binaries `target
 | `ec`    | Elliptic curve add, multiply, order, Pohlig-Hellman      |
 | `dh`    | Diffie-Hellman public key, shared secret, discrete log   |
 
-### Utilities (14 tools)
+### Utilities (15 tools)
 
 | Command     | Description                                                              |
 | ----------- | ------------------------------------------------------------------------ |
@@ -114,6 +114,7 @@ This produces `target/release/happy-cracking` and the companion binaries `target
 | `math`      | Number theory tools (GCD, LCM, modular inverse, modular exponentiation)  |
 | `primes`    | Prime factorization and primality test                                   |
 | `str`       | String tools (reverse, ord, chr)                                         |
+| `strgen`    | Fast string generation: random, exhaustive charset ranges, and masks     |
 | `numconv`   | Number base conversion (bases 2-36)                                      |
 | `hexdump`   | Hex dump display and reverse (xxd-style)                                 |
 | `bitrot`    | Bit rotation (rotate left / rotate right)                                |
@@ -315,6 +316,13 @@ happy-cracking math modpow 2 10 1000   # Modular exponentiation
 # Prime factorization
 happy-cracking primes factorize 84      # 2^2 × 3 × 7
 happy-cracking primes isprime 104729
+
+# Fast string generation
+happy-cracking strgen random --preset alnum --len 16 --count 5 --seed 1
+happy-cracking strgen brute --charset ab --min-len 1 --max-len 2
+happy-cracking strgen brute --preset digits --min-len 4 --max-len 4 --prefix "flag{" --suffix "}"
+happy-cracking strgen mask 'flag{?d?d?d?d}'
+happy-cracking strgen mask 'id?1?1' --custom1 ab
 
 # String tools
 happy-cracking str reverse "flag{hello}"
