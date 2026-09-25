@@ -1,11 +1,92 @@
 use anyhow::{Context, Result};
+use clap::Subcommand;
 use rand::RngExt;
 use std::collections::HashSet;
-use std::io::Write;
+use std::io::{self, BufWriter, Write};
 
 pub const MAX_CANDIDATES: u128 = 1_000_000_000;
 pub const MAX_CHARSET_LEN: usize = 256;
 pub const MAX_OUTPUT_LEN: usize = 4_096;
+pub const DEFAULT_CHARSET: &str = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+
+#[derive(Subcommand)]
+pub enum WordgenAction {
+    #[command(about = "Generate random strings")]
+    Random {
+        #[arg(long, help = "Length of each generated string")]
+        length: usize,
+        #[arg(short = 'n', long, default_value_t = 1, help = "Number of strings")]
+        count: u64,
+        #[arg(
+            short,
+            long,
+            default_value = DEFAULT_CHARSET,
+            help = "Characters to sample"
+        )]
+        charset: String,
+        #[arg(long, help = "Allow more than 1,000,000,000 outputs")]
+        force: bool,
+    },
+    #[command(about = "Generate every combination from a character set")]
+    Enumerate {
+        #[arg(short, long, help = "Characters to combine")]
+        charset: String,
+        #[arg(long, default_value_t = 1, help = "Minimum output length")]
+        min_len: usize,
+        #[arg(long, default_value_t = 4, help = "Maximum output length")]
+        max_len: usize,
+        #[arg(long, help = "Allow more than 1,000,000,000 outputs")]
+        force: bool,
+    },
+    #[command(about = "Generate strings from fixed text and ?c positions")]
+    Mask {
+        #[arg(help = "Mask containing fixed text, ?c variables, and ?? escapes")]
+        mask: String,
+        #[arg(short, long, help = "Characters for each ?c position")]
+        charset: String,
+        #[arg(long, help = "Allow more than 1,000,000,000 outputs")]
+        force: bool,
+    },
+}
+
+pub fn run(action: WordgenAction) -> Result<()> {
+    let stdout = io::stdout();
+    let mut writer = BufWriter::with_capacity(64 * 1024, stdout.lock());
+    let result = match action {
+        WordgenAction::Random {
+            length,
+            count,
+            charset,
+            force,
+        } => write_random(&mut writer, &charset, length, count, force),
+        WordgenAction::Enumerate {
+            charset,
+            min_len,
+            max_len,
+            force,
+        } => write_enumerated(&mut writer, &charset, min_len, max_len, force),
+        WordgenAction::Mask {
+            mask,
+            charset,
+            force,
+        } => write_masked(&mut writer, &mask, &charset, force),
+    }
+    .and_then(|()| {
+        writer.flush()?;
+        Ok(())
+    });
+
+    match result {
+        Err(error)
+            if error
+                .downcast_ref::<io::Error>()
+                .is_some_and(|source| source.kind() == io::ErrorKind::BrokenPipe) =>
+        {
+            Ok(())
+        }
+        other => other,
+    }
+}
 
 fn normalize_charset(charset: &str) -> Result<Vec<char>> {
     let mut seen = HashSet::new();
@@ -111,8 +192,7 @@ pub fn write_enumerated<W: Write>(
         let count = base
             .checked_pow(len as u32)
             .context("Candidate count overflowed")?;
-        sum.checked_add(count)
-            .context("Candidate count overflowed")
+        sum.checked_add(count).context("Candidate count overflowed")
     })?;
     validate_candidate_count(total, force)?;
 
