@@ -40,13 +40,19 @@ pub fn run(action: OtpAction) -> Result<()> {
             println!(
                 "Generate a truly random key of {} bytes ({} hex characters).",
                 length,
-                length * 2
+                hex_char_count(length)?
             );
             println!("Use a cryptographically secure random source (e.g., /dev/urandom).");
             println!("Example: head -c {length} /dev/urandom | xxd -p | tr -d '\\n'");
         }
     }
     Ok(())
+}
+
+pub fn hex_char_count(byte_len: usize) -> Result<usize> {
+    byte_len
+        .checked_mul(2)
+        .context("OTP key length overflows hex character count")
 }
 
 pub fn encrypt(input: &str, hex_key: &str) -> Result<String> {
