@@ -114,6 +114,9 @@ fn mask_rejects_unknown_tokens() {
 
 #[test]
 fn mask_rejects_dangling_token_and_oversized_space() {
+    let empty = write_masked(&mut std::io::sink(), "", "ab", false).unwrap_err();
+    assert!(empty.to_string().contains("Mask"));
+
     let dangling = write_masked(&mut std::io::sink(), "fixed?", "ab", false).unwrap_err();
     assert!(dangling.to_string().contains("dangling"));
 
