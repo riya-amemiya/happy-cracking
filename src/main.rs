@@ -303,6 +303,14 @@ enum Commands {
         #[command(subcommand)]
         action: crypto::portscan::PortscanAction,
     },
+    #[command(
+        name = "httpload",
+        about = "Send concurrent HTTP requests and report throughput and latency"
+    )]
+    HttpLoad {
+        #[command(subcommand)]
+        action: crypto::httpload::HttpLoadAction,
+    },
 
     // === Advanced Crypto ===
     #[command(about = "Elliptic curve operations over finite fields")]
@@ -456,6 +464,7 @@ fn main() -> Result<()> {
         Commands::Zipcrack { action } => crypto::zipcrack::run(action)?,
         Commands::Solve { action } => crypto::solve::run(action)?,
         Commands::Portscan { action } => crypto::portscan::run(action)?,
+        Commands::HttpLoad { action } => crypto::httpload::run(action)?,
 
         Commands::Ec { action } => crypto::ec::run(action)?,
         Commands::Dh { action } => crypto::dh::run(action)?,

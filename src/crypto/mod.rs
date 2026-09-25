@@ -41,6 +41,7 @@ pub mod hex;
 pub mod hexdump;
 pub mod hill;
 pub mod hmac;
+pub mod httpload;
 pub mod jwt;
 pub mod mathtools;
 pub mod morse;
