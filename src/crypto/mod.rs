@@ -69,5 +69,6 @@ pub mod tapcode;
 pub mod url;
 pub mod uuencode;
 pub mod vigenere;
+pub mod wordgen;
 pub mod xor;
 pub mod zipcrack;
