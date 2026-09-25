@@ -1,5 +1,6 @@
 use happy_cracking::crypto::wordgen::{write_enumerated, write_masked, write_random};
-use std::process::Command;
+use std::io::{BufRead, BufReader};
+use std::process::{Command, Stdio};
 
 #[test]
 fn enumerate_streams_shorter_lengths_first() {
@@ -28,6 +29,64 @@ fn enumerate_rejects_empty_charset_and_invalid_range() {
 
     let range = write_enumerated(&mut std::io::sink(), "ab", 3, 2, false).unwrap_err();
     assert!(range.to_string().contains("--max-len"));
+}
+
+#[test]
+fn generators_reject_line_breaks() {
+    let newline = write_enumerated(&mut std::io::sink(), "a\n", 1, 1, false).unwrap_err();
+    assert!(newline.to_string().contains("line break"));
+
+    let carriage_return = write_random(&mut std::io::sink(), "a\r", 1, 1, false).unwrap_err();
+    assert!(carriage_return.to_string().contains("line break"));
+
+    let literal = write_masked(&mut std::io::sink(), "fixed\n?c", "ab", false).unwrap_err();
+    assert!(literal.to_string().contains("line break"));
+}
+
+#[test]
+fn generators_enforce_charset_and_output_length_boundaries() {
+    let charset_256: String = (0..256)
+        .map(|offset| char::from_u32(0x100 + offset).unwrap())
+        .collect();
+    let charset_257 = format!("{charset_256}\u{200}");
+
+    let mut charset_output = Vec::new();
+    write_enumerated(&mut charset_output, &charset_256, 1, 1, false).unwrap();
+    assert_eq!(
+        charset_output
+            .iter()
+            .filter(|&&value| value == b'\n')
+            .count(),
+        256
+    );
+    assert!(write_enumerated(&mut std::io::sink(), &charset_257, 1, 1, false).is_err());
+
+    let mask_4096 = "x".repeat(4_096);
+    let mut mask_output = Vec::new();
+    write_masked(&mut mask_output, &mask_4096, "a", false).unwrap();
+    assert_eq!(mask_output.len(), 4_097);
+    assert!(write_masked(&mut std::io::sink(), &format!("{mask_4096}x"), "a", false).is_err());
+}
+
+#[test]
+fn length_errors_name_the_offending_option() {
+    let min = write_enumerated(&mut std::io::sink(), "ab", 0, 1, false).unwrap_err();
+    assert!(min.to_string().contains("--min-len"));
+
+    let max = write_enumerated(&mut std::io::sink(), "ab", 1, 4_097, false).unwrap_err();
+    assert!(max.to_string().contains("--max-len"));
+
+    let random = write_random(&mut std::io::sink(), "ab", 0, 1, false).unwrap_err();
+    assert!(random.to_string().contains("--length"));
+}
+
+#[test]
+fn forced_generation_still_rejects_candidate_count_overflow() {
+    let charset_256: String = (0..256)
+        .map(|offset| char::from_u32(0x100 + offset).unwrap())
+        .collect();
+    let error = write_enumerated(&mut std::io::sink(), &charset_256, 16, 16, true).unwrap_err();
+    assert!(error.to_string().contains("overflow"));
 }
 
 #[test]
@@ -131,4 +190,31 @@ fn wordgen_random_cli_streams_requested_count() {
         String::from_utf8(output.stdout).unwrap(),
         "xxxx\nxxxx\nxxxx\n"
     );
+}
+
+#[test]
+fn wordgen_exits_successfully_when_downstream_pipe_closes() {
+    let mut child = Command::new(env!("CARGO_BIN_EXE_happy-cracking"))
+        .args([
+            "wordgen",
+            "enumerate",
+            "--charset",
+            "ab",
+            "--min-len",
+            "1",
+            "--max-len",
+            "25",
+            "--force",
+        ])
+        .stdout(Stdio::piped())
+        .spawn()
+        .unwrap();
+
+    let mut first_line = String::new();
+    let mut output = BufReader::new(child.stdout.take().unwrap());
+    output.read_line(&mut first_line).unwrap();
+    assert_eq!(first_line, "a\n");
+    drop(output);
+
+    assert!(child.wait().unwrap().success());
 }

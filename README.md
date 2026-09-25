@@ -328,6 +328,9 @@ happy-cracking wordgen random --length 12 --count 100 --charset abc123
 happy-cracking wordgen enumerate --charset abc --min-len 2 --max-len 4
 happy-cracking wordgen mask 'AB?c?cZ' --charset 01
 
+# Character sets and fixed mask text cannot contain CR/LF line breaks.
+# More than one billion outputs require an explicit --force.
+
 # Hexdump and bit rotation
 happy-cracking hexdump dump "Hello"
 happy-cracking bitrot rotl "deadbeef" --bits 1 --width 32

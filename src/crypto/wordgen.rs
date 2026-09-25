@@ -90,33 +90,38 @@ pub fn run(action: WordgenAction) -> Result<()> {
 
 fn normalize_charset(charset: &str) -> Result<Vec<char>> {
     let mut seen = HashSet::new();
-    let chars: Vec<char> = charset
-        .chars()
-        .filter(|value| seen.insert(*value))
-        .collect();
+    let mut chars = Vec::new();
+    for value in charset.chars() {
+        if matches!(value, '\n' | '\r') {
+            anyhow::bail!("--charset must not contain a line break");
+        }
+        if seen.insert(value) {
+            if chars.len() == MAX_CHARSET_LEN {
+                anyhow::bail!("--charset contains more than {MAX_CHARSET_LEN} unique characters");
+            }
+            chars.push(value);
+        }
+    }
 
     if chars.is_empty() {
         anyhow::bail!("--charset must not be empty");
     }
-    if chars.len() > MAX_CHARSET_LEN {
-        anyhow::bail!("--charset contains more than {MAX_CHARSET_LEN} unique characters");
-    }
     Ok(chars)
 }
 
-fn validate_length(length: usize) -> Result<()> {
+fn validate_length(option: &str, length: usize) -> Result<()> {
     if length == 0 {
-        anyhow::bail!("Length must be at least 1");
+        anyhow::bail!("{option} must be at least 1");
     }
     if length > MAX_OUTPUT_LEN {
-        anyhow::bail!("Length {length} exceeds the limit of {MAX_OUTPUT_LEN}");
+        anyhow::bail!("{option} ({length}) exceeds the limit of {MAX_OUTPUT_LEN}");
     }
     Ok(())
 }
 
 fn validate_length_range(min_len: usize, max_len: usize) -> Result<()> {
-    validate_length(min_len)?;
-    validate_length(max_len)?;
+    validate_length("--min-len", min_len)?;
+    validate_length("--max-len", max_len)?;
     if max_len < min_len {
         anyhow::bail!("--max-len ({max_len}) must be >= --min-len ({min_len})");
     }
@@ -155,24 +160,23 @@ fn parse_mask(mask: &str) -> Result<Vec<MaskPosition>> {
     let mut chars = mask.chars();
     let mut positions = Vec::new();
     while let Some(value) = chars.next() {
-        if value != '?' {
-            positions.push(MaskPosition::Literal(value));
-            continue;
+        let position = if value == '?' {
+            match chars.next() {
+                Some('c') => MaskPosition::Variable,
+                Some('?') => MaskPosition::Literal('?'),
+                Some(token) => anyhow::bail!("Unknown mask token '?{token}'"),
+                None => anyhow::bail!("Mask ends with a dangling '?'"),
+            }
+        } else {
+            if matches!(value, '\n' | '\r') {
+                anyhow::bail!("Mask literals must not contain a line break");
+            }
+            MaskPosition::Literal(value)
+        };
+        if positions.len() == MAX_OUTPUT_LEN {
+            anyhow::bail!("Mask output length exceeds the limit of {MAX_OUTPUT_LEN} characters");
         }
-
-        match chars.next() {
-            Some('c') => positions.push(MaskPosition::Variable),
-            Some('?') => positions.push(MaskPosition::Literal('?')),
-            Some(token) => anyhow::bail!("Unknown mask token '?{token}'"),
-            None => anyhow::bail!("Mask ends with a dangling '?'"),
-        }
-    }
-
-    if positions.len() > MAX_OUTPUT_LEN {
-        anyhow::bail!(
-            "Mask output length {} exceeds the limit of {MAX_OUTPUT_LEN}",
-            positions.len()
-        );
+        positions.push(position);
     }
     Ok(positions)
 }
@@ -257,7 +261,7 @@ pub fn write_random<W: Write>(
     force: bool,
 ) -> Result<()> {
     let chars = normalize_charset(charset)?;
-    validate_length(length)?;
+    validate_length("--length", length)?;
     if count == 0 {
         anyhow::bail!("--count must be at least 1");
     }
