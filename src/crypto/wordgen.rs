@@ -60,6 +60,41 @@ fn increment_digits(digits: &mut [usize], base: usize) {
     }
 }
 
+enum MaskPosition {
+    Literal(char),
+    Variable,
+}
+
+fn parse_mask(mask: &str) -> Result<Vec<MaskPosition>> {
+    if mask.is_empty() {
+        anyhow::bail!("Mask must not be empty");
+    }
+
+    let mut chars = mask.chars();
+    let mut positions = Vec::new();
+    while let Some(value) = chars.next() {
+        if value != '?' {
+            positions.push(MaskPosition::Literal(value));
+            continue;
+        }
+
+        match chars.next() {
+            Some('c') => positions.push(MaskPosition::Variable),
+            Some('?') => positions.push(MaskPosition::Literal('?')),
+            Some(token) => anyhow::bail!("Unknown mask token '?{token}'"),
+            None => anyhow::bail!("Mask ends with a dangling '?'"),
+        }
+    }
+
+    if positions.len() > MAX_OUTPUT_LEN {
+        anyhow::bail!(
+            "Mask output length {} exceeds the limit of {MAX_OUTPUT_LEN}",
+            positions.len()
+        );
+    }
+    Ok(positions)
+}
+
 pub fn write_enumerated<W: Write>(
     writer: &mut W,
     charset: &str,
@@ -91,6 +126,44 @@ pub fn write_enumerated<W: Write>(
             writer.write_all(b"\n")?;
             increment_digits(&mut digits, chars.len());
         }
+    }
+    Ok(())
+}
+
+pub fn write_masked<W: Write>(
+    writer: &mut W,
+    mask: &str,
+    charset: &str,
+    force: bool,
+) -> Result<()> {
+    let chars = normalize_charset(charset)?;
+    let positions = parse_mask(mask)?;
+    let variable_count = positions
+        .iter()
+        .filter(|position| matches!(position, MaskPosition::Variable))
+        .count();
+    let total = (chars.len() as u128)
+        .checked_pow(variable_count as u32)
+        .context("Candidate count overflowed")?;
+    validate_candidate_count(total, force)?;
+
+    let mut digits = vec![0usize; variable_count];
+    let mut candidate = String::with_capacity(positions.len().saturating_mul(4));
+    for _ in 0..total {
+        candidate.clear();
+        let mut variable = 0;
+        for position in &positions {
+            match position {
+                MaskPosition::Literal(value) => candidate.push(*value),
+                MaskPosition::Variable => {
+                    candidate.push(chars[digits[variable]]);
+                    variable += 1;
+                }
+            }
+        }
+        writer.write_all(candidate.as_bytes())?;
+        writer.write_all(b"\n")?;
+        increment_digits(&mut digits, chars.len());
     }
     Ok(())
 }
