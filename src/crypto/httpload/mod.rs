@@ -511,6 +511,16 @@ pub(crate) fn build_request(
     Ok(out)
 }
 
+pub(crate) fn redacted_url(url: &Url) -> String {
+    if url.username().is_empty() && url.password().is_none() {
+        return url.to_string();
+    }
+    let mut redacted = url.clone();
+    let _ = redacted.set_password(None);
+    let _ = redacted.set_username("");
+    redacted.to_string()
+}
+
 fn host_header(url: &Url) -> Result<String> {
     let host = url.host_str().context("URL is missing a host")?;
     let host = if host.contains(':') {
@@ -615,4 +625,30 @@ struct JsonLatency {
     p90: f64,
     p95: f64,
     p99: f64,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::redacted_url;
+    use url::Url;
+
+    #[test]
+    fn redacted_url_strips_userinfo() {
+        let url = Url::parse("https://alice:hunter2@example.com:8443/v1?x=1#frag").unwrap();
+        let shown = redacted_url(&url);
+        assert_eq!(shown, "https://example.com:8443/v1?x=1#frag");
+    }
+
+    #[test]
+    fn redacted_url_strips_username_only() {
+        let url = Url::parse("http://alice@127.0.0.1/path").unwrap();
+        let shown = redacted_url(&url);
+        assert_eq!(shown, "http://127.0.0.1/path");
+    }
+
+    #[test]
+    fn redacted_url_leaves_plain_urls_unchanged() {
+        let url = Url::parse("http://127.0.0.1:8080/hit").unwrap();
+        assert_eq!(redacted_url(&url), url.as_str());
+    }
 }
