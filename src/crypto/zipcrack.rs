@@ -1,3 +1,4 @@
+use crate::crypto::wordgen;
 use anyhow::{Context, Result};
 use clap::Subcommand;
 use rayon::prelude::*;
@@ -23,7 +24,7 @@ pub enum ZipcrackAction {
         #[arg(short, long, help = "Path to the wordlist (one password per line)")]
         wordlist: PathBuf,
     },
-    #[command(about = "Brute-force attack against a password-protected zip")]
+    #[command(about = "Brute-force attack using wordgen charset enumeration")]
     Brute {
         #[arg(short, long, help = "Path to the encrypted zip file")]
         file: PathBuf,
@@ -38,6 +39,39 @@ pub enum ZipcrackAction {
         min_len: usize,
         #[arg(long, help = "Maximum password length", default_value = "4")]
         max_len: usize,
+    },
+    #[command(about = "Mask attack using wordgen ?c positions and ?? escapes")]
+    Mask {
+        #[arg(short, long, help = "Path to the encrypted zip file")]
+        file: PathBuf,
+        #[arg(
+            long,
+            help = "Mask containing fixed text, ?c variables, and ?? escapes"
+        )]
+        mask: String,
+        #[arg(short, long, help = "Characters for each ?c position")]
+        charset: String,
+    },
+    #[command(about = "Random attack sampling wordgen candidates")]
+    Random {
+        #[arg(short, long, help = "Path to the encrypted zip file")]
+        file: PathBuf,
+        #[arg(long, help = "Length of each sampled password")]
+        length: usize,
+        #[arg(
+            short = 'n',
+            long,
+            default_value_t = 1,
+            help = "Number of passwords to try"
+        )]
+        count: u64,
+        #[arg(
+            short,
+            long,
+            default_value = wordgen::DEFAULT_CHARSET,
+            help = "Characters to sample"
+        )]
+        charset: String,
     },
     #[command(about = "List entries in a zip (name, size, encryption)")]
     Info {
@@ -75,6 +109,29 @@ pub fn run(action: ZipcrackAction) -> Result<()> {
             let bytes = read_zipcrack_bytes_with_limit(&file, MAX_ZIP_BYTES)?;
 
             match brute_attack(&bytes, &charset, min_len, max_len)? {
+                Some(password) => println!("Found password: {password}"),
+                None => println!("Not found"),
+            }
+        }
+        ZipcrackAction::Mask {
+            file,
+            mask,
+            charset,
+        } => {
+            let bytes = read_zipcrack_bytes_with_limit(&file, MAX_ZIP_BYTES)?;
+            match mask_attack(&bytes, &mask, &charset)? {
+                Some(password) => println!("Found password: {password}"),
+                None => println!("Not found"),
+            }
+        }
+        ZipcrackAction::Random {
+            file,
+            length,
+            count,
+            charset,
+        } => {
+            let bytes = read_zipcrack_bytes_with_limit(&file, MAX_ZIP_BYTES)?;
+            match random_attack(&bytes, &charset, length, count)? {
                 Some(password) => println!("Found password: {password}"),
                 None => println!("Not found"),
             }
@@ -149,10 +206,7 @@ pub fn brute_attack(
     min_len: usize,
     max_len: usize,
 ) -> Result<Option<String>> {
-    let chars: Vec<char> = charset.chars().collect();
-    if chars.is_empty() {
-        anyhow::bail!("Charset must not be empty");
-    }
+    let chars = wordgen::normalize_charset(charset)?;
     if min_len == 0 {
         anyhow::bail!("min-len must be at least 1");
     }
@@ -163,25 +217,15 @@ pub fn brute_attack(
         anyhow::bail!("Maximum password length {max_len} exceeds the limit of {MAX_BRUTE_LEN}");
     }
 
-    let base = chars.len() as u128;
-    let mut total: u128 = 0;
-    for len in min_len..=max_len {
-        let count = base.checked_pow(len as u32).unwrap_or(u128::MAX);
-        total = total.saturating_add(count);
-        if total > MAX_BRUTE_SPACE {
-            anyhow::bail!("Brute-force keyspace ({total}+) exceeds the limit of {MAX_BRUTE_SPACE}");
-        }
+    let total = wordgen::enumerated_total(&chars, min_len, max_len)?;
+    if total > MAX_BRUTE_SPACE {
+        anyhow::bail!("Brute-force keyspace ({total}) exceeds the limit of {MAX_BRUTE_SPACE}");
     }
 
     for len in min_len..=max_len {
-        let count = base.pow(len as u32);
-        let found = (0..count).into_par_iter().find_map_any(|index| {
-            let candidate = index_to_candidate(index, &chars, len);
-            if verify_password(zip_bytes, &candidate) {
-                Some(candidate)
-            } else {
-                None
-            }
+        let count = wordgen::combination_count(chars.len(), len)?;
+        let found = search_indexed(zip_bytes, count, |index| {
+            wordgen::candidate_from_index(&chars, len, index)
         });
         if found.is_some() {
             return Ok(found);
@@ -191,15 +235,69 @@ pub fn brute_attack(
     Ok(None)
 }
 
-fn index_to_candidate(index: u128, chars: &[char], len: usize) -> String {
-    let base = chars.len() as u128;
-    let mut value = index;
-    let mut out = vec![chars[0]; len];
-    for slot in out.iter_mut().rev() {
-        *slot = chars[(value % base) as usize];
-        value /= base;
+pub fn mask_attack(zip_bytes: &[u8], mask: &str, charset: &str) -> Result<Option<String>> {
+    let plan = wordgen::mask_plan(mask, charset)?;
+    if plan.output_len() > MAX_BRUTE_LEN {
+        anyhow::bail!(
+            "Maximum password length {} exceeds the limit of {MAX_BRUTE_LEN}",
+            plan.output_len()
+        );
     }
-    out.into_iter().collect()
+    let total = plan.total()?;
+    if total > MAX_BRUTE_SPACE {
+        anyhow::bail!("Mask keyspace ({total}) exceeds the limit of {MAX_BRUTE_SPACE}");
+    }
+    Ok(search_indexed(zip_bytes, total, |index| {
+        plan.candidate(index)
+    }))
+}
+
+pub fn random_attack(
+    zip_bytes: &[u8],
+    charset: &str,
+    length: usize,
+    count: u64,
+) -> Result<Option<String>> {
+    let chars = wordgen::normalize_charset(charset)?;
+    if length == 0 {
+        anyhow::bail!("length must be at least 1");
+    }
+    if length > MAX_BRUTE_LEN {
+        anyhow::bail!("Maximum password length {length} exceeds the limit of {MAX_BRUTE_LEN}");
+    }
+    if count == 0 {
+        anyhow::bail!("count must be at least 1");
+    }
+    if u128::from(count) > MAX_BRUTE_SPACE {
+        anyhow::bail!("Random attempt count ({count}) exceeds the limit of {MAX_BRUTE_SPACE}");
+    }
+
+    let found = (0..count).into_par_iter().find_map_any(|_| {
+        let mut rng = rand::rng();
+        let mut candidate = String::with_capacity(length);
+        wordgen::append_random(&mut candidate, &chars, length, &mut rng);
+        if verify_password(zip_bytes, &candidate) {
+            Some(candidate)
+        } else {
+            None
+        }
+    });
+    Ok(found)
+}
+
+fn search_indexed(
+    zip_bytes: &[u8],
+    total: u128,
+    candidate_at: impl Fn(u128) -> String + Sync,
+) -> Option<String> {
+    (0..total).into_par_iter().find_map_any(|index| {
+        let candidate = candidate_at(index);
+        if verify_password(zip_bytes, &candidate) {
+            Some(candidate)
+        } else {
+            None
+        }
+    })
 }
 
 pub fn list_entries(zip_bytes: &[u8]) -> Result<Vec<EntryInfo>> {
