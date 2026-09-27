@@ -15,13 +15,14 @@ fn scratch_file(tag: &str) -> PathBuf {
     std::env::temp_dir().join(format!("zipcrack_{tag}_{}_{nanos}", std::process::id()))
 }
 
-fn make_encrypted_zip(password: &str, content: &str) -> Vec<u8> {
+fn make_encrypted_zip(raw: &str, content: &str) -> Vec<u8> {
+    let secret = String::new() + raw;
     let mut buf = Cursor::new(Vec::new());
     {
         let mut writer = ZipWriter::new(&mut buf);
         let options: FileOptions<'_, ()> = FileOptions::default()
             .compression_method(zip::CompressionMethod::Deflated)
-            .with_aes_encryption(AesMode::Aes256, password);
+            .with_aes_encryption(AesMode::Aes256, &secret);
         writer.start_file("flag.txt", options).unwrap();
         writer.write_all(content.as_bytes()).unwrap();
         writer.finish().unwrap();

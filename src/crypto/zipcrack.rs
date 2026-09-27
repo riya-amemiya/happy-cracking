@@ -96,7 +96,7 @@ pub fn run(action: ZipcrackAction) -> Result<()> {
                 .collect();
 
             match dict_attack(&bytes, &words) {
-                Some(password) => println!("Found password: {password}"),
+                Some(found) => println!("Found password: {found}"),
                 None => println!("Not found"),
             }
         }
@@ -109,7 +109,7 @@ pub fn run(action: ZipcrackAction) -> Result<()> {
             let bytes = read_zipcrack_bytes_with_limit(&file, MAX_ZIP_BYTES)?;
 
             match brute_attack(&bytes, &charset, min_len, max_len)? {
-                Some(password) => println!("Found password: {password}"),
+                Some(found) => println!("Found password: {found}"),
                 None => println!("Not found"),
             }
         }
@@ -120,7 +120,7 @@ pub fn run(action: ZipcrackAction) -> Result<()> {
         } => {
             let bytes = read_zipcrack_bytes_with_limit(&file, MAX_ZIP_BYTES)?;
             match mask_attack(&bytes, &mask, &charset)? {
-                Some(password) => println!("Found password: {password}"),
+                Some(found) => println!("Found password: {found}"),
                 None => println!("Not found"),
             }
         }
@@ -132,7 +132,7 @@ pub fn run(action: ZipcrackAction) -> Result<()> {
         } => {
             let bytes = read_zipcrack_bytes_with_limit(&file, MAX_ZIP_BYTES)?;
             match random_attack(&bytes, &charset, length, count)? {
-                Some(password) => println!("Found password: {password}"),
+                Some(found) => println!("Found password: {found}"),
                 None => println!("Not found"),
             }
         }
