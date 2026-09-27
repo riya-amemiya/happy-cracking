@@ -167,6 +167,34 @@ fn counts_connection_failures() {
 }
 
 #[test]
+fn load_report_omits_url_userinfo() {
+    let server = Server::spawn(|raw| {
+        let text = String::from_utf8_lossy(raw);
+        if text.contains("Authorization: Basic ") {
+            ok_body(raw)
+        } else {
+            b"HTTP/1.1 401 Unauthorized\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".to_vec()
+        }
+    });
+    let password = "s3cret-for-redact-test";
+    let url = server
+        .url
+        .replacen("http://", &format!("http://loaduser:{password}@"), 1);
+    let mut load = req(url);
+    load.requests = Some(2);
+    load.connections = 1;
+    let report = httpload::run_load(&load).unwrap();
+    assert_eq!(report.success, 2);
+    assert!(!report.url.contains(password));
+    assert!(!report.url.contains("loaduser"));
+    assert!(report.url.starts_with("http://127.0.0.1:"));
+    let text = httpload::format_text(&report);
+    let json = httpload::format_json(&report).unwrap();
+    assert!(!text.contains(password));
+    assert!(!json.contains(password));
+}
+
+#[test]
 fn json_summary_contains_rate() {
     let server = Server::spawn(ok_body);
     let mut load = req(server.url.clone());

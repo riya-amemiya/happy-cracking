@@ -853,7 +853,7 @@ fn merge(prep: &Prepared, parts: Vec<Partial>, elapsed: Duration) -> LoadReport 
         }
     }
     LoadReport {
-        url: prep.url.to_string(),
+        url: super::redacted_url(&prep.url),
         method: prep.method.clone(),
         total: success + errors,
         success,
