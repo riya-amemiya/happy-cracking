@@ -286,7 +286,7 @@ enum Commands {
         #[command(subcommand)]
         action: crypto::hashcrack::HashcrackAction,
     },
-    #[command(about = "Crack password-protected zip archives (dict/brute/info)")]
+    #[command(about = "Crack password-protected zip archives (dict/brute/mask/random/info)")]
     Zipcrack {
         #[command(subcommand)]
         action: crypto::zipcrack::ZipcrackAction,

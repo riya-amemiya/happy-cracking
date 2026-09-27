@@ -88,7 +88,7 @@ pub fn run(action: WordgenAction) -> Result<()> {
     }
 }
 
-fn normalize_charset(charset: &str) -> Result<Vec<char>> {
+pub(crate) fn normalize_charset(charset: &str) -> Result<Vec<char>> {
     let mut seen = HashSet::new();
     let mut chars = Vec::new();
     for value in charset.chars() {
@@ -139,6 +139,43 @@ fn validate_candidate_count(total: u128, force: bool) -> Result<()> {
     Ok(())
 }
 
+pub(crate) fn combination_count(base: usize, len: usize) -> Result<u128> {
+    let exponent = u32::try_from(len).context("Candidate count overflowed")?;
+    (base as u128)
+        .checked_pow(exponent)
+        .context("Candidate count overflowed")
+}
+
+pub(crate) fn enumerated_total(chars: &[char], min_len: usize, max_len: usize) -> Result<u128> {
+    (min_len..=max_len).try_fold(0u128, |sum, len| {
+        let count = combination_count(chars.len(), len)?;
+        sum.checked_add(count).context("Candidate count overflowed")
+    })
+}
+
+pub(crate) fn candidate_from_index(chars: &[char], len: usize, index: u128) -> String {
+    let base = chars.len() as u128;
+    let mut value = index;
+    let mut out = vec![chars[0]; len];
+    for slot in out.iter_mut().rev() {
+        *slot = chars[(value % base) as usize];
+        value /= base;
+    }
+    out.into_iter().collect()
+}
+
+pub(crate) fn append_random(
+    out: &mut String,
+    chars: &[char],
+    length: usize,
+    rng: &mut impl RngExt,
+) {
+    out.clear();
+    for _ in 0..length {
+        out.push(chars[rng.random_range(0..chars.len())]);
+    }
+}
+
 fn increment_digits(digits: &mut [usize], base: usize) {
     for digit in digits.iter_mut().rev() {
         *digit += 1;
@@ -152,6 +189,59 @@ fn increment_digits(digits: &mut [usize], base: usize) {
 enum MaskPosition {
     Literal(char),
     Variable,
+}
+
+pub(crate) struct MaskPlan {
+    positions: Vec<MaskPosition>,
+    chars: Vec<char>,
+    variable_count: usize,
+}
+
+impl MaskPlan {
+    pub(crate) fn output_len(&self) -> usize {
+        self.positions.len()
+    }
+
+    pub(crate) fn total(&self) -> Result<u128> {
+        combination_count(self.chars.len(), self.variable_count)
+    }
+
+    pub(crate) fn candidate(&self, index: u128) -> String {
+        let base = self.chars.len() as u128;
+        let mut value = index;
+        let mut digits = vec![0usize; self.variable_count];
+        for digit in digits.iter_mut().rev() {
+            *digit = (value % base) as usize;
+            value /= base;
+        }
+
+        let mut candidate = String::with_capacity(self.positions.len().saturating_mul(4));
+        let mut variable = 0;
+        for position in &self.positions {
+            match position {
+                MaskPosition::Literal(value) => candidate.push(*value),
+                MaskPosition::Variable => {
+                    candidate.push(self.chars[digits[variable]]);
+                    variable += 1;
+                }
+            }
+        }
+        candidate
+    }
+}
+
+pub(crate) fn mask_plan(mask: &str, charset: &str) -> Result<MaskPlan> {
+    let chars = normalize_charset(charset)?;
+    let positions = parse_mask(mask)?;
+    let variable_count = positions
+        .iter()
+        .filter(|position| matches!(position, MaskPosition::Variable))
+        .count();
+    Ok(MaskPlan {
+        positions,
+        chars,
+        variable_count,
+    })
 }
 
 fn parse_mask(mask: &str) -> Result<Vec<MaskPosition>> {
@@ -192,19 +282,12 @@ pub fn write_enumerated<W: Write>(
 ) -> Result<()> {
     let chars = normalize_charset(charset)?;
     validate_length_range(min_len, max_len)?;
-
-    let base = chars.len() as u128;
-    let total = (min_len..=max_len).try_fold(0u128, |sum, len| {
-        let count = base
-            .checked_pow(len as u32)
-            .context("Candidate count overflowed")?;
-        sum.checked_add(count).context("Candidate count overflowed")
-    })?;
+    let total = enumerated_total(&chars, min_len, max_len)?;
     validate_candidate_count(total, force)?;
 
     let mut candidate = String::with_capacity(max_len.saturating_mul(4));
     for len in min_len..=max_len {
-        let count = base.pow(len as u32);
+        let count = combination_count(chars.len(), len)?;
         let mut digits = vec![0usize; len];
         for _ in 0..count {
             candidate.clear();
@@ -223,34 +306,27 @@ pub fn write_masked<W: Write>(
     charset: &str,
     force: bool,
 ) -> Result<()> {
-    let chars = normalize_charset(charset)?;
-    let positions = parse_mask(mask)?;
-    let variable_count = positions
-        .iter()
-        .filter(|position| matches!(position, MaskPosition::Variable))
-        .count();
-    let total = (chars.len() as u128)
-        .checked_pow(variable_count as u32)
-        .context("Candidate count overflowed")?;
+    let plan = mask_plan(mask, charset)?;
+    let total = plan.total()?;
     validate_candidate_count(total, force)?;
 
-    let mut digits = vec![0usize; variable_count];
-    let mut candidate = String::with_capacity(positions.len().saturating_mul(4));
+    let mut digits = vec![0usize; plan.variable_count];
+    let mut candidate = String::with_capacity(plan.output_len().saturating_mul(4));
     for _ in 0..total {
         candidate.clear();
         let mut variable = 0;
-        for position in &positions {
+        for position in &plan.positions {
             match position {
                 MaskPosition::Literal(value) => candidate.push(*value),
                 MaskPosition::Variable => {
-                    candidate.push(chars[digits[variable]]);
+                    candidate.push(plan.chars[digits[variable]]);
                     variable += 1;
                 }
             }
         }
         writer.write_all(candidate.as_bytes())?;
         writer.write_all(b"\n")?;
-        increment_digits(&mut digits, chars.len());
+        increment_digits(&mut digits, plan.chars.len());
     }
     Ok(())
 }
@@ -272,12 +348,39 @@ pub fn write_random<W: Write>(
     let mut rng = rand::rng();
     let mut candidate = String::with_capacity(length.saturating_mul(4));
     for _ in 0..count {
-        candidate.clear();
-        for _ in 0..length {
-            candidate.push(chars[rng.random_range(0..chars.len())]);
-        }
+        append_random(&mut candidate, &chars, length, &mut rng);
         writer.write_all(candidate.as_bytes())?;
         writer.write_all(b"\n")?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn candidate_from_index_matches_enumerated_order() {
+        let chars = normalize_charset("ab").unwrap();
+        let mut output = Vec::new();
+        write_enumerated(&mut output, "ab", 1, 2, false).unwrap();
+        let text = String::from_utf8(output).unwrap();
+        let mut index_by_len = [0u128; 3];
+        for line in text.lines() {
+            let len = line.chars().count();
+            assert_eq!(line, candidate_from_index(&chars, len, index_by_len[len]));
+            index_by_len[len] += 1;
+        }
+    }
+
+    #[test]
+    fn mask_candidate_matches_masked_order() {
+        let plan = mask_plan("A??B?c?c", "01").unwrap();
+        let mut output = Vec::new();
+        write_masked(&mut output, "A??B?c?c", "01", false).unwrap();
+        let text = String::from_utf8(output).unwrap();
+        for (index, line) in text.lines().enumerate() {
+            assert_eq!(line, plan.candidate(u128::try_from(index).unwrap()));
+        }
+    }
 }

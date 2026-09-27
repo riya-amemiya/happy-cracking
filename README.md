@@ -84,7 +84,7 @@ This produces `target/release/happy-cracking` and the companion binaries `target
 | Command     | Description                                                                                          |
 | ----------- | ---------------------------------------------------------------------------------------------------- |
 | `hashcrack` | Recover hashes via dictionary, brute-force, or table lookup (MD5/SHA1/SHA256/SHA512/MD4/NTLM, optional salt, rayon-parallel) |
-| `zipcrack`  | Crack password-protected ZIP archives (ZipCrypto and WinZip AES) via dictionary or brute-force, plus archive info |
+| `zipcrack`  | Crack password-protected ZIP archives (ZipCrypto and WinZip AES) via dictionary, wordgen brute-force, mask, or random sampling, plus archive info |
 
 ### Attack / Recon (3 tools)
 
@@ -264,9 +264,12 @@ happy-cracking hashcrack brute "<hash>" --algo md5 --preset alnum --min-len 1 --
 # Reverse lookup against a precomputed "hash:plaintext" table
 happy-cracking hashcrack lookup "5d41402abc4b2a76b9719d911017c592" --table rainbow.txt
 
-# Crack a password-protected zip (ZipCrypto or WinZip AES)
+# Crack a password-protected zip (ZipCrypto or WinZip AES).
+# brute, mask, and random use wordgen's charset, enumeration, ?c mask, and sampling.
 happy-cracking zipcrack dict --file secret.zip --wordlist words.txt
 happy-cracking zipcrack brute --file secret.zip --charset "0123456789" --min-len 1 --max-len 6
+happy-cracking zipcrack mask --file secret.zip --mask 'AB?c?cZ' --charset 01
+happy-cracking zipcrack random --file secret.zip --length 4 --count 1000 --charset 0123456789
 happy-cracking zipcrack info --file secret.zip
 ```
 
