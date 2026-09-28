@@ -72,3 +72,13 @@ fn test_ctf_flag() {
     let decrypted = columnar::decrypt(&encrypted, key).unwrap();
     assert!(decrypted.starts_with(original));
 }
+
+#[test]
+fn test_unicode_roundtrip_keeps_scalars() {
+    let original = "HELLO🐱WORLD";
+    let key = "KEY";
+    let encrypted = columnar::encrypt(original, key).unwrap();
+    let decrypted = columnar::decrypt(&encrypted, key).unwrap();
+    assert!(decrypted.starts_with(original));
+    assert!(encrypted.contains('🐱'));
+}
