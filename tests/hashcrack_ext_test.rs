@@ -1,6 +1,6 @@
 use happy_cracking::crypto::hashcrack::{
-    HashAlgo, MAX_RULE_CANDIDATE_LEN, apply_rule, builtin_rules, compute_hash, expand_mask,
-    hybrid_attack, mask_attack, rule_attack,
+    HashAlgo, MAX_BRUTE_LEN, MAX_RULE_CANDIDATE_LEN, apply_rule, builtin_rules, compute_hash,
+    expand_mask, hybrid_attack, mask_attack, rule_attack,
 };
 
 #[test]
@@ -145,6 +145,46 @@ fn mask_rejects_unknown_class() {
 fn mask_attack_invalid_hex_still_validates_mask() {
     let err = mask_attack("not-hex!!!", HashAlgo::Md5, "?z").unwrap_err();
     assert!(err.to_string().contains("Unknown mask class"));
+}
+
+#[test]
+fn expand_mask_rejects_length_above_cap() {
+    let err = expand_mask(&"a".repeat(MAX_BRUTE_LEN + 1)).unwrap_err();
+    assert!(err.to_string().contains(&MAX_BRUTE_LEN.to_string()));
+}
+
+#[test]
+fn expand_mask_rejects_class_tokens_above_cap() {
+    let err = expand_mask(&"?d".repeat(MAX_BRUTE_LEN + 1)).unwrap_err();
+    assert!(err.to_string().contains(&MAX_BRUTE_LEN.to_string()));
+}
+
+#[test]
+fn expand_mask_accepts_length_at_cap() {
+    let positions = expand_mask(&"a".repeat(MAX_BRUTE_LEN)).unwrap();
+    assert_eq!(positions.len(), MAX_BRUTE_LEN);
+}
+
+#[test]
+fn mask_attack_rejects_length_above_cap() {
+    let mask = "a".repeat(MAX_BRUTE_LEN + 1);
+    let err = mask_attack("5d41402abc4b2a76b9719d911017c592", HashAlgo::Md5, &mask).unwrap_err();
+    assert!(err.to_string().contains(&MAX_BRUTE_LEN.to_string()));
+}
+
+#[test]
+fn mask_attack_accepts_length_at_cap() {
+    let plain = "a".repeat(MAX_BRUTE_LEN);
+    let target = compute_hash(HashAlgo::Md5, &plain);
+    let found = mask_attack(&target, HashAlgo::Md5, &plain).unwrap();
+    assert_eq!(found.as_deref(), Some(plain.as_str()));
+}
+
+#[test]
+fn mask_attack_invalid_hex_still_validates_length() {
+    let mask = "a".repeat(MAX_BRUTE_LEN + 1);
+    let err = mask_attack("not-hex!!!", HashAlgo::Md5, &mask).unwrap_err();
+    assert!(err.to_string().contains(&MAX_BRUTE_LEN.to_string()));
 }
 
 #[test]

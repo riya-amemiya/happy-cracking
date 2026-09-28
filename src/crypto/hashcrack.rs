@@ -796,6 +796,12 @@ pub fn expand_mask(mask: &str) -> Result<Vec<Vec<char>>> {
     let mut positions: Vec<Vec<char>> = Vec::new();
     let mut i = 0usize;
     while i < chars.len() {
+        if positions.len() >= MAX_BRUTE_LEN {
+            anyhow::bail!(
+                "Maximum candidate length {} exceeds the limit of {MAX_BRUTE_LEN}",
+                MAX_BRUTE_LEN + 1
+            );
+        }
         if chars[i] == '?' {
             i += 1;
             if i >= chars.len() {
