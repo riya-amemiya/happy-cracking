@@ -1,3 +1,4 @@
+use crate::crypto::wordgen;
 use anyhow::{Context, Result};
 use clap::{Subcommand, ValueEnum};
 use md4::Md4;
@@ -9,8 +10,6 @@ use std::io::{BufRead, Read};
 use std::path::{Path, PathBuf};
 
 const MAX_BRUTE_SPACE: u128 = 1_000_000_000;
-
-const MAX_CHARSET_LEN: usize = 256;
 
 pub const MAX_BRUTE_LEN: usize = 32;
 
@@ -435,17 +434,7 @@ pub fn brute_force(
     salt: Option<&str>,
     pos: SaltPosition,
 ) -> Result<Option<String>> {
-    let chars: Vec<char> = charset.chars().collect();
-    if chars.is_empty() {
-        anyhow::bail!("Charset must not be empty");
-    }
-    if chars.len() > MAX_CHARSET_LEN {
-        anyhow::bail!(
-            "Charset too large ({} characters); maximum is {}",
-            chars.len(),
-            MAX_CHARSET_LEN
-        );
-    }
+    let chars = wordgen::normalize_charset(charset)?;
     if min_len == 0 {
         anyhow::bail!("--min-len must be at least 1");
     }

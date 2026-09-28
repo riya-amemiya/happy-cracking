@@ -328,6 +328,37 @@ fn test_brute_force_rejects_len_beyond_u32() {
 }
 
 #[test]
+fn test_brute_force_deduplicates_charset() {
+    let target = compute_hash(HashAlgo::Md5, "a");
+    let found = brute_force(
+        &target,
+        HashAlgo::Md5,
+        &"a".repeat(80),
+        1,
+        5,
+        None,
+        SaltPosition::Suffix,
+    )
+    .unwrap();
+    assert_eq!(found, Some("a".to_string()));
+}
+
+#[test]
+fn test_brute_force_rejects_charset_line_break() {
+    let err = brute_force(
+        "5d41402abc4b2a76b9719d911017c592",
+        HashAlgo::Md5,
+        "a\n",
+        1,
+        1,
+        None,
+        SaltPosition::Suffix,
+    )
+    .unwrap_err();
+    assert!(err.to_string().contains("line break"));
+}
+
+#[test]
 fn test_brute_force_empty_charset_errors() {
     let result = brute_force(
         "5d41402abc4b2a76b9719d911017c592",
@@ -356,7 +387,7 @@ fn test_brute_force_invalid_hex_still_validates_charset() {
         result
             .unwrap_err()
             .to_string()
-            .contains("Charset must not be empty")
+            .contains("must not be empty")
     );
 }
 
