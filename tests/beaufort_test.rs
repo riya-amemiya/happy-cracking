@@ -82,3 +82,33 @@ fn test_ctf_flag() {
     let decrypted = beaufort::decrypt(&encrypted, key).unwrap();
     assert_eq!(decrypted, original);
 }
+
+#[test]
+fn test_encrypt_preserves_non_ascii() {
+    assert_eq!(
+        beaufort::encrypt("HELLO, 世界!", "KEY").unwrap(),
+        "DANZQ, 世界!"
+    );
+}
+
+#[test]
+fn test_roundtrip_non_ascii() {
+    let original = "Привет, world!";
+    let key = "KEY";
+    let encrypted = beaufort::encrypt(original, key).unwrap();
+    let decrypted = beaufort::decrypt(&encrypted, key).unwrap();
+    assert_eq!(decrypted, original);
+}
+
+#[test]
+fn test_lowercase_key_matches_uppercase() {
+    assert_eq!(
+        beaufort::encrypt("Hello", "key").unwrap(),
+        beaufort::encrypt("Hello", "KEY").unwrap()
+    );
+}
+
+#[test]
+fn test_empty_input() {
+    assert_eq!(beaufort::encrypt("", "KEY").unwrap(), "");
+}
