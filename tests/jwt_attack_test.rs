@@ -1,10 +1,10 @@
 use happy_cracking::crypto::jwt::{
-    crack_hmac_secret, crack_hmac_secret_list, decode, forge_alg_confusion, forge_none,
-    read_jwt_bytes_with_limit, verify_hs,
+    MAX_JWT_LEN, crack_hmac_secret, crack_hmac_secret_list, decode, forge_alg_confusion,
+    forge_none, read_jwt_bytes_with_limit, verify_hs,
 };
 use std::fs;
 use std::path::PathBuf;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 fn scratch_file(tag: &str) -> PathBuf {
     let nanos = SystemTime::now()
@@ -45,6 +45,33 @@ fn forge_none_produces_decodable_token() {
     assert!(parts.header.to_ascii_lowercase().contains("none"));
     assert!(parts.payload.contains("admin"));
     assert!(parts.signature_hex.is_empty() || parts.signature_hex == "");
+}
+
+#[test]
+fn forge_none_rejects_oversized_payload() {
+    let start = Instant::now();
+    let payload = "x".repeat(MAX_JWT_LEN + 1);
+    let err = forge_none(&payload)
+        .err()
+        .expect("oversized payload should fail")
+        .to_string();
+    assert!(
+        err.contains("maximum length"),
+        "expected length rejection, got: {err}"
+    );
+    assert!(
+        start.elapsed().as_millis() < 100,
+        "oversized payload must be rejected before JSON parse"
+    );
+}
+
+#[test]
+fn forge_none_accepts_payload_at_size_limit() {
+    let pad = MAX_JWT_LEN - 8;
+    let payload = format!(r#"{{"a":"{}"}}"#, "x".repeat(pad));
+    assert_eq!(payload.len(), MAX_JWT_LEN);
+    let forged = forge_none(&payload).unwrap();
+    assert!(forged.ends_with('.'));
 }
 
 #[test]
