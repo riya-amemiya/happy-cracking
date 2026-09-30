@@ -89,3 +89,22 @@ fn test_ctf_flag_roundtrip() {
     let decrypted = playfair::decrypt(&encrypted, "CIPHER").unwrap();
     assert_eq!(decrypted, original);
 }
+
+#[test]
+fn test_lowercase_matches_uppercase() {
+    let enc1 = playfair::encrypt("hello", "KEY").unwrap();
+    let enc2 = playfair::encrypt("HELLO", "KEY").unwrap();
+    assert_eq!(enc1, enc2);
+}
+
+#[test]
+fn test_eszett_expands_like_ss() {
+    let enc1 = playfair::encrypt("ßHELLO", "KEY").unwrap();
+    let enc2 = playfair::encrypt("SSHELLO", "KEY").unwrap();
+    assert_eq!(enc1, enc2);
+}
+
+#[test]
+fn test_punctuation_only_is_empty() {
+    assert_eq!(playfair::encrypt("!!!", "KEY").unwrap(), "");
+}
