@@ -126,6 +126,52 @@ fn mask_rejects_dangling_token_and_oversized_space() {
 }
 
 #[test]
+fn charset_expands_class_and_backslash_escape() {
+    let mut digits = Vec::new();
+    write_enumerated(&mut digits, "?d", 1, 1, false).unwrap();
+    assert_eq!(
+        String::from_utf8(digits).unwrap(),
+        "0\n1\n2\n3\n4\n5\n6\n7\n8\n9\n"
+    );
+
+    let mut escaped = Vec::new();
+    write_enumerated(&mut escaped, "\\?d", 1, 1, false).unwrap();
+    assert_eq!(String::from_utf8(escaped).unwrap(), "?\nd\n");
+}
+
+#[test]
+fn charset_rejects_unknown_token() {
+    let error = write_enumerated(&mut std::io::sink(), "?z", 1, 1, false).unwrap_err();
+    assert!(error.to_string().contains("Unknown charset token"));
+}
+
+#[test]
+fn mask_mixes_custom_and_class_positions() {
+    let mut output = Vec::new();
+    write_masked(&mut output, "?c?d", "ab", false).unwrap();
+    let mut expected = String::new();
+    for outer in ["a", "b"] {
+        for inner in 0..10 {
+            expected.push_str(&format!("{outer}{inner}\n"));
+        }
+    }
+    assert_eq!(String::from_utf8(output).unwrap(), expected);
+}
+
+#[test]
+fn mask_class_tokens_run_without_custom_charset() {
+    let mut output = Vec::new();
+    write_masked(&mut output, "x?d", "", false).unwrap();
+    assert_eq!(
+        String::from_utf8(output).unwrap(),
+        "x0\nx1\nx2\nx3\nx4\nx5\nx6\nx7\nx8\nx9\n"
+    );
+
+    let missing = write_masked(&mut std::io::sink(), "?c", "", false).unwrap_err();
+    assert!(missing.to_string().contains("?c"));
+}
+
+#[test]
 fn random_writes_requested_shape_and_count() {
     let mut output = Vec::new();
     write_random(&mut output, "x", 4, 3, false).unwrap();

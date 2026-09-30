@@ -38,11 +38,18 @@ pub enum WordgenAction {
         #[arg(long, help = "Allow more than 1,000,000,000 outputs")]
         force: bool,
     },
-    #[command(about = "Generate strings from fixed text and ?c positions")]
+    #[command(about = "Generate strings from a mask with ?d/?l/?u/?w/?a classes and ?c positions")]
     Mask {
-        #[arg(help = "Mask containing fixed text, ?c variables, and ?? escapes")]
+        #[arg(
+            help = "Mask with literals, ?d/?l/?u/?w/?a classes, ?c custom positions, and ?? or \\? for a literal ?"
+        )]
         mask: String,
-        #[arg(short, long, help = "Characters for each ?c position")]
+        #[arg(
+            short,
+            long,
+            default_value = "",
+            help = "Characters for ?c positions (required only when the mask uses ?c)"
+        )]
         charset: String,
         #[arg(long, help = "Allow more than 1,000,000,000 outputs")]
         force: bool,
@@ -88,20 +95,59 @@ pub fn run(action: WordgenAction) -> Result<()> {
     }
 }
 
+pub(crate) fn charset_class(token: char) -> Option<Vec<char>> {
+    let literal = match token {
+        'd' => "0123456789",
+        'l' => "abcdefghijklmnopqrstuvwxyz",
+        'u' => "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+        'w' => "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_",
+        'a' => return Some((0x20u8..=0x7eu8).map(|byte| byte as char).collect()),
+        _ => return None,
+    };
+    Some(literal.chars().collect())
+}
+
+fn expand_charset_tokens(charset: &str) -> Result<Vec<char>> {
+    let mut expanded = Vec::new();
+    let mut chars = charset.chars();
+    while let Some(value) = chars.next() {
+        match value {
+            '\\' => {
+                let Some(escaped) = chars.next() else {
+                    anyhow::bail!("--charset ends with a dangling '\\'");
+                };
+                if matches!(escaped, '\n' | '\r') {
+                    anyhow::bail!("--charset must not contain a line break");
+                }
+                expanded.push(escaped);
+            }
+            '?' => match chars.next() {
+                Some('?') => expanded.push('?'),
+                Some(token) => {
+                    let Some(class) = charset_class(token) else {
+                        anyhow::bail!("Unknown charset token '?{token}'");
+                    };
+                    expanded.extend(class);
+                }
+                None => anyhow::bail!("--charset ends with a dangling '?'"),
+            },
+            '\n' | '\r' => anyhow::bail!("--charset must not contain a line break"),
+            other => expanded.push(other),
+        }
+    }
+    Ok(expanded)
+}
+
 pub(crate) fn normalize_charset(charset: &str) -> Result<Vec<char>> {
     let mut seen = HashSet::new();
     let mut chars = Vec::new();
-    for value in charset.chars() {
-        if matches!(value, '\n' | '\r') {
-            anyhow::bail!("--charset must not contain a line break");
-        }
-        if seen.contains(&value) {
+    for value in expand_charset_tokens(charset)? {
+        if !seen.insert(value) {
             continue;
         }
         if chars.len() == MAX_CHARSET_LEN {
             anyhow::bail!("--charset contains more than {MAX_CHARSET_LEN} unique characters");
         }
-        seen.insert(value);
         chars.push(value);
     }
 
@@ -186,15 +232,23 @@ fn increment_digits(digits: &mut [usize], base: usize) {
     }
 }
 
+fn increment_mixed(digits: &mut [usize], bases: &[usize]) {
+    for (digit, base) in digits.iter_mut().zip(bases).rev() {
+        *digit += 1;
+        if *digit < *base {
+            return;
+        }
+        *digit = 0;
+    }
+}
+
 enum MaskPosition {
     Literal(char),
-    Variable,
+    Variable(Vec<char>),
 }
 
 pub(crate) struct MaskPlan {
     positions: Vec<MaskPosition>,
-    chars: Vec<char>,
-    variable_count: usize,
 }
 
 impl MaskPlan {
@@ -203,25 +257,45 @@ impl MaskPlan {
     }
 
     pub(crate) fn total(&self) -> Result<u128> {
-        combination_count(self.chars.len(), self.variable_count)
+        self.positions
+            .iter()
+            .try_fold(1u128, |total, position| match position {
+                MaskPosition::Literal(_) => Ok(total),
+                MaskPosition::Variable(chars) => total
+                    .checked_mul(chars.len() as u128)
+                    .context("Candidate count overflowed"),
+            })
+    }
+
+    fn variable_bases(&self) -> Vec<usize> {
+        self.positions
+            .iter()
+            .filter_map(|position| match position {
+                MaskPosition::Variable(chars) => Some(chars.len()),
+                MaskPosition::Literal(_) => None,
+            })
+            .collect()
     }
 
     pub(crate) fn candidate(&self, index: u128) -> String {
-        let base = self.chars.len() as u128;
         let mut value = index;
-        let mut digits = vec![0usize; self.variable_count];
-        for digit in digits.iter_mut().rev() {
-            *digit = (value % base) as usize;
-            value /= base;
+        let mut digits = Vec::new();
+        for position in self.positions.iter().rev() {
+            if let MaskPosition::Variable(chars) = position {
+                let base = chars.len() as u128;
+                digits.push((value % base) as usize);
+                value /= base;
+            }
         }
+        digits.reverse();
 
-        let mut candidate = String::with_capacity(self.positions.len().saturating_mul(4));
+        let mut candidate = String::with_capacity(self.positions.len());
         let mut variable = 0;
         for position in &self.positions {
             match position {
                 MaskPosition::Literal(value) => candidate.push(*value),
-                MaskPosition::Variable => {
-                    candidate.push(self.chars[digits[variable]]);
+                MaskPosition::Variable(chars) => {
+                    candidate.push(chars[digits[variable]]);
                     variable += 1;
                 }
             }
@@ -231,20 +305,16 @@ impl MaskPlan {
 }
 
 pub(crate) fn mask_plan(mask: &str, charset: &str) -> Result<MaskPlan> {
-    let chars = normalize_charset(charset)?;
-    let positions = parse_mask(mask)?;
-    let variable_count = positions
-        .iter()
-        .filter(|position| matches!(position, MaskPosition::Variable))
-        .count();
-    Ok(MaskPlan {
-        positions,
-        chars,
-        variable_count,
-    })
+    let custom = if charset.is_empty() {
+        Vec::new()
+    } else {
+        normalize_charset(charset)?
+    };
+    let positions = parse_mask(mask, &custom)?;
+    Ok(MaskPlan { positions })
 }
 
-fn parse_mask(mask: &str) -> Result<Vec<MaskPosition>> {
+fn parse_mask(mask: &str, custom: &[char]) -> Result<Vec<MaskPosition>> {
     if mask.is_empty() {
         anyhow::bail!("Mask must not be empty");
     }
@@ -252,18 +322,34 @@ fn parse_mask(mask: &str) -> Result<Vec<MaskPosition>> {
     let mut chars = mask.chars();
     let mut positions = Vec::new();
     while let Some(value) = chars.next() {
-        let position = if value == '?' {
-            match chars.next() {
-                Some('c') => MaskPosition::Variable,
+        let position = match value {
+            '\\' => {
+                let Some(escaped) = chars.next() else {
+                    anyhow::bail!("Mask ends with a dangling '\\'");
+                };
+                if matches!(escaped, '\n' | '\r') {
+                    anyhow::bail!("Mask literals must not contain a line break");
+                }
+                MaskPosition::Literal(escaped)
+            }
+            '?' => match chars.next() {
+                Some('c') => {
+                    if custom.is_empty() {
+                        anyhow::bail!("Mask uses '?c' but --charset is empty");
+                    }
+                    MaskPosition::Variable(custom.to_vec())
+                }
                 Some('?') => MaskPosition::Literal('?'),
-                Some(token) => anyhow::bail!("Unknown mask token '?{token}'"),
+                Some(token) => {
+                    let Some(class) = charset_class(token) else {
+                        anyhow::bail!("Unknown mask token '?{token}'");
+                    };
+                    MaskPosition::Variable(class)
+                }
                 None => anyhow::bail!("Mask ends with a dangling '?'"),
-            }
-        } else {
-            if matches!(value, '\n' | '\r') {
-                anyhow::bail!("Mask literals must not contain a line break");
-            }
-            MaskPosition::Literal(value)
+            },
+            '\n' | '\r' => anyhow::bail!("Mask literals must not contain a line break"),
+            other => MaskPosition::Literal(other),
         };
         if positions.len() == MAX_OUTPUT_LEN {
             anyhow::bail!("Mask output length exceeds the limit of {MAX_OUTPUT_LEN} characters");
@@ -310,7 +396,8 @@ pub fn write_masked<W: Write>(
     let total = plan.total()?;
     validate_candidate_count(total, force)?;
 
-    let mut digits = vec![0usize; plan.variable_count];
+    let bases = plan.variable_bases();
+    let mut digits = vec![0usize; bases.len()];
     let mut candidate = String::with_capacity(plan.output_len().saturating_mul(4));
     for _ in 0..total {
         candidate.clear();
@@ -318,15 +405,15 @@ pub fn write_masked<W: Write>(
         for position in &plan.positions {
             match position {
                 MaskPosition::Literal(value) => candidate.push(*value),
-                MaskPosition::Variable => {
-                    candidate.push(plan.chars[digits[variable]]);
+                MaskPosition::Variable(chars) => {
+                    candidate.push(chars[digits[variable]]);
                     variable += 1;
                 }
             }
         }
         writer.write_all(candidate.as_bytes())?;
         writer.write_all(b"\n")?;
-        increment_digits(&mut digits, plan.chars.len());
+        increment_mixed(&mut digits, &bases);
     }
     Ok(())
 }
