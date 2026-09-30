@@ -109,12 +109,6 @@ pub struct JwtParts {
     pub signature_hex: String,
 }
 
-/// Maximum encoded JWT length in bytes.
-///
-/// SECURITY: Unbounded tokens are a memory/CPU `DoS`. `split('.')` can allocate
-/// a slice per delimiter, and base64-decoding header/payload/signature grows
-/// with input. Typical JWTs are a few kilobytes; 64 KiB still covers oversized
-/// CTF tokens (embedded certs, large claims).
 pub const MAX_JWT_LEN: usize = 64 * 1024;
 
 pub const MAX_JWT_WORDLIST_BYTES: usize = 256 * 1024 * 1024;
@@ -331,6 +325,11 @@ pub fn crack_hmac_secret(token: &str, wordlist: &Path) -> Result<Option<String>>
 
 /// Forge alg=none token (header with none + given payload + empty signature).
 pub fn forge_none(payload_json: &str) -> Result<String> {
+    if payload_json.len() > MAX_JWT_LEN {
+        anyhow::bail!(
+            "JWT payload exceeds maximum length of {MAX_JWT_LEN} bytes to prevent Denial of Service"
+        );
+    }
     let _: serde_json::Value =
         serde_json::from_str(payload_json).context("Payload is not valid JSON")?;
     let header = r#"{"alg":"none","typ":"JWT"}"#;
