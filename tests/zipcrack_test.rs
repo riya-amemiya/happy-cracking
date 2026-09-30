@@ -53,21 +53,22 @@ fn verify_password_rejects_wrong() {
 #[test]
 fn brute_attack_recovers_short_numeric_password() {
     let bytes = make_encrypted_zip("042", "flag{zip_cracked}");
-    let found = zipcrack::brute_attack(&bytes, "0123456789", 1, 3).unwrap();
+    let found = zipcrack::brute_attack(&bytes, "0123456789", 1, 3, false).unwrap();
     assert_eq!(found, Some("042".to_string()));
 }
 
 #[test]
 fn brute_attack_not_found_returns_none() {
     let bytes = make_encrypted_zip("99", "flag{zip_cracked}");
-    let found = zipcrack::brute_attack(&bytes, "abc", 1, 2).unwrap();
+    let found = zipcrack::brute_attack(&bytes, "abc", 1, 2, false).unwrap();
     assert_eq!(found, None);
 }
 
 #[test]
 fn brute_attack_rejects_max_len_above_cap() {
     let bytes = make_encrypted_zip("xx", "flag{zip_cracked}");
-    let err = zipcrack::brute_attack(&bytes, "a", 1, zipcrack::MAX_BRUTE_LEN + 1).unwrap_err();
+    let err =
+        zipcrack::brute_attack(&bytes, "a", 1, zipcrack::MAX_BRUTE_LEN + 1, false).unwrap_err();
     assert!(
         err.to_string()
             .contains(&zipcrack::MAX_BRUTE_LEN.to_string())
@@ -79,7 +80,7 @@ fn brute_attack_rejects_max_len_above_cap() {
 fn brute_attack_rejects_len_beyond_u32() {
     let bytes = make_encrypted_zip("xx", "flag{zip_cracked}");
     let len = 1usize << 32;
-    let err = zipcrack::brute_attack(&bytes, "ab", len, len).unwrap_err();
+    let err = zipcrack::brute_attack(&bytes, "ab", len, len, false).unwrap_err();
     assert!(
         err.to_string()
             .contains(&zipcrack::MAX_BRUTE_LEN.to_string())
@@ -89,14 +90,14 @@ fn brute_attack_rejects_len_beyond_u32() {
 #[test]
 fn brute_attack_rejects_charset_line_break() {
     let bytes = make_encrypted_zip("a", "flag{zip_cracked}");
-    let err = zipcrack::brute_attack(&bytes, "a\n", 1, 1).unwrap_err();
+    let err = zipcrack::brute_attack(&bytes, "a\n", 1, 1, false).unwrap_err();
     assert!(err.to_string().contains("line break"));
 }
 
 #[test]
 fn brute_attack_deduplicates_charset_like_wordgen() {
     let bytes = make_encrypted_zip("a", "flag{zip_cracked}");
-    let found = zipcrack::brute_attack(&bytes, &"a".repeat(100), 1, 5).unwrap();
+    let found = zipcrack::brute_attack(&bytes, &"a".repeat(100), 1, 5, false).unwrap();
     assert_eq!(found, Some("a".to_string()));
 }
 
@@ -126,6 +127,20 @@ fn mask_attack_not_found_returns_none() {
     let bytes = make_encrypted_zip("nope", "flag{zip_cracked}");
     let found = zipcrack::mask_attack(&bytes, "AB?c", "01").unwrap();
     assert_eq!(found, None);
+}
+
+#[test]
+fn brute_attack_expands_charset_tokens() {
+    let bytes = make_encrypted_zip("07", "flag{zip_cracked}");
+    let found = zipcrack::brute_attack(&bytes, "?d", 2, 2, false).unwrap();
+    assert_eq!(found, Some("07".to_string()));
+}
+
+#[test]
+fn mask_attack_supports_class_tokens_without_charset() {
+    let bytes = make_encrypted_zip("a5", "flag{zip_cracked}");
+    let found = zipcrack::mask_attack(&bytes, "?l?d", "").unwrap();
+    assert_eq!(found, Some("a5".to_string()));
 }
 
 #[test]
@@ -181,8 +196,16 @@ fn brute_attack_oversized_space_errors() {
     let bytes = make_encrypted_zip("xx", "flag{zip_cracked}");
 
     let charset: String = (0x20u8..0x7f).map(|b| b as char).collect();
-    let result = zipcrack::brute_attack(&bytes, &charset, 1, 6);
+    let result = zipcrack::brute_attack(&bytes, &charset, 1, 6, false);
     assert!(result.is_err());
+}
+
+#[test]
+fn brute_attack_force_runs_over_keyspace_limit() {
+    let bytes = make_encrypted_zip("a", "flag{zip_cracked}");
+    let charset = "abcdefghijklmnopqrstuvwxyzABCDEF";
+    let found = zipcrack::brute_attack(&bytes, charset, 1, 6, true).unwrap();
+    assert_eq!(found, Some("a".to_string()));
 }
 
 #[test]

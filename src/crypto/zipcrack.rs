@@ -39,17 +39,24 @@ pub enum ZipcrackAction {
         min_len: usize,
         #[arg(long, help = "Maximum password length", default_value = "4")]
         max_len: usize,
+        #[arg(long, help = "Run even if the keyspace exceeds 1,000,000,000")]
+        force: bool,
     },
-    #[command(about = "Mask attack using wordgen ?c positions and ?? escapes")]
+    #[command(about = "Mask attack with ?d/?l/?u/?w/?a classes and ?c positions")]
     Mask {
         #[arg(short, long, help = "Path to the encrypted zip file")]
         file: PathBuf,
         #[arg(
             long,
-            help = "Mask containing fixed text, ?c variables, and ?? escapes"
+            help = "Mask with literals, ?d/?l/?u/?w/?a classes, ?c custom positions, and ?? or \\? for a literal ?"
         )]
         mask: String,
-        #[arg(short, long, help = "Characters for each ?c position")]
+        #[arg(
+            short,
+            long,
+            default_value = "",
+            help = "Characters for ?c positions (required only when the mask uses ?c)"
+        )]
         charset: String,
     },
     #[command(about = "Random attack sampling wordgen candidates")]
@@ -105,10 +112,11 @@ pub fn run(action: ZipcrackAction) -> Result<()> {
             charset,
             min_len,
             max_len,
+            force,
         } => {
             let bytes = read_zipcrack_bytes_with_limit(&file, MAX_ZIP_BYTES)?;
 
-            match brute_attack(&bytes, &charset, min_len, max_len)? {
+            match brute_attack(&bytes, &charset, min_len, max_len, force)? {
                 Some(found) => println!("Found password: {found}"),
                 None => println!("Not found"),
             }
@@ -205,6 +213,7 @@ pub fn brute_attack(
     charset: &str,
     min_len: usize,
     max_len: usize,
+    force: bool,
 ) -> Result<Option<String>> {
     let chars = wordgen::normalize_charset(charset)?;
     if min_len == 0 {
@@ -218,8 +227,10 @@ pub fn brute_attack(
     }
 
     let total = wordgen::enumerated_total(&chars, min_len, max_len)?;
-    if total > MAX_BRUTE_SPACE {
-        anyhow::bail!("Brute-force keyspace ({total}) exceeds the limit of {MAX_BRUTE_SPACE}");
+    if !force && total > MAX_BRUTE_SPACE {
+        anyhow::bail!(
+            "Brute-force keyspace ({total}) exceeds the limit of {MAX_BRUTE_SPACE}; pass --force to run anyway"
+        );
     }
 
     for len in min_len..=max_len {
