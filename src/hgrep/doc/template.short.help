@@ -1,0 +1,41 @@
+!!PROG!! !!VERSION!!
+Riya Amemiya
+
+!!PROG!! recursively searches the current directory for lines matching
+a regex pattern. By default, !!PROG!! will respect gitignore rules and
+automatically skip hidden files/directories and binary files.
+
+Use -h for short descriptions and --help for more details.
+
+When invoked as hgrep, the short flags -E -h -I -L -r -s -T -U -z -0 take
+their GNU grep meanings instead and -u is a usage error; see 'hgrep --help'.
+
+Project home page: https://github.com/riya-amemiya/happy-cracking
+
+USAGE:
+  !!PROG!! [OPTIONS] PATTERN [PATH ...]
+
+POSITIONAL ARGUMENTS:
+  <PATTERN>   A regular expression used for searching.
+  <PATH>...   A file or directory to search.
+
+INPUT OPTIONS:
+!!input!!
+
+SEARCH OPTIONS:
+!!search!!
+
+FILTER OPTIONS:
+!!filter!!
+
+OUTPUT OPTIONS:
+!!output!!
+
+OUTPUT MODES:
+!!output-modes!!
+
+LOGGING OPTIONS:
+!!logging!!
+
+OTHER BEHAVIORS:
+!!other-behaviors!!

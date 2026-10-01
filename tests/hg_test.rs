@@ -108,16 +108,24 @@ fn hg_searches_a_directory_without_recursive_flag() {
 }
 
 #[test]
-fn hgrep_still_rejects_a_directory_without_recursive() {
+fn hgrep_searches_a_directory_operand_like_rg() {
     let dir = scratch("hgrep_dir");
     put(&dir, "a.txt", b"needle\n");
-    let out = run(hgrep(), &["needle", dir.to_str().unwrap()]);
-    assert!(
-        out.stderr.contains("Is a directory"),
-        "got {:?}",
+    let out = run(hgrep(), &["-l", "needle", dir.to_str().unwrap()]);
+    assert_eq!(
+        rels(&out.stdout, &dir),
+        ["a.txt"],
+        "stderr {:?}",
         out.stderr
     );
-    assert_eq!(out.code, 2);
+    assert_eq!(out.code, 0);
+    let read = run(hgrep(), &["-d", "read", "needle", dir.to_str().unwrap()]);
+    assert!(
+        read.stderr.contains("Is a directory"),
+        "got {:?}",
+        read.stderr
+    );
+    assert_eq!(read.code, 2);
     fs::remove_dir_all(&dir).unwrap();
 }
 
@@ -165,7 +173,8 @@ fn hg_help_documents_no_ignore() {
     let line = out
         .stdout
         .lines()
-        .find(|l| l.contains("--no-ignore"))
+        .skip_while(|l| l.trim() != "--no-ignore")
+        .nth(1)
         .unwrap_or_else(|| panic!("no --no-ignore row in {:?}", out.stdout));
     assert!(
         line.to_ascii_lowercase().contains("gitignore"),
@@ -174,18 +183,24 @@ fn hg_help_documents_no_ignore() {
 }
 
 #[test]
-fn hg_searches_hidden_paths_that_are_not_gitignored() {
+fn hg_skips_hidden_paths_unless_hidden_is_given() {
     let dir = scratch("hidden");
     put(&dir, ".secret/flag.txt", b"needle\n");
     put(&dir, "visible.txt", b"needle\n");
     let out = run(hg(), &["-l", "needle", dir.to_str().unwrap()]);
-    let found = rels(&out.stdout, &dir);
-    assert!(
-        found.iter().any(|p| p.ends_with(".secret/flag.txt")),
-        "got {found:?} stderr {:?}",
+    assert_eq!(
+        rels(&out.stdout, &dir),
+        ["visible.txt"],
+        "stderr {:?}",
         out.stderr
     );
-    assert!(found.iter().any(|p| p == "visible.txt"), "got {found:?}");
+    let all = run(hg(), &["--hidden", "-l", "needle", dir.to_str().unwrap()]);
+    assert_eq!(
+        rels(&all.stdout, &dir),
+        [".secret/flag.txt", "visible.txt"],
+        "stderr {:?}",
+        all.stderr
+    );
     fs::remove_dir_all(&dir).unwrap();
 }
 

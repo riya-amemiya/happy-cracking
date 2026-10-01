@@ -1,13 +1,11 @@
 use std::ffi::OsString;
 use std::fs;
-use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
-use std::sync::atomic::AtomicBool;
 use std::time::SystemTime;
 
 use regex::bytes::{Regex, RegexBuilder};
 
-use super::walk::{Follow, Item, Kind};
+use super::walk::{Follow, GNU_FIND, Item, Kind, Sink};
 
 #[derive(Clone, Copy)]
 pub(crate) enum Cmp {
@@ -84,7 +82,7 @@ pub(crate) fn parse(
 
 impl Parser<'_> {
     fn peek(&self) -> Option<&[u8]> {
-        self.tokens.get(self.i).map(|t| t.as_bytes())
+        self.tokens.get(self.i).map(|t| t.as_encoded_bytes())
     }
 
     fn take_arg(&mut self, flag: &str) -> Result<OsString, String> {
@@ -177,14 +175,14 @@ impl Parser<'_> {
             .cloned()
             .ok_or_else(|| "expected an expression".to_string())?;
         self.i += 1;
-        match tok.as_bytes() {
+        match tok.as_encoded_bytes() {
             b"," => Err("the comma operator is not supported".into()),
             b"-true" => Ok(Expr::True),
             b"-false" => Ok(Expr::False),
             b"-print" | b"-print0" => {
                 self.has_action = true;
                 Ok(Expr::Print {
-                    nul: tok.as_bytes() == b"-print0",
+                    nul: tok.as_encoded_bytes() == b"-print0",
                 })
             }
             b"-empty" => Ok(Expr::Empty),
@@ -217,7 +215,7 @@ impl Parser<'_> {
     fn glob_arg(&mut self, flag: &str, fold: bool, whole: bool) -> Result<Expr, String> {
         let raw = self.take_arg(flag)?;
         Ok(Expr::Glob {
-            pat: raw.as_bytes().to_vec(),
+            pat: raw.as_encoded_bytes().to_vec(),
             fold,
             whole,
         })
@@ -240,7 +238,7 @@ impl Parser<'_> {
 
     fn type_arg(&mut self) -> Result<Expr, String> {
         let raw = self.take_arg("-type")?;
-        let kind = match raw.as_bytes() {
+        let kind = match raw.as_encoded_bytes() {
             b"f" => Kind::File,
             b"d" => Kind::Dir,
             b"l" => Kind::Link,
@@ -256,13 +254,13 @@ impl Parser<'_> {
 
     fn size_arg(&mut self) -> Result<Expr, String> {
         let raw = self.take_arg("-size")?;
-        let (cmp, n, unit) = parse_size(raw.as_bytes())?;
+        let (cmp, n, unit) = parse_size(raw.as_encoded_bytes())?;
         Ok(Expr::Size { cmp, n, unit })
     }
 
     fn age_arg(&mut self, flag: &str, unit: u64) -> Result<Expr, String> {
         let raw = self.take_arg(flag)?;
-        let (cmp, n) = parse_signed(raw.as_bytes())
+        let (cmp, n) = parse_signed(raw.as_encoded_bytes())
             .ok_or_else(|| format!("invalid argument `{}' to `{flag}'", raw.to_string_lossy()))?;
         Ok(Expr::Age { cmp, n, unit })
     }
@@ -284,7 +282,7 @@ impl Parser<'_> {
 
     fn nat_arg(&mut self, flag: &str) -> Result<usize, String> {
         let raw = self.take_arg(flag)?;
-        std::str::from_utf8(raw.as_bytes())
+        std::str::from_utf8(raw.as_encoded_bytes())
             .ok()
             .filter(|s| !s.is_empty() && s.bytes().all(|c| c.is_ascii_digit()))
             .and_then(|s| s.parse().ok())
@@ -353,32 +351,29 @@ pub(crate) fn needs_meta(expr: &Expr) -> bool {
     false
 }
 
-pub(crate) fn eval(
-    expr: &Expr,
-    item: &Item,
-    now: SystemTime,
-    errors: &AtomicBool,
-    emit: &mut impl FnMut(&[u8], bool),
-) -> bool {
+pub(crate) fn eval(expr: &Expr, item: &Item, now: SystemTime, sink: &mut Sink<'_>) -> bool {
     match expr {
         Expr::True => true,
         Expr::False => false,
         Expr::Print { nul } => {
-            emit(item.path.as_os_str().as_bytes(), *nul);
+            sink.emit(
+                item.path.as_os_str().as_encoded_bytes(),
+                if *nul { 0 } else { b'\n' },
+            );
             true
         }
-        Expr::Not(e) => !eval(e, item, now, errors, emit),
-        Expr::And(items) => items.iter().all(|e| eval(e, item, now, errors, emit)),
-        Expr::Or(items) => items.iter().any(|e| eval(e, item, now, errors, emit)),
+        Expr::Not(e) => !eval(e, item, now, sink),
+        Expr::And(items) => items.iter().all(|e| eval(e, item, now, sink)),
+        Expr::Or(items) => items.iter().any(|e| eval(e, item, now, sink)),
         Expr::Glob { pat, fold, whole } => {
             let text = if *whole {
-                item.path.as_os_str().as_bytes()
+                item.path.as_os_str().as_encoded_bytes()
             } else {
                 base_name(item.path)
             };
             glob_match(pat, text, *fold)
         }
-        Expr::Regex(re) => re.is_match(item.path.as_os_str().as_bytes()),
+        Expr::Regex(re) => re.is_match(item.path.as_os_str().as_encoded_bytes()),
         Expr::Type(k) => item.kind == *k,
         Expr::Size { cmp, n, unit } => item
             .meta
@@ -388,7 +383,9 @@ pub(crate) fn eval(
             Kind::Dir => match fs::read_dir(item.path) {
                 Ok(mut rd) => rd.next().is_none(),
                 Err(e) => {
-                    super::walk::report(item.path, e, errors);
+                    if GNU_FIND {
+                        sink.report(item.path, &e);
+                    }
                     false
                 }
             },
@@ -406,7 +403,7 @@ pub(crate) fn eval(
 }
 
 fn base_name(path: &Path) -> &[u8] {
-    let bytes = path.as_os_str().as_bytes();
+    let bytes = path.as_os_str().as_encoded_bytes();
     let mut end = bytes.len();
     while end > 1 && bytes[end - 1] == b'/' {
         end -= 1;
@@ -622,6 +619,7 @@ fn glob_match(pat: &[u8], text: &[u8], fold: bool) -> bool {
 mod tests {
     use super::*;
     use std::os::unix::fs::PermissionsExt;
+    use std::sync::atomic::AtomicBool;
 
     #[test]
     fn glob_and_age_edges() {
@@ -701,12 +699,9 @@ mod tests {
             meta: None,
         };
         let errors = AtomicBool::new(false);
-        let now = SystemTime::now();
-        let mut printed = false;
-        assert!(eval(&expr, &item, now, &errors, &mut |_, _| {
-            printed = true;
-        }));
-        assert!(printed);
+        let mut sink = Sink::new(&errors);
+        assert!(eval(&expr, &item, SystemTime::now(), &mut sink));
+        assert_eq!(sink.out, b"ab\n");
     }
 
     #[test]
@@ -796,19 +791,13 @@ mod tests {
         let errors = AtomicBool::new(false);
         let now = SystemTime::now();
         let file = item("ab", Kind::File, None);
-        fn noop(_: &[u8], _: bool) {}
-        noop(b"", false);
-        let mut saw = false;
-        assert!(eval(&even, &file, now, &errors, &mut |_, _| {
-            saw = true;
-        }));
-        assert!(saw);
-        assert!(!eval(&odd, &file, now, &errors, &mut noop));
-        let mut saw_nul = false;
-        assert!(eval(&typed, &file, now, &errors, &mut |_, nul| {
-            saw_nul = nul;
-        }));
-        assert!(saw_nul);
+        let mut sink = Sink::new(&errors);
+        assert!(eval(&even, &file, now, &mut sink));
+        assert_eq!(sink.out, b"ab\n");
+        assert!(!eval(&odd, &file, now, &mut sink));
+        assert_eq!(sink.out, b"ab\n");
+        assert!(eval(&typed, &file, now, &mut sink));
+        assert_eq!(sink.out, b"ab\nab\0");
         assert!(!eval(
             &Expr::Size {
                 cmp: Cmp::Eq,
@@ -817,8 +806,7 @@ mod tests {
             },
             &file,
             now,
-            &errors,
-            &mut noop
+            &mut sink,
         ));
         assert!(!eval(
             &Expr::Age {
@@ -828,17 +816,10 @@ mod tests {
             },
             &file,
             now,
-            &errors,
-            &mut noop
+            &mut sink,
         ));
-        assert!(!eval(&Expr::Newer(now), &file, now, &errors, &mut noop));
-        assert!(eval(
-            &Expr::Type(Kind::File),
-            &file,
-            now,
-            &errors,
-            &mut noop
-        ));
+        assert!(!eval(&Expr::Newer(now), &file, now, &mut sink));
+        assert!(eval(&Expr::Type(Kind::File), &file, now, &mut sink,));
         assert!(eval(
             &Expr::Glob {
                 pat: b"ab".to_vec(),
@@ -847,8 +828,7 @@ mod tests {
             },
             &file,
             now,
-            &errors,
-            &mut noop
+            &mut sink,
         ));
         assert!(eval(
             &Expr::Glob {
@@ -858,15 +838,13 @@ mod tests {
             },
             &file,
             now,
-            &errors,
-            &mut noop
+            &mut sink,
         ));
         assert!(!eval(
             &Expr::Empty,
             &item("l", Kind::Link, None),
             now,
-            &errors,
-            &mut noop
+            &mut sink,
         ));
         assert!(parse_size(b"18446744073709551616c").is_err());
         assert!(parse_signed(b"9223372036854775808").is_none());
@@ -912,29 +890,25 @@ mod tests {
             &age,
             &item(newer.to_str().unwrap(), Kind::File, Some(&meta)),
             now,
-            &errors,
-            &mut noop,
+            &mut sink,
         );
         let _ = eval(
             &age_h,
             &item(newer.to_str().unwrap(), Kind::File, Some(&meta)),
             now,
-            &errors,
-            &mut noop,
+            &mut sink,
         );
         assert!(eval(
             &Expr::Empty,
             &item(empty.to_str().unwrap(), Kind::Dir, None),
             now,
-            &errors,
-            &mut noop
+            &mut sink,
         ));
         assert!(!eval(
             &Expr::Empty,
             &item(locked.to_str().unwrap(), Kind::Dir, None),
             now,
-            &errors,
-            &mut noop
+            &mut sink,
         ));
         fs::set_permissions(&locked, fs::Permissions::from_mode(0o755)).unwrap();
         fs::remove_dir_all(&dir).unwrap();

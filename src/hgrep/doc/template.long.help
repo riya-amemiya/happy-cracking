@@ -1,0 +1,77 @@
+!!PROG!! !!VERSION!!
+Riya Amemiya
+
+!!PROG!! recursively searches the current directory for lines matching
+a regex pattern. By default, !!PROG!! will respect gitignore rules and
+automatically skip hidden files/directories and binary files.
+
+Use -h for short descriptions and --help for more details.
+
+Project home page: https://github.com/riya-amemiya/happy-cracking
+
+USAGE:
+    !!PROG!! [OPTIONS] PATTERN [PATH ...]
+    !!PROG!! [OPTIONS] -e PATTERN ... [PATH ...]
+    !!PROG!! [OPTIONS] -f PATTERNFILE ... [PATH ...]
+    !!PROG!! [OPTIONS] --files [PATH ...]
+    !!PROG!! [OPTIONS] --type-list
+    command | !!PROG!! [OPTIONS] PATTERN
+    !!PROG!! [OPTIONS] --help
+    !!PROG!! [OPTIONS] --version
+
+POSITIONAL ARGUMENTS:
+    <PATTERN>
+        A regular expression used for searching. To match a pattern beginning
+        with a dash, use the -e/--regexp flag.
+
+        For example, to search for the literal '-foo', you can use this flag:
+
+            !!PROG!! -e -foo
+
+        You can also use the special '--' delimiter to indicate that no more
+        flags will be provided. Namely, the following is equivalent to the
+        above:
+
+            !!PROG!! -- -foo
+
+    <PATH>...
+        A file or directory to search. Directories are searched recursively.
+        File paths specified on the command line override glob and ignore
+        rules.
+
+GREP COMPATIBILITY:
+    When invoked as hgrep, the program behaves like GNU grep, and 'hgrep
+    --help' documents that mode. These short flags then take their GNU grep
+    meanings instead of the ones documented below:
+
+        -E  --extended-regexp        -s  --no-messages
+        -h  --no-filename            -T  --initial-tab
+        -I  --binary-files=without-match
+        -L  --files-without-match    -U  --binary (no effect)
+        -r  --recursive              -z  --null-data
+        -0  --context=0
+        -u  rejected with GNU grep's usage error and exit status 2
+
+    Every long flag documented below is also accepted by hgrep, except that
+    --binary there means GNU grep's -U/--binary.
+
+INPUT OPTIONS:
+!!input!!
+
+SEARCH OPTIONS:
+!!search!!
+
+FILTER OPTIONS:
+!!filter!!
+
+OUTPUT OPTIONS:
+!!output!!
+
+OUTPUT MODES:
+!!output-modes!!
+
+LOGGING OPTIONS:
+!!logging!!
+
+OTHER BEHAVIORS:
+!!other-behaviors!!

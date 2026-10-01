@@ -1,0 +1,84 @@
+Usage: !!PROG!! [OPTION]... PATTERNS [FILE]...
+Search each FILE for lines that match PATTERNS.
+Example: !!PROG!! -i 'hello world' menu.h main.c
+PATTERNS may hold several patterns, one per line.
+
+Pattern selection and interpretation:
+  -E, --extended-regexp     treat PATTERNS as POSIX extended regexes
+  -F, --fixed-strings       treat PATTERNS as literal strings
+  -G, --basic-regexp        treat PATTERNS as POSIX basic regexes (default)
+  -P, --perl-regexp         treat PATTERNS as Perl-compatible regexes
+  -e, --regexp=PATTERNS     search for PATTERNS; may be repeated
+  -f, --file=FILE           read PATTERNS from FILE, one per line
+  -i, --ignore-case         match without regard to letter case
+      --no-ignore-case      match letter case exactly (default)
+  -w, --word-regexp         match whole words only
+  -x, --line-regexp         match whole lines only
+  -z, --null-data           input lines end with a NUL byte, not a newline
+
+Miscellaneous:
+  -s, --no-messages         do not report missing or unreadable files
+  -v, --invert-match        select the lines that do not match
+  -V, --version             print version information and exit
+      --help                print this help and exit
+
+Output control:
+  -m, --max-count=NUM       stop reading a file after NUM selected lines
+  -b, --byte-offset         prefix output lines with their byte offset
+  -n, --line-number         prefix output lines with their line number
+      --line-buffered       flush the output after every line
+  -H, --with-filename       prefix output lines with the file name
+  -h, --no-filename         never prefix output lines with the file name
+      --label=LABEL         call standard input LABEL in the output
+  -o, --only-matching       print only the non-empty matching parts
+  -q, --quiet, --silent     print nothing; report a match by exit status
+      --binary-files=TYPE   treat binary files as TYPE, which is
+                            'binary', 'text', or 'without-match'
+  -a, --text                same as --binary-files=text
+  -I                        same as --binary-files=without-match
+  -d, --directories=ACTION  what to do with directories; ACTION is
+                            'read', 'recurse', or 'skip'
+  -D, --devices=ACTION      what to do with devices, FIFOs and sockets;
+                            ACTION is 'read' or 'skip'
+  -r, --recursive           same as --directories=recurse
+  -R, --dereference-recursive  the same, and follow every symlink
+      --include=GLOB        search only files whose name matches GLOB
+      --exclude=GLOB        skip files whose name matches GLOB
+      --exclude-from=FILE   skip files matching any glob listed in FILE
+      --exclude-dir=GLOB    skip directories whose name matches GLOB
+      --gitignore           skip paths that .gitignore excludes; needs -r or -R
+  -L, --files-without-match  list only the FILEs without selected lines
+  -l, --files-with-matches  list only the FILEs with selected lines
+  -c, --count               print only the number of selected lines per FILE
+  -T, --initial-tab         start line content on a tab stop
+  -Z, --null                print a NUL byte after each FILE name
+
+Context control:
+  -B, --before-context=NUM  print NUM lines before each match
+  -A, --after-context=NUM   print NUM lines after each match
+  -C, --context=NUM         print NUM lines before and after each match
+  -NUM                      same as --context=NUM
+      --group-separator=SEP  print SEP between groups of context lines
+      --no-group-separator  print nothing between groups of context lines
+      --color[=WHEN],
+      --colour[=WHEN]       highlight the matches; WHEN is 'always',
+                            'never', or 'auto'
+  -U, --binary              keep CR characters at line ends (no effect)
+
+Options from ripgrep, also accepted here:
+!!RIPGREP!!
+
+When FILE is '-', standard input is read.  Without a FILE, standard input
+is read, unless -r is given, in which case the working directory is
+searched.  File names are shown when more than one file is searched.  -y and
+--fixed-regexp are obsolete spellings of -i and -F, and -X MATCHER picks the
+syntax by name: grep, egrep, fgrep or perl.  -u is rejected with the usage
+error above and exit status 2, as in GNU grep.  The exit status is 0 if a
+line is selected and 1 if none is; it is 2 if an error occurred, unless -q
+was given and a line was selected.
+
+When invoked as hg or hrg, the options -E -h -I -L -r -s -T -U -z and -0 take
+their ripgrep meanings, and -u means --unrestricted; see 'hg --help'.
+
+Report bugs to: <https://github.com/riya-amemiya/happy-cracking/issues>
+happy-cracking home page: <https://github.com/riya-amemiya/happy-cracking>

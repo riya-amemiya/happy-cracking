@@ -1,32 +1,84 @@
-mod cli;
-mod matcher;
-mod search;
-mod source;
-mod walk;
+mod app;
+mod doc;
+mod escape;
+mod flags;
+mod gitfilter;
+mod gnu_search;
+mod gnuwalk;
+mod haystack;
+mod hiargs;
+mod hostname;
+mod matchers;
+mod messages;
+mod ordered;
+mod out;
+mod patterns;
+mod process;
+mod queue;
+mod worker;
 
-use std::cell::RefCell;
 use std::fs::File;
-use std::io::{self, IsTerminal, Read, Write};
-use std::os::unix::ffi::{OsStrExt, OsStringExt};
+use std::io::{self, Read};
 use std::path::Path;
 use std::process::ExitCode;
-use std::sync::Mutex;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::OnceLock;
 
-use crate::hc_internal::outbuf;
-use clap::Parser;
-
-use cli::{Cli, apply_search_defaults, invoked_as_rg_style};
-use matcher::build_matcher;
-use search::{Job, may_stop_early, report, search_buf, search_exists, selected};
-use source::{from_file, open_source};
-use walk::for_each_path;
-
-thread_local! {
-    static SLOT: RefCell<(Vec<u8>, Vec<u8>)> = const { RefCell::new((Vec::new(), Vec::new())) };
-}
+use flags::Personality;
 
 pub const MAX_PATTERN_FILE_BYTES: usize = 16 * 1024 * 1024;
+
+static PERSONALITY: OnceLock<Personality> = OnceLock::new();
+
+fn set_personality(personality: Personality) {
+    let _ = PERSONALITY.set(personality);
+}
+
+fn personality() -> Personality {
+    PERSONALITY.get().copied().unwrap_or(Personality::Grep)
+}
+
+fn strip_os_error(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(at) = rest.find(" (os error ") {
+        out.push_str(&rest[..at]);
+        let tail = &rest[at + " (os error ".len()..];
+        match tail.find(')') {
+            Some(end) if tail[..end].bytes().all(|b| b.is_ascii_digit()) => {
+                rest = &tail[end + 1..];
+            }
+            _ => {
+                out.push_str(" (os error ");
+                rest = tail;
+            }
+        }
+    }
+    out.push_str(rest);
+    out
+}
+
+fn strip_io_prefix(text: &str) -> String {
+    let marker = "IO error for operation on ";
+    let Some(at) = text.find(marker) else {
+        return text.to_string();
+    };
+    let tail = &text[at + marker.len()..];
+    match tail.find(": ") {
+        Some(end) => format!("{}{}", &text[..at], &tail[end + 2..]),
+        None => text.to_string(),
+    }
+}
+
+pub(crate) fn format_error(text: &str) -> String {
+    match personality() {
+        Personality::Rg => text.to_string(),
+        Personality::Grep => strip_os_error(&strip_io_prefix(text)),
+    }
+}
+
+pub(crate) fn format_parallel_error(text: &str) -> String {
+    format_error(&strip_io_prefix(text))
+}
 
 pub fn read_pattern_file_with_limit(path: &Path, max_bytes: usize) -> io::Result<Vec<u8>> {
     let max_bytes = max_bytes.min(MAX_PATTERN_FILE_BYTES);
@@ -47,225 +99,23 @@ pub fn read_pattern_file_with_limit(path: &Path, max_bytes: usize) -> io::Result
 
 #[must_use]
 pub fn run() -> ExitCode {
-    let mut cli = Cli::parse();
-    apply_search_defaults(&mut cli, invoked_as_rg_style(), io::stdin().is_terminal());
-
-    let patterns: Vec<Vec<u8>> = if !cli.patterns.is_empty() || cli.pattern_file.is_some() {
-        let mut ps: Vec<Vec<u8>> = cli
-            .patterns
-            .iter()
-            .map(|p| p.as_os_str().as_bytes().to_vec())
-            .collect();
-        if let Some(f) = &cli.pattern_file {
-            match read_pattern_file_with_limit(f, MAX_PATTERN_FILE_BYTES) {
-                Ok(data) if !data.is_empty() => {
-                    let body = data.strip_suffix(b"\n").unwrap_or(&data);
-                    ps.extend(
-                        body.split(|&b| b == b'\n')
-                            .map(|l| l.strip_suffix(b"\r").unwrap_or(l).to_vec()),
-                    );
-                }
-                Ok(_) => {}
-                Err(e) => {
-                    eprintln!("hgrep: {}: {e}", f.display());
-                    return ExitCode::from(2);
-                }
-            }
-        }
-        ps
-    } else if cli.operands.is_empty() {
-        eprintln!("hgrep: no pattern given");
-        return ExitCode::from(2);
-    } else {
-        vec![cli.operands.remove(0).into_vec()]
-    };
-
-    let matcher = match build_matcher(&cli, &patterns) {
-        Ok(m) => m,
-        Err(e) => {
-            eprintln!("hgrep: {e}");
-            return ExitCode::from(2);
-        }
-    };
-
-    let errors = AtomicBool::new(false);
-    let found = AtomicBool::new(false);
-    let show_name = if cli.no_filename {
-        false
-    } else {
-        cli.with_filename || cli.recursive || cli.operands.len() > 1
-    };
-    let job = Job {
-        matcher: &matcher,
-        cli: &cli,
-        show_name,
-        emit_lines: !(cli.count || cli.files_with_matches || cli.files_without_match || cli.quiet),
-    };
-
-    if cli.operands.is_empty() {
-        let mut buf = Vec::new();
-        if let Err(e) = io::stdin().lock().read_to_end(&mut buf) {
-            eprintln!("hgrep: (standard input): {e}");
-            return ExitCode::from(2);
-        }
-        let mut out = Vec::new();
-        let count = search_buf(&buf, &job, b"(standard input)", &mut out);
-        report(&job, b"(standard input)", count, &mut out);
-        let _ = io::stdout().lock().write_all(&out);
-        return exit_code(selected(&cli, count), false);
-    }
-
-    let sink = Mutex::new(io::BufWriter::with_capacity(256 * 1024, io::stdout()));
-    let early = may_stop_early(&cli);
-    for_each_path(
-        &cli.operands,
-        cli.recursive,
-        cli.gitignore,
-        &errors,
-        cli.no_messages,
-        |path, file| process_path(path, file, &job, &sink, &found, &errors, early),
-    );
-
-    outbuf::finish(&sink);
-    exit_code(
-        found.load(Ordering::Relaxed),
-        errors.load(Ordering::Relaxed),
-    )
+    app::run()
 }
 
-struct OpenedFile<'a> {
-    path: &'a Path,
-    file: Option<File>,
-}
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-fn process_path(
-    path: &Path,
-    file: Option<File>,
-    job: &Job<'_>,
-    sink: &Mutex<io::BufWriter<io::Stdout>>,
-    found: &AtomicBool,
-    errors: &AtomicBool,
-    early: bool,
-) {
-    if job.cli.quiet && found.load(Ordering::Relaxed) {
-        return;
-    }
-    with_thread_bufs(|read_buf, out| {
-        out.clear();
-        let name = path.as_os_str().as_bytes();
-        let count = stream_or_search(
-            OpenedFile { path, file },
-            job,
-            name,
-            read_buf,
-            out,
-            errors,
-            early,
+    #[test]
+    fn grep_errors_drop_rust_decorations() {
+        assert_eq!(
+            strip_io_prefix("x.txt: IO error for operation on x.txt: No such file or directory"),
+            "x.txt: No such file or directory"
         );
-        let Some(count) = count else {
-            return;
-        };
-        if selected(job.cli, count) {
-            found.store(true, Ordering::Relaxed);
-        }
-        report(job, name, count, out);
-        if !out.is_empty() {
-            outbuf::push(sink, out, None);
-        }
-    });
-}
-
-fn with_thread_bufs(f: impl FnOnce(&mut Vec<u8>, &mut Vec<u8>)) {
-    SLOT.with(|slot| {
-        if let Ok(mut pair) = slot.try_borrow_mut() {
-            let (read_buf, out) = &mut *pair;
-            f(read_buf, out);
-            return;
-        }
-        // Nested rayon work on this thread (a large-file split joining while
-        // the directory walk still holds the slot) needs a private pair.
-        let mut read_buf = Vec::new();
-        let mut out = Vec::new();
-        f(&mut read_buf, &mut out);
-    });
-}
-
-fn source_of<'a>(
-    opened: OpenedFile<'_>,
-    buf: &'a mut Vec<u8>,
-    early: bool,
-) -> io::Result<source::Source<'a>> {
-    match opened.file {
-        Some(file) => from_file(file, buf, early),
-        None => open_source(opened.path, buf, early),
-    }
-}
-
-fn stream_or_search(
-    opened: OpenedFile<'_>,
-    job: &Job<'_>,
-    name: &[u8],
-    read_buf: &mut Vec<u8>,
-    out: &mut Vec<u8>,
-    errors: &AtomicBool,
-    early: bool,
-) -> Option<u64> {
-    if early
-        && !job.cli.invert
-        && !job.cli.count
-        && let Some(overlap) = job.matcher.stream_overlap()
-    {
-        let path = opened.path;
-        return match source_of(opened, read_buf, true) {
-            Ok(src) => {
-                let count = search_exists(src.bytes(), job, overlap, || src.prefetch_from(0));
-                drop(src);
-                Some(count)
-            }
-            Err(e) => {
-                errors.store(true, Ordering::Relaxed);
-                if !job.cli.no_messages {
-                    eprintln!("hgrep: {}: {e}", path.display());
-                }
-                None
-            }
-        };
-    }
-    open_and_search(opened, job, name, read_buf, out, errors, early)
-}
-
-fn open_and_search(
-    opened: OpenedFile<'_>,
-    job: &Job<'_>,
-    name: &[u8],
-    read_buf: &mut Vec<u8>,
-    out: &mut Vec<u8>,
-    errors: &AtomicBool,
-    early: bool,
-) -> Option<u64> {
-    let path = opened.path;
-    match source_of(opened, read_buf, early) {
-        Ok(src) => {
-            let count = search_buf(src.bytes(), job, name, out);
-            drop(src);
-            Some(count)
-        }
-        Err(e) => {
-            errors.store(true, Ordering::Relaxed);
-            if !job.cli.no_messages {
-                eprintln!("hgrep: {}: {e}", path.display());
-            }
-            None
-        }
-    }
-}
-
-fn exit_code(found: bool, errored: bool) -> ExitCode {
-    if errored {
-        ExitCode::from(2)
-    } else if found {
-        ExitCode::SUCCESS
-    } else {
-        ExitCode::from(1)
+        assert_eq!(
+            strip_os_error("x: Permission denied (os error 13)"),
+            "x: Permission denied"
+        );
+        assert_eq!(strip_os_error("a (os error x) b"), "a (os error x) b");
     }
 }

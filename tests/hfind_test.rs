@@ -2442,3 +2442,692 @@ fn gitignore_double_star_and_question() {
     assert!(!got.contains(&"z/end".to_string()), "{got:?}");
     fs::remove_dir_all(&dir).unwrap();
 }
+
+fn fd_command(bin: &str, dir: &Path) -> Command {
+    let home = sandbox();
+    let mut cmd = Command::new(bin);
+    cmd.current_dir(dir)
+        .env("HOME", home)
+        .env("XDG_CONFIG_HOME", home.join("xdg"))
+        .env("GIT_CONFIG_GLOBAL", home.join("absent-config"))
+        .env("GIT_CONFIG_NOSYSTEM", "1")
+        .env_remove("LS_COLORS")
+        .env_remove("NO_COLOR")
+        .env_remove("COLUMNS");
+    cmd
+}
+
+fn run_bin(bin: &str, dir: &Path, envs: &[(&str, &str)], args: &[&str]) -> Run {
+    let mut cmd = fd_command(bin, dir);
+    for (k, v) in envs {
+        cmd.env(k, v);
+    }
+    let out = cmd.args(args).output().unwrap();
+    Run {
+        stdout: String::from_utf8_lossy(&out.stdout).into_owned(),
+        stderr: String::from_utf8_lossy(&out.stderr).into_owned(),
+        code: out.status.code().unwrap_or(-1),
+        raw: out.stdout,
+    }
+}
+
+fn hfd(dir: &Path, args: &[&str]) -> Run {
+    run_bin(env!("CARGO_BIN_EXE_hfd"), dir, &[], args)
+}
+
+fn sorted_lines(text: &str) -> Vec<String> {
+    let mut lines: Vec<String> = text.lines().map(str::to_string).collect();
+    lines.sort();
+    lines
+}
+
+fn fd_fixture(tag: &str) -> PathBuf {
+    let dir = git_repo(tag);
+    put(&dir, ".gitignore", b"*.log\nbuild/\n");
+    for rel in [
+        "a.rs",
+        "B.RS",
+        "notes.txt",
+        "app.log",
+        ".hidden",
+        "build/out.o",
+        "src/main.rs",
+        "src/lib.rs",
+        "src/deep/x.md",
+    ] {
+        put(&dir, rel, b"x");
+    }
+    put(&dir, "empty_file", b"");
+    put(&dir, "big.bin", &[0u8; 2000]);
+    put(&dir, "run.sh", b"#!/bin/sh\n");
+    fs::set_permissions(dir.join("run.sh"), fs::Permissions::from_mode(0o755)).unwrap();
+    fs::create_dir_all(dir.join("empty_dir")).unwrap();
+    std::os::unix::fs::symlink("src/main.rs", dir.join("link")).unwrap();
+    set_mtime(&dir.join("notes.txt"), 1_577_836_800);
+    dir
+}
+
+const FD_DEFAULT: &str = "B.RS\na.rs\nbig.bin\nempty_dir/\nempty_file\nlink\nnotes.txt\nrun.sh\nsrc/\nsrc/deep/\nsrc/deep/x.md\nsrc/lib.rs\nsrc/main.rs\n";
+
+#[test]
+fn fd_default_listing_is_sorted_with_trailing_slashes() {
+    let dir = fd_fixture("fd_default");
+    let out = hfd(&dir, &["--max-buffer-time", "60000"]);
+    assert_eq!(out.code, 0, "{}", out.stderr);
+    assert_eq!(out.stdout, FD_DEFAULT);
+    fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn fd_hidden_and_ignore_flags() {
+    let dir = fd_fixture("fd_hidden");
+    let hidden = sorted_lines(&hfd(&dir, &["-H"]).stdout);
+    assert!(hidden.contains(&".hidden".to_string()), "{hidden:?}");
+    assert!(hidden.contains(&".git/".to_string()), "{hidden:?}");
+    assert!(!hidden.contains(&"app.log".to_string()), "{hidden:?}");
+    let no_ignore = sorted_lines(&hfd(&dir, &["-I"]).stdout);
+    assert!(no_ignore.contains(&"app.log".to_string()), "{no_ignore:?}");
+    assert!(
+        no_ignore.contains(&"build/out.o".to_string()),
+        "{no_ignore:?}"
+    );
+    assert!(!no_ignore.contains(&".hidden".to_string()), "{no_ignore:?}");
+    let all = sorted_lines(&hfd(&dir, &["-u"]).stdout);
+    assert_eq!(all.len(), 19, "{all:?}");
+    assert_eq!(
+        sorted_lines(&hfd(&dir, &["-H", "--no-hidden"]).stdout).len(),
+        13
+    );
+    assert_eq!(
+        sorted_lines(&hfd(&dir, &["-I", "--ignore"]).stdout).len(),
+        13
+    );
+    fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn fd_patterns_smart_case_glob_fixed_and_full_path() {
+    let dir = fd_fixture("fd_patterns");
+    let lines = |args: &[&str]| sorted_lines(&hfd(&dir, args).stdout);
+    assert_eq!(
+        lines(&["rs"]),
+        ["B.RS", "a.rs", "src/lib.rs", "src/main.rs"]
+    );
+    assert_eq!(lines(&["RS"]), ["B.RS"]);
+    assert_eq!(lines(&["-s", "rs"]), ["a.rs", "src/lib.rs", "src/main.rs"]);
+    assert_eq!(lines(&["-i", "RS"]).len(), 4);
+    assert_eq!(lines(&["-g", "*.rs"]).len(), 4);
+    assert_eq!(lines(&["-g", "*.RS"]), ["B.RS"]);
+    assert_eq!(lines(&["-F", "."]).len(), 8);
+    assert_eq!(lines(&["-p", "src/deep"]), ["src/deep/", "src/deep/x.md"]);
+    assert_eq!(lines(&["rs", "--and", "main"]), ["src/main.rs"]);
+    assert_eq!(
+        lines(&["^[a-z]+\\.rs$"]),
+        ["B.RS", "a.rs", "src/lib.rs", "src/main.rs"]
+    );
+    assert_eq!(lines(&["^[A-Z]"]), ["B.RS"]);
+    fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn fd_filters_types_extensions_depth_size_time() {
+    let dir = fd_fixture("fd_filters");
+    let lines = |args: &[&str]| sorted_lines(&hfd(&dir, args).stdout);
+    assert_eq!(
+        lines(&["-e", "rs"]),
+        ["B.RS", "a.rs", "src/lib.rs", "src/main.rs"]
+    );
+    assert_eq!(lines(&["-e", ".md"]), ["src/deep/x.md"]);
+    assert_eq!(lines(&["-t", "d"]), ["empty_dir/", "src/", "src/deep/"]);
+    assert_eq!(lines(&["-t", "l"]), ["link"]);
+    assert_eq!(lines(&["-t", "x"]), ["run.sh"]);
+    assert_eq!(lines(&["-t", "e"]), ["empty_dir/", "empty_file"]);
+    assert_eq!(lines(&["-te", "-tf"]), ["empty_file"]);
+    assert_eq!(lines(&["-t", "f"]).len(), 9);
+    assert_eq!(lines(&["-d", "1"]).len(), 9);
+    assert_eq!(
+        lines(&["--exact-depth", "2"]),
+        ["src/deep/", "src/lib.rs", "src/main.rs"]
+    );
+    assert_eq!(lines(&["--min-depth", "3"]), ["src/deep/x.md"]);
+    assert_eq!(lines(&["-E", "src"]).len(), 8);
+    assert_eq!(lines(&["--prune"]).len(), 9);
+    assert_eq!(lines(&["-S", "+1k"]), ["big.bin"]);
+    assert_eq!(lines(&["-S", "-0b", "-t", "f"]), ["empty_file"]);
+    assert_eq!(lines(&["--changed-before", "2021-01-01"]), ["notes.txt"]);
+    assert!(lines(&["--changed-before", "@1"]).is_empty());
+    assert_eq!(lines(&["--changed-within", "@1"]).len(), 13);
+    assert_eq!(lines(&["--ignore-contain", "lib.rs"]).len(), 8);
+    fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn fd_output_forms() {
+    let dir = fd_fixture("fd_output");
+    let nul = hfd(&dir, &["--max-buffer-time", "60000", "-0", "-e", "rs"]);
+    assert_eq!(nul.raw, b"./B.RS\0./a.rs\0./src/lib.rs\0./src/main.rs\0");
+    let fmt = hfd(
+        &dir,
+        &[
+            "--max-buffer-time",
+            "60000",
+            "--format",
+            "{/.}|{//}",
+            "-e",
+            "md",
+        ],
+    );
+    assert_eq!(fmt.stdout, "x|src/deep\n");
+    let sep = sorted_lines(&hfd(&dir, &["--path-separator", "#", "-p", "deep"]).stdout);
+    assert_eq!(sep, ["src#deep#", "src#deep#x.md"]);
+    let strip = hfd(&dir, &["--strip-cwd-prefix", "-0", "x.md"]);
+    assert_eq!(strip.raw, b"src/deep/x.md\0");
+    let base = sorted_lines(&hfd(&dir, &["-C", "src"]).stdout);
+    assert_eq!(base, ["deep/", "deep/x.md", "lib.rs", "main.rs"]);
+    let abs = hfd(&dir, &["-a", "x.md"]);
+    let canon = dir.canonicalize().unwrap();
+    assert_eq!(
+        abs.stdout,
+        format!("{}/src/deep/x.md\n", canon.to_str().unwrap())
+    );
+    let roots = sorted_lines(&hfd(&dir, &[".", "src", "empty_dir"]).stdout);
+    assert_eq!(
+        roots,
+        ["src/deep/", "src/deep/x.md", "src/lib.rs", "src/main.rs"]
+    );
+    fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn fd_colors_and_hyperlinks() {
+    let dir = fd_fixture("fd_color");
+    let out = run_bin(
+        env!("CARGO_BIN_EXE_hfd"),
+        &dir,
+        &[("LS_COLORS", "di=01;34:*.rs=32")],
+        &["--max-buffer-time", "60000", "--color=always", "main"],
+    );
+    assert_eq!(out.stdout, "\x1b[1;34msrc/\x1b[0m\x1b[32mmain.rs\x1b[0m\n");
+    let dirs = run_bin(
+        env!("CARGO_BIN_EXE_hfd"),
+        &dir,
+        &[("LS_COLORS", "di=01;34")],
+        &["--color=always", "^deep$"],
+    );
+    assert_eq!(
+        dirs.stdout,
+        "\x1b[1;34msrc/\x1b[0m\x1b[1;34mdeep\x1b[0m\x1b[1;34m/\x1b[0m\n"
+    );
+    let exe = hfd(&dir, &["--color=always", "run.sh"]);
+    assert_eq!(exe.stdout, "\x1b[1;38;5;203mrun.sh\x1b[0m\n");
+    let link = hfd(&dir, &["--hyperlink=always", "x.md"]);
+    assert!(
+        link.stdout.starts_with("\x1b]8;;file://"),
+        "{:?}",
+        link.stdout
+    );
+    assert!(
+        link.stdout
+            .ends_with("/src/deep/x.md\x1b\\src/deep/x.md\x1b]8;;\x1b\\\n"),
+        "{:?}",
+        link.stdout
+    );
+    let plain = hfd(&dir, &["--color=never", "--hyperlink=auto", "x.md"]);
+    assert_eq!(plain.stdout, "src/deep/x.md\n");
+    fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn fd_exec_and_exec_batch() {
+    let dir = fd_fixture("fd_exec");
+    let each = hfd(&dir, &["-e", "rs", "-x", "printf", "%s|%s\n", "{/}", "{.}"]);
+    assert_eq!(each.code, 0, "{}", each.stderr);
+    assert_eq!(
+        sorted_lines(&each.stdout),
+        ["B.RS|B", "a.rs|a", "lib.rs|src/lib", "main.rs|src/main"]
+    );
+    let batch = hfd(&dir, &["-e", "rs", "-X", "echo", "pre", "{}", "post"]);
+    let mut words: Vec<&str> = batch.stdout.split_whitespace().collect();
+    words.sort_unstable();
+    assert_eq!(
+        words,
+        [
+            "./B.RS",
+            "./a.rs",
+            "./src/lib.rs",
+            "./src/main.rs",
+            "post",
+            "pre"
+        ]
+    );
+    let sized = hfd(&dir, &["-e", "rs", "--batch-size", "1", "-X", "echo"]);
+    assert_eq!(sized.stdout.lines().count(), 4);
+    let trailing = hfd(&dir, &["-e", "md", "-X", "echo", "--batch-size", "1"]);
+    assert_eq!(trailing.stdout, "--batch-size 1 ./src/deep/x.md\n");
+    let failing = hfd(&dir, &["-e", "md", "-x", "sh", "-c", "exit 3"]);
+    assert_eq!(failing.code, 1);
+    let missing = hfd(&dir, &["-e", "md", "-X", "hfd-no-such-command"]);
+    assert_eq!(missing.code, 1);
+    assert!(
+        missing
+            .stderr
+            .contains("[hfd error]: Command not found: hfd-no-such-command"),
+        "{}",
+        missing.stderr
+    );
+    let two = hfd(&dir, &["-X", "echo", "{}", "{}"]);
+    assert_eq!(two.code, 2);
+    assert!(
+        two.stderr
+            .contains("Only one placeholder allowed for batch commands"),
+        "{}",
+        two.stderr
+    );
+    fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn fd_quiet_max_results_and_exit_codes() {
+    let dir = fd_fixture("fd_quiet");
+    let yes = hfd(&dir, &["-q", "rs"]);
+    assert_eq!((yes.code, yes.stdout.as_str()), (0, ""));
+    let no = hfd(&dir, &["-q", "no_such_entry_zz"]);
+    assert_eq!(no.code, 1);
+    assert_eq!(hfd(&dir, &["--max-results", "2"]).stdout.lines().count(), 2);
+    assert_eq!(hfd(&dir, &["-1"]).stdout.lines().count(), 1);
+    assert_eq!(
+        hfd(&dir, &["--max-results", "0"]).stdout.lines().count(),
+        13
+    );
+    let conflict = hfd(&dir, &["-q", "-x", "echo"]);
+    assert_eq!(conflict.code, 2);
+    fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn fd_errors_match_fd_wording() {
+    let dir = fd_fixture("fd_errors");
+    let path_pattern = hfd(&dir, &["src/"]);
+    assert_eq!(path_pattern.code, 1);
+    assert!(
+        path_pattern.stderr.starts_with(
+            "[hfd error]: The search pattern 'src/' contains a path-separation character ('/')"
+        ),
+        "{}",
+        path_pattern.stderr
+    );
+    assert!(path_pattern.stderr.contains("  hfd . 'src/'"));
+    let size = hfd(&dir, &["-S", "10x"]);
+    assert_eq!(size.code, 2);
+    assert!(
+        size.stderr.contains(
+            "error: invalid value '10x' for '--size <size>': '10x' is not a valid size constraint. See 'hfd --help'."
+        ),
+        "{}",
+        size.stderr
+    );
+    let bogus = hfd(&dir, &["--bogus"]);
+    assert_eq!(bogus.code, 2);
+    assert!(
+        bogus
+            .stderr
+            .contains("Usage: hfd [OPTIONS] [pattern] [path]...")
+    );
+    let regex = hfd(&dir, &["["]);
+    assert_eq!(regex.code, 1);
+    assert!(
+        regex.stderr.contains("regex parse error"),
+        "{}",
+        regex.stderr
+    );
+    let time = hfd(&dir, &["--changed-within", "xyz"]);
+    assert_eq!(time.code, 1);
+    assert_eq!(
+        time.stderr,
+        "[hfd error]: 'xyz' is not a valid date or duration. See 'hfd --help'.\n"
+    );
+    let dot = hfd(&dir, &["^\\.hidden"]);
+    assert_eq!(dot.code, 1);
+    assert!(dot.stderr.contains("leading dot"), "{}", dot.stderr);
+    let missing_root = hfd(&dir, &[".", "no_such_dir"]);
+    assert_eq!(missing_root.code, 1);
+    assert!(
+        missing_root
+            .stderr
+            .contains("[hfd error]: Search path 'no_such_dir' is not a directory.")
+    );
+    fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn fd_help_is_wrapped_like_fd() {
+    let dir = scratch("fd_help");
+    let long = hfd(&dir, &["--help"]);
+    assert_eq!(long.code, 0);
+    assert!(
+        long.stdout
+            .contains("Usage: hfd [OPTIONS] [pattern] [path]...")
+    );
+    assert!(long.stdout.contains("hfd -e zip -x unzip"));
+    assert!(long.stdout.contains("'.fdignore'"));
+    assert!(
+        long.stdout.lines().all(|l| l.chars().count() <= 98),
+        "{}",
+        long.stdout
+    );
+    let short = hfd(&dir, &["-h"]);
+    assert!(short.stdout.contains(
+        "  -t, --type <filetype>            Filter by type: file (f), directory (d/dir), symlink (l),\n"
+    ));
+    assert!(short.stdout.lines().all(|l| l.chars().count() <= 98));
+    let version = hfd(&dir, &["--version"]);
+    assert!(version.stdout.starts_with("hfd "), "{}", version.stdout);
+    fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn unified_front_end_routes_by_tokens_and_name() {
+    let dir = fd_fixture("fd_route");
+    let hfind = env!("CARGO_BIN_EXE_hfind");
+    let fd_style = run_bin(hfind, &dir, &[], &["-e", "md"]);
+    assert_eq!(fd_style.stdout, "src/deep/x.md\n");
+    let find_style = run_bin(hfind, &dir, &[], &[".", "-name", "x.md"]);
+    assert_eq!(find_style.stdout, "./src/deep/x.md\n");
+    let find_paths = run_bin(hfind, &dir, &[], &["src/deep"]);
+    assert_eq!(
+        sorted_lines(&find_paths.stdout),
+        ["src/deep", "src/deep/x.md"]
+    );
+    let fd_pattern = hfd(&dir, &["^x"]);
+    assert_eq!(fd_pattern.stdout, "src/deep/x.md\n");
+    let fd_find_expr = hfd(&dir, &["src", "-type", "d"]);
+    assert_eq!(sorted_lines(&fd_find_expr.stdout), ["src", "src/deep"]);
+    let escaped = hfd(&dir, &["--", "-name"]);
+    assert_eq!(escaped.code, 0);
+    assert_eq!(escaped.stdout, "");
+    fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn fd_gen_completions_for_each_shell() {
+    let dir = scratch("fd_completions");
+    let expect = [
+        (
+            "bash",
+            "complete -F _hfd -o nosort -o bashdefault -o default hfd\n",
+        ),
+        (
+            "elvish",
+            "set edit:completion:arg-completer[hfd] = {|@words|\n",
+        ),
+        (
+            "fish",
+            "complete -c hfd -s H -l hidden -d 'Search hidden files and directories'\n",
+        ),
+        (
+            "powershell",
+            "Register-ArgumentCompleter -Native -CommandName 'hfd' -ScriptBlock {\n",
+        ),
+        ("zsh", "#compdef hfd\n"),
+    ];
+    for (shell, needle) in expect {
+        let out = hfd(&dir, &["--gen-completions", shell]);
+        assert_eq!(out.code, 0, "{}", out.stderr);
+        assert!(out.stdout.contains(needle), "{shell}: {}", out.stdout);
+        assert!(out.stdout.contains("gen-completions"), "{shell}");
+    }
+    let hfd_bin = env!("CARGO_BIN_EXE_hfd");
+    let from_env = run_bin(
+        hfd_bin,
+        &dir,
+        &[("SHELL", "/opt/bin/zsh")],
+        &["--gen-completions"],
+    );
+    assert!(from_env.stdout.starts_with("#compdef hfd\n"));
+    let unknown = run_bin(
+        hfd_bin,
+        &dir,
+        &[("SHELL", "/bin/sh")],
+        &["--gen-completions"],
+    );
+    assert_eq!(unknown.code, 1);
+    assert_eq!(
+        unknown.stderr,
+        "[hfd error]: Unable to get shell from environment\n"
+    );
+    let invalid = hfd(&dir, &["--gen-completions", "tcsh"]);
+    assert_eq!(invalid.code, 2);
+    assert!(
+        invalid
+            .stderr
+            .contains("[possible values: bash, elvish, fish, powershell, zsh]")
+    );
+    let exclusive = hfd(&dir, &["--gen-completions", "bash", "-H"]);
+    assert_eq!(exclusive.code, 2);
+    fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn argv0_suffix_selects_personality_and_program_name() {
+    let dir = fd_fixture("fd_argv0");
+    let links = scratch("fd_argv0_links");
+    for (name, target) in [
+        ("myfd", "CARGO_BIN_EXE_hfind"),
+        ("tool.exe", "CARGO_BIN_EXE_hfd"),
+        ("hfd.exe", "CARGO_BIN_EXE_hfind"),
+        ("find", "CARGO_BIN_EXE_hfd"),
+    ] {
+        let bin = match target {
+            "CARGO_BIN_EXE_hfind" => env!("CARGO_BIN_EXE_hfind"),
+            _ => env!("CARGO_BIN_EXE_hfd"),
+        };
+        std::os::unix::fs::symlink(bin, links.join(name)).unwrap();
+    }
+    let path = |name: &str| links.join(name).to_string_lossy().into_owned();
+    let fd_first = run_bin(&path("myfd"), &dir, &[], &["^x"]);
+    assert_eq!(fd_first.stdout, "src/deep/x.md\n");
+    let usage = run_bin(&path("myfd"), &dir, &[], &["--bogus"]);
+    assert!(
+        usage
+            .stderr
+            .contains("Usage: myfd [OPTIONS] [pattern] [path]..."),
+        "{}",
+        usage.stderr
+    );
+    let exe_fd = run_bin(&path("hfd.exe"), &dir, &[], &["^x"]);
+    assert_eq!(exe_fd.stdout, "src/deep/x.md\n");
+    for name in ["find", "tool.exe"] {
+        let find_first = run_bin(&path(name), &dir, &[], &["src/deep"]);
+        assert_eq!(
+            sorted_lines(&find_first.stdout),
+            ["src/deep", "src/deep/x.md"],
+            "{name}"
+        );
+    }
+    let find_error = run_bin(&path("find"), &dir, &[], &[".", "-bogus"]);
+    assert_eq!(find_error.code, 2);
+    assert!(
+        find_error.stderr.starts_with("find: "),
+        "{}",
+        find_error.stderr
+    );
+    fs::remove_dir_all(&links).unwrap();
+    fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn fd_interrupt_during_colored_output_dies_by_sigint() {
+    use std::io::Read;
+    use std::os::unix::process::ExitStatusExt;
+    use std::process::Stdio;
+    let dir = scratch("fd_sigint");
+    let long = "x".repeat(60);
+    for i in 0..6000 {
+        put(&dir, &format!("{long}_{i:05}.txt"), b"");
+    }
+    for color in ["always", "never"] {
+        let mut child = fd_command(env!("CARGO_BIN_EXE_hfd"), &dir)
+            .args(["--color", color, "--max-buffer-time", "0"])
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(300));
+        let killed = Command::new("kill")
+            .args(["-INT", &child.id().to_string()])
+            .status()
+            .unwrap();
+        assert!(killed.success());
+        let mut out = Vec::new();
+        child.stdout.take().unwrap().read_to_end(&mut out).unwrap();
+        let status = child.wait().unwrap();
+        assert_eq!(status.signal(), Some(2), "{color}: {status:?}");
+        assert!(color == "never" || out.ends_with(b"\n"), "{color}");
+    }
+    fs::remove_dir_all(&dir).unwrap();
+}
+
+fn lifo_arrivals(root: &Path) -> Vec<(String, bool)> {
+    let children = |dir: &Path, rel: &str| -> Vec<(PathBuf, String)> {
+        fs::read_dir(dir)
+            .unwrap()
+            .map(|e| {
+                let name = e.unwrap().file_name().to_string_lossy().into_owned();
+                let child = if rel.is_empty() {
+                    name.clone()
+                } else {
+                    format!("{rel}/{name}")
+                };
+                (dir.join(&name), child)
+            })
+            .collect()
+    };
+    let mut stack = children(root, "");
+    let mut out = Vec::new();
+    while let Some((path, rel)) = stack.pop() {
+        let is_dir = path.is_dir();
+        out.push((rel.clone(), is_dir));
+        if is_dir {
+            stack.extend(children(&path, &rel));
+        }
+    }
+    out
+}
+
+#[test]
+fn fd_max_results_follows_ignore_lifo_arrival_order() {
+    let dir = scratch("fd_lifo");
+    for rel in [
+        "f1.txt",
+        "f2.txt",
+        "f3.txt",
+        "a/x.txt",
+        "a/y.txt",
+        "f4.txt",
+        "b/c/z.txt",
+        "f5.txt",
+        "b/w.txt",
+        "f6.txt",
+    ] {
+        put(&dir, rel, b"x");
+    }
+    let order = lifo_arrivals(&dir);
+    let streamed = hfd(&dir, &["-j1", "--max-buffer-time", "0"]);
+    let expect: String = order
+        .iter()
+        .map(|(rel, is_dir)| format!("{rel}{}\n", if *is_dir { "/" } else { "" }))
+        .collect();
+    assert_eq!(streamed.stdout, expect);
+    let files: Vec<String> = order
+        .iter()
+        .filter(|(_, is_dir)| !is_dir)
+        .map(|(rel, _)| rel.clone())
+        .collect();
+    for n in [1usize, 3, 5, 8] {
+        let mut want = files[..n].to_vec();
+        want.sort();
+        let got = hfd(&dir, &["--max-results", &n.to_string(), "-t", "f"]);
+        assert_eq!(sorted_lines(&got.stdout), want, "max-results {n}");
+    }
+    let one = hfd(&dir, &["-1"]);
+    let (first, is_dir) = &order[0];
+    assert_eq!(
+        one.stdout,
+        format!("{first}{}\n", if *is_dir { "/" } else { "" })
+    );
+    fs::remove_dir_all(&dir).unwrap();
+}
+
+fn find_preorder(path: &Path, depth: usize, max: usize, out: &mut Vec<(String, bool, usize)>) {
+    let is_dir = fs::symlink_metadata(path).unwrap().is_dir();
+    out.push((path.to_string_lossy().into_owned(), is_dir, depth));
+    if is_dir && depth < max {
+        for entry in fs::read_dir(path).unwrap() {
+            find_preorder(&entry.unwrap().path(), depth + 1, max, out);
+        }
+    }
+}
+
+fn joined(rows: &[(String, bool, usize)], keep: impl Fn(&(String, bool, usize)) -> bool) -> String {
+    rows.iter()
+        .filter(|row| keep(row))
+        .map(|(path, _, _)| format!("{path}\n"))
+        .collect()
+}
+
+#[test]
+fn find_mode_prints_readdir_preorder() {
+    let dir = scratch("find_order");
+    for i in 0..40 {
+        put(&dir, &format!("d{}/f{i}.rs", i % 7), b"x");
+        put(&dir, &format!("d{}/n{}/g{i}.md", i % 5, i % 3), b"yy");
+        put(&dir, &format!("top{i}.txt"), b"");
+    }
+    let mut rows = Vec::new();
+    find_preorder(&dir, 0, usize::MAX, &mut rows);
+    let root = dir.to_str().unwrap();
+    for _ in 0..5 {
+        let all = run(&["--no-ignore", root]);
+        assert_eq!(all.stdout, joined(&rows, |_| true));
+    }
+    let rs = run(&["--no-ignore", root, "-name", "*.rs"]);
+    assert_eq!(rs.stdout, joined(&rows, |(p, _, _)| p.ends_with(".rs")));
+    let dirs = run(&["--no-ignore", root, "-type", "d"]);
+    assert_eq!(dirs.stdout, joined(&rows, |(_, d, _)| *d));
+    let sized = run(&["--no-ignore", root, "-type", "f", "-size", "+0c"]);
+    assert_eq!(
+        sized.stdout,
+        joined(&rows, |(p, d, _)| !d && !p.ends_with(".txt"))
+    );
+    let window = run(&["--no-ignore", root, "-mindepth", "1", "-maxdepth", "2"]);
+    let mut shallow = Vec::new();
+    find_preorder(&dir, 0, 2, &mut shallow);
+    assert_eq!(window.stdout, joined(&shallow, |(_, _, depth)| *depth >= 1));
+    let nul = run(&["--no-ignore", root, "-name", "*.md", "-print0"]);
+    let want: String = rows
+        .iter()
+        .filter(|(p, _, _)| p.ends_with(".md"))
+        .map(|(p, _, _)| format!("{p}\0"))
+        .collect();
+    assert_eq!(nul.stdout, want);
+    let (a, b) = (dir.join("d3"), dir.join("d1"));
+    let two = run(&[
+        "--no-ignore",
+        a.to_str().unwrap(),
+        b.to_str().unwrap(),
+        a.to_str().unwrap(),
+    ]);
+    let mut both = Vec::new();
+    find_preorder(&a, 0, usize::MAX, &mut both);
+    find_preorder(&b, 0, usize::MAX, &mut both);
+    find_preorder(&a, 0, usize::MAX, &mut both);
+    assert_eq!(two.stdout, joined(&both, |_| true));
+    let mut head = Command::new(env!("CARGO_BIN_EXE_hfind"))
+        .args(["--no-ignore", root])
+        .stdout(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    drop(head.stdout.take());
+    assert!(head.wait().unwrap().code().is_some());
+    fs::remove_dir_all(&dir).unwrap();
+}
