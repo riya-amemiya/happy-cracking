@@ -1,7 +1,7 @@
 use happy_cracking::crypto::hashcrack::{
-    HashAlgo, MAX_BRUTE_LEN, SaltPosition, brute_force, compute_hash, find_in_candidates,
-    lookup_in_pairs, lookup_in_table_file, lookup_in_table_file_with_limit, parse_table_line,
-    read_wordlist_buf_with_limit,
+    HashAlgo, MAX_BRUTE_LEN, MAX_SALT_LEN, SaltPosition, brute_force, compute_hash,
+    find_in_candidates, lookup_in_pairs, lookup_in_table_file, lookup_in_table_file_with_limit,
+    parse_table_line, read_wordlist_buf_with_limit,
 };
 use std::fs;
 use std::path::PathBuf;
@@ -198,6 +198,65 @@ fn test_brute_force_with_salt() {
     )
     .unwrap();
     assert_eq!(found, Some("ab".to_string()));
+}
+
+#[test]
+fn test_brute_force_rejects_salt_above_cap() {
+    let err = brute_force(
+        "5d41402abc4b2a76b9719d911017c592",
+        HashAlgo::Md5,
+        "a",
+        1,
+        1,
+        Some(&"x".repeat(MAX_SALT_LEN + 1)),
+        SaltPosition::Suffix,
+    )
+    .unwrap_err();
+    assert!(err.to_string().contains(&MAX_SALT_LEN.to_string()));
+}
+
+#[test]
+fn test_brute_force_accepts_salt_at_cap() {
+    let salt = "x".repeat(MAX_SALT_LEN);
+    let target = compute_hash(HashAlgo::Md5, &format!("a{salt}"));
+    let found = brute_force(
+        &target,
+        HashAlgo::Md5,
+        "a",
+        1,
+        1,
+        Some(&salt),
+        SaltPosition::Suffix,
+    )
+    .unwrap();
+    assert_eq!(found, Some("a".to_string()));
+}
+
+#[test]
+fn test_dict_cli_rejects_salt_above_cap() {
+    use std::process::Command;
+
+    let path = scratch_wordlist("salt_cap");
+    fs::write(&path, "hello\n").unwrap();
+    let salt = "x".repeat(MAX_SALT_LEN + 1);
+    let out = Command::new(env!("CARGO_BIN_EXE_happy-cracking"))
+        .args([
+            "hashcrack",
+            "dict",
+            "5d41402abc4b2a76b9719d911017c592",
+            "-w",
+        ])
+        .arg(&path)
+        .args(["--algo", "md5", "--salt", &salt])
+        .output()
+        .unwrap();
+    let _ = fs::remove_file(&path);
+    assert!(!out.status.success(), "stderr {:?}", out.stderr);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains(&MAX_SALT_LEN.to_string()),
+        "unexpected stderr: {stderr}"
+    );
 }
 
 #[test]

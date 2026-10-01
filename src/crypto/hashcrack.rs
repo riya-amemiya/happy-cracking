@@ -13,6 +13,8 @@ const MAX_BRUTE_SPACE: u128 = 1_000_000_000;
 
 pub const MAX_BRUTE_LEN: usize = 32;
 
+pub const MAX_SALT_LEN: usize = 1024;
+
 /// Stack buffer for ASCII mask/brute candidates (`?l`/`?u`/`?d`/`?s`/`?a`/`?h`).
 /// 32 bytes covers typical CTF masks; longer or non-ASCII inputs fall back to `String`.
 const MAX_STACK_MASK: usize = 32;
@@ -226,6 +228,15 @@ pub fn run(action: HashcrackAction) -> Result<()> {
     }
 }
 
+fn require_salt_len(salt: Option<&str>) -> Result<()> {
+    if let Some(s) = salt
+        && s.len() > MAX_SALT_LEN
+    {
+        anyhow::bail!("Salt exceeds maximum length of {MAX_SALT_LEN}");
+    }
+    Ok(())
+}
+
 fn run_dict(
     hash: &str,
     wordlist: &Path,
@@ -233,6 +244,7 @@ fn run_dict(
     salt: Option<&str>,
     pos: SaltPosition,
 ) -> Result<()> {
+    require_salt_len(salt)?;
     let target = normalize_hash(hash);
     let buf = read_wordlist_buf(wordlist)?;
     let candidates = wordlist_lines(&buf);
@@ -434,6 +446,7 @@ pub fn brute_force(
     salt: Option<&str>,
     pos: SaltPosition,
 ) -> Result<Option<String>> {
+    require_salt_len(salt)?;
     let chars = wordgen::normalize_charset(charset)?;
     if min_len == 0 {
         anyhow::bail!("--min-len must be at least 1");
