@@ -34,6 +34,8 @@ pub struct ExtensionResult {
     pub forged_suffix: Vec<u8>,
 }
 
+pub const MAX_APPEND_LEN: usize = 64 * 1024;
+
 // Given H(secret || message) and the total length of (secret || message),
 // computes H(secret || message || padding || append) without knowing the secret.
 pub fn sha256_extend(
@@ -41,6 +43,12 @@ pub fn sha256_extend(
     original_len: u64,
     append: &[u8],
 ) -> Result<ExtensionResult> {
+    if append.len() > MAX_APPEND_LEN {
+        anyhow::bail!(
+            "Append data exceeds maximum length of {MAX_APPEND_LEN} bytes to prevent Denial of Service"
+        );
+    }
+
     let hash_bytes =
         hex::decode(original_hash_hex.trim()).context("Invalid hex in original hash")?;
     if hash_bytes.len() != 32 {
@@ -94,10 +102,6 @@ pub fn sha256_extend(
     })
 }
 
-/// Convert a byte length to SHA-256's 64-bit bit-length field.
-///
-/// Security: `byte_len * 8` panics in debug (CLI `DoS` via `--original-len`) and
-/// wraps in release, producing incorrect glue padding and a wrong forged hash.
 fn sha256_bit_len(byte_len: u64) -> Result<u64> {
     byte_len
         .checked_mul(8)
