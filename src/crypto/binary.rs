@@ -29,24 +29,24 @@ pub fn run(action: BinaryAction) -> Result<()> {
 
 #[must_use]
 pub fn encode(input: &str) -> String {
-    if input.is_empty() {
+    let bytes = input.as_bytes();
+    if bytes.is_empty() {
         return String::new();
     }
 
-    // 8 bits + 1 space per byte, minus the trailing space.
-    let mut out = String::with_capacity(input.len() * 9 - 1);
-    for (i, b) in input.bytes().enumerate() {
-        if i > 0 {
-            out.push(' ');
+    let mut out = vec![0u8; bytes.len() * 9 - 1];
+    let mut pos = 0;
+    for &b in bytes {
+        if pos != 0 {
+            out[pos] = b' ';
+            pos += 1;
         }
-
-        let mut bits = [0u8; 8];
         for j in 0..8 {
-            bits[7 - j] = b'0' + ((b >> j) & 1);
+            out[pos + j] = b'0' + ((b >> (7 - j)) & 1);
         }
-        out.push_str(std::str::from_utf8(&bits).expect("bits are ASCII digits"));
+        pos += 8;
     }
-    out
+    String::from_utf8(out).expect("binary encode produces ASCII digits and spaces")
 }
 
 pub fn decode(input: &str) -> Result<String> {

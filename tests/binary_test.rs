@@ -11,6 +11,11 @@ fn test_encode_hello() {
 }
 
 #[test]
+fn test_encode_empty() {
+    assert_eq!(binary::encode(""), "");
+}
+
+#[test]
 fn test_decode_basic() {
     assert_eq!(binary::decode("01000001").unwrap(), "A");
 }
