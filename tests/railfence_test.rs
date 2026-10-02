@@ -51,6 +51,17 @@ fn test_roundtrip_unicode() {
 }
 
 #[test]
+fn test_empty_and_identity() {
+    assert_eq!(railfence::encrypt("", 3).unwrap(), "");
+    assert_eq!(railfence::decrypt("", 3).unwrap(), "");
+    assert_eq!(railfence::encrypt("HI", 10).unwrap(), "HI");
+    assert_eq!(railfence::decrypt("HI", 10).unwrap(), "HI");
+    let original = "flag{ascii_bytes}";
+    let encrypted = railfence::encrypt(original, 4).unwrap();
+    assert_eq!(railfence::decrypt(&encrypted, 4).unwrap(), original);
+}
+
+#[test]
 fn test_invalid_rails() {
     assert!(railfence::encrypt("HELLO", 1).is_err());
 }
