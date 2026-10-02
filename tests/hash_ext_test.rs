@@ -132,3 +132,27 @@ fn extend_rejects_padded_length_overflow() {
         }
     }
 }
+
+#[test]
+fn extend_rejects_append_above_cap() {
+    let start = std::time::Instant::now();
+    let append = vec![b'x'; hash_ext::MAX_APPEND_LEN + 1];
+    let err = hash_ext::sha256_extend(dummy_sha256_hex(), 10, &append)
+        .err()
+        .expect("oversized append should fail")
+        .to_string();
+    assert!(
+        err.contains(&hash_ext::MAX_APPEND_LEN.to_string()),
+        "unexpected error: {err}"
+    );
+    assert!(
+        start.elapsed().as_millis() < 100,
+        "oversized append must be rejected before hashing"
+    );
+}
+
+#[test]
+fn extend_accepts_append_at_cap() {
+    let append = vec![b'a'; hash_ext::MAX_APPEND_LEN];
+    verify_extension(b"key", b"msg", &append);
+}
