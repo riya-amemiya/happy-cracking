@@ -35,6 +35,7 @@ pub struct ExtensionResult {
 }
 
 pub const MAX_APPEND_LEN: usize = 64 * 1024;
+pub const MAX_ORIGINAL_HASH_HEX_LEN: usize = 64;
 
 // Given H(secret || message) and the total length of (secret || message),
 // computes H(secret || message || padding || append) without knowing the secret.
@@ -49,8 +50,14 @@ pub fn sha256_extend(
         );
     }
 
-    let hash_bytes =
-        hex::decode(original_hash_hex.trim()).context("Invalid hex in original hash")?;
+    let original_hash_hex = original_hash_hex.trim();
+    if original_hash_hex.len() > MAX_ORIGINAL_HASH_HEX_LEN {
+        anyhow::bail!(
+            "Original hash exceeds maximum length of {MAX_ORIGINAL_HASH_HEX_LEN} hex characters to prevent Denial of Service"
+        );
+    }
+
+    let hash_bytes = hex::decode(original_hash_hex).context("Invalid hex in original hash")?;
     if hash_bytes.len() != 32 {
         anyhow::bail!(
             "SHA-256 hash must be 32 bytes (64 hex chars), got {}",
