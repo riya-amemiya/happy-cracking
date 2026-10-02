@@ -396,6 +396,10 @@ cargo clippy -- -D warnings  # Lint
 
 `cargo run -- <command>` runs `happy-cracking`. Companion binaries ship in the same package: `cargo run --bin hgrep -- <args>` and `cargo run --bin hfind -- <args>`. `hg` and `hrg` are argv0 variants of `hgrep`. `hfd` is an argv0 variant of `hfind`.
 
+## Community
+
+[Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · [Code of conduct](CODE_OF_CONDUCT.md)
+
 ## License
 
-This project is for educational and CTF competition purposes.
+[MIT](LICENSE). This project is for educational and CTF competition purposes.
