@@ -1,7 +1,5 @@
-use std::ffi::OsStr;
 use std::fs::File;
 use std::io::{self, Read};
-use std::os::unix::ffi::{OsStrExt, OsStringExt};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::OnceLock;
@@ -11,6 +9,7 @@ use memchr::memchr;
 use regex::bytes::{Regex, RegexBuilder};
 
 use super::ignore::{Ignore, glob_to_regex, load_ignore};
+#[cfg(unix)]
 use super::unixhome;
 
 #[derive(Clone, Default)]
@@ -248,13 +247,30 @@ fn config_bool(value: &[u8]) -> bool {
     }
 }
 
+#[cfg(unix)]
 fn home_of(user: &[u8]) -> Option<PathBuf> {
     unixhome::home_of(user)
 }
 
+#[cfg(not(unix))]
+fn home_of(_: &[u8]) -> Option<PathBuf> {
+    None
+}
+
+#[cfg(unix)]
+fn os_path(bytes: &[u8]) -> PathBuf {
+    use std::os::unix::ffi::OsStrExt;
+    PathBuf::from(std::ffi::OsStr::from_bytes(bytes))
+}
+
+#[cfg(not(unix))]
+fn os_path(bytes: &[u8]) -> PathBuf {
+    PathBuf::from(String::from_utf8_lossy(bytes).into_owned())
+}
+
 fn expand_tilde(value: &[u8]) -> Option<PathBuf> {
     let Some(rest) = value.strip_prefix(b"~") else {
-        return Some(PathBuf::from(OsStr::from_bytes(value)));
+        return Some(os_path(value));
     };
     let cut = rest.iter().position(|&b| b == b'/').unwrap_or(rest.len());
     let home = if cut == 0 {
@@ -263,7 +279,7 @@ fn expand_tilde(value: &[u8]) -> Option<PathBuf> {
         home_of(&rest[..cut])?
     };
     Some(match rest.get(cut + 1..) {
-        Some(tail) => home.join(OsStr::from_bytes(tail)),
+        Some(tail) => home.join(os_path(tail)),
         None => home,
     })
 }
@@ -281,14 +297,16 @@ fn by_gitdir(cond: &[u8], scope: &Scope, fold: bool) -> bool {
     let Some(gitdir) = scope.gitdir else {
         return false;
     };
-    let expanded =
-        expand_tilde(cond).map_or_else(|| cond.to_vec(), |p| p.into_os_string().into_vec());
+    let expanded = expand_tilde(cond).map_or_else(
+        || cond.to_vec(),
+        |p| p.into_os_string().into_encoded_bytes(),
+    );
     let mut pattern = if expanded.starts_with(b"./") || expanded.starts_with(b"../") {
         let base = scope
             .dir
             .canonicalize()
             .unwrap_or_else(|_| scope.dir.to_path_buf());
-        let mut joined = base.into_os_string().into_vec();
+        let mut joined = base.into_os_string().into_encoded_bytes();
         joined.push(b'/');
         joined.extend_from_slice(&expanded);
         joined
@@ -310,7 +328,7 @@ fn by_gitdir(cond: &[u8], scope: &Scope, fold: bool) -> bool {
         .into_iter()
         .flatten()
         .any(|candidate| {
-            let mut text = candidate.as_os_str().as_bytes().to_vec();
+            let mut text = candidate.as_os_str().as_encoded_bytes().to_vec();
             if fold {
                 text.make_ascii_lowercase();
             }
@@ -471,7 +489,7 @@ fn base_sources() -> &'static [RawConfig] {
     CACHE.get_or_init(|| {
         let mut out = Vec::new();
         let nosystem = std::env::var_os("GIT_CONFIG_NOSYSTEM")
-            .is_some_and(|v| config_bool(v.as_os_str().as_bytes()));
+            .is_some_and(|v| config_bool(v.as_os_str().as_encoded_bytes()));
         if !nosystem {
             let system = std::env::var_os("GIT_CONFIG_SYSTEM")
                 .map_or_else(|| PathBuf::from("/etc/gitconfig"), PathBuf::from);
@@ -527,7 +545,7 @@ fn resolve_gitdir(repo: &Path) -> Option<PathBuf> {
     if target.is_empty() {
         return None;
     }
-    let named = PathBuf::from(OsStr::from_bytes(target));
+    let named = os_path(target);
     let gitdir = join_or_abs(repo, named);
     let Ok(shared) =
         read_config_file_with_limit(&gitdir.join("commondir"), MAX_GITCONFIG_FILE_BYTES)
@@ -542,7 +560,7 @@ fn resolve_gitdir(repo: &Path) -> Option<PathBuf> {
     if common.is_empty() {
         return Some(gitdir);
     }
-    let named = PathBuf::from(OsStr::from_bytes(common));
+    let named = os_path(common);
     Some(join_or_abs(&gitdir, named))
 }
 

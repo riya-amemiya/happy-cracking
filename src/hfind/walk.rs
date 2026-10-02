@@ -1,10 +1,9 @@
 use std::ffi::{OsStr, OsString};
 use std::fs;
-use std::os::unix::ffi::OsStrExt;
-use std::os::unix::fs::MetadataExt;
+use std::io::{self, Write};
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError};
 
 #[cfg(test)]
 use std::cell::Cell;
@@ -15,13 +14,21 @@ thread_local! {
     static FORCE_ENTRY_TYPE_ERR: Cell<bool> = const { Cell::new(false) };
 }
 
-use rayon::prelude::*;
-
 use crate::hc_internal::gitconfig::{RepoOpts, repo_sources};
+use crate::hc_internal::gnu::output::strerror;
 use crate::hc_internal::ignore::{Ignore, load_ignore};
 use crate::hc_internal::nfc;
 
-const PROG: &str = "hfind";
+const AHEAD_LIMIT: usize = 4096;
+const INODE_SORT_THRESHOLD: usize = 10_000;
+pub(crate) const GNU_FIND: bool = !cfg!(any(
+    target_os = "macos",
+    target_os = "ios",
+    target_os = "freebsd",
+    target_os = "netbsd",
+    target_os = "openbsd",
+    target_os = "dragonfly"
+));
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Follow {
@@ -83,10 +90,113 @@ struct Node {
     repo: Option<PathBuf>,
 }
 
-struct Ctx<'a, F> {
-    cfg: &'a WalkCfg,
+pub(crate) struct Sink<'a> {
     errors: &'a AtomicBool,
-    visit: F,
+    pub(crate) out: Vec<u8>,
+    events: Vec<Event>,
+}
+
+struct Event {
+    at: usize,
+    msg: Option<String>,
+    next: Option<Arc<Slot>>,
+}
+
+impl Sink<'_> {
+    pub(crate) fn new(errors: &AtomicBool) -> Sink<'_> {
+        Sink {
+            errors,
+            out: Vec::new(),
+            events: Vec::new(),
+        }
+    }
+
+    fn message(&mut self, msg: String) {
+        self.errors.store(true, Ordering::Relaxed);
+        self.events.push(Event {
+            at: self.out.len(),
+            msg: Some(msg),
+            next: None,
+        });
+    }
+
+    pub(crate) fn report(&mut self, path: &Path, e: &io::Error) {
+        self.message(format!(
+            "{}: {}: {}",
+            super::prog(),
+            path.display(),
+            strerror(e)
+        ));
+    }
+
+    pub(crate) fn emit(&mut self, bytes: &[u8], term: u8) {
+        self.out.extend_from_slice(bytes);
+        self.out.push(term);
+    }
+}
+
+struct Listing {
+    out: Vec<u8>,
+    events: Vec<Event>,
+    queued: bool,
+}
+
+impl From<Sink<'_>> for Listing {
+    fn from(sink: Sink<'_>) -> Listing {
+        Listing {
+            out: sink.out,
+            events: sink.events,
+            queued: false,
+        }
+    }
+}
+
+fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
+    m.lock().unwrap_or_else(PoisonError::into_inner)
+}
+
+struct Slot {
+    claimed: AtomicBool,
+    node: Mutex<Option<Node>>,
+    value: Mutex<Option<Listing>>,
+    ready: Condvar,
+}
+
+impl Slot {
+    fn new(node: Node) -> Arc<Slot> {
+        Arc::new(Slot {
+            claimed: AtomicBool::new(false),
+            node: Mutex::new(Some(node)),
+            value: Mutex::new(None),
+            ready: Condvar::new(),
+        })
+    }
+
+    fn claim(&self) -> Option<Node> {
+        if self.claimed.swap(true, Ordering::AcqRel) {
+            None
+        } else {
+            lock(&self.node).take()
+        }
+    }
+
+    fn put(&self, listing: Listing) {
+        *lock(&self.value) = Some(listing);
+        self.ready.notify_all();
+    }
+
+    fn wait(&self) -> Listing {
+        let mut value = lock(&self.value);
+        loop {
+            if let Some(listing) = value.take() {
+                return listing;
+            }
+            value = self
+                .ready
+                .wait(value)
+                .unwrap_or_else(PoisonError::into_inner);
+        }
+    }
 }
 
 fn kind_from_meta(m: &fs::Metadata) -> Kind {
@@ -105,22 +215,44 @@ fn kind_from_ft(t: fs::FileType) -> Kind {
     }
 }
 
-fn file_id(m: &fs::Metadata) -> (u64, u64) {
+#[cfg(unix)]
+fn file_id(m: &fs::Metadata, _: &Path) -> (u64, u64) {
+    use std::os::unix::fs::MetadataExt;
     (m.dev(), m.ino())
 }
 
-pub(crate) fn report(path: &Path, e: impl std::fmt::Display, errors: &AtomicBool) {
-    errors.store(true, Ordering::Relaxed);
-    eprintln!("hfind: {}: {e}", path.display());
+#[cfg(not(unix))]
+fn file_id(_: &fs::Metadata, path: &Path) -> (u64, u64) {
+    use std::hash::{BuildHasher, BuildHasherDefault, DefaultHasher};
+    let real = fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+    (
+        0,
+        BuildHasherDefault::<DefaultHasher>::default().hash_one(real),
+    )
 }
 
-fn report_loop(here: &Path, there: &Path, errors: &AtomicBool) {
+#[cfg(unix)]
+fn entry_ino(entry: &fs::DirEntry) -> u64 {
+    std::os::unix::fs::DirEntryExt::ino(entry)
+}
+
+#[cfg(not(unix))]
+fn entry_ino(_: &fs::DirEntry) -> u64 {
+    0
+}
+
+fn report(path: &Path, e: &io::Error, errors: &AtomicBool) {
     errors.store(true, Ordering::Relaxed);
-    eprintln!(
-        "hfind: File system loop detected; '{}' is part of the same file system loop as '{}'.",
+    eprintln!("{}: {}: {}", super::prog(), path.display(), strerror(e));
+}
+
+fn loop_message(here: &Path, there: &Path) -> String {
+    format!(
+        "{}: File system loop detected; '{}' is part of the same file system loop as '{}'.",
+        super::prog(),
         here.display(),
         there.display()
-    );
+    )
 }
 
 fn should_descend(maxdepth: Option<usize>, depth: usize) -> bool {
@@ -128,7 +260,7 @@ fn should_descend(maxdepth: Option<usize>, depth: usize) -> bool {
 }
 
 fn push_rel_component(rel: &mut Vec<u8>, name: &OsStr, opts: RepoOpts) {
-    let raw = name.as_bytes();
+    let raw = name.as_encoded_bytes();
     if !rel.is_empty() {
         rel.push(b'/');
     }
@@ -143,7 +275,7 @@ fn push_rel_component(rel: &mut Vec<u8>, name: &OsStr, opts: RepoOpts) {
 }
 
 fn child_rel(parent: &[u8], name: &OsStr, opts: RepoOpts) -> Vec<u8> {
-    let raw = name.as_bytes();
+    let raw = name.as_encoded_bytes();
     let mut rel = Vec::with_capacity(parent.len() + raw.len() + 1);
     rel.extend_from_slice(parent);
     push_rel_component(&mut rel, name, opts);
@@ -192,7 +324,7 @@ fn root_ignore(path: &Path, is_dir: bool, follow: bool, errors: &AtomicBool) -> 
         return Some(plain_node(path.to_path_buf()));
     };
     if abs.join(".git").exists() {
-        let (seed, opts) = repo_sources(&abs, errors, false, PROG);
+        let (seed, opts) = repo_sources(&abs, errors, false, super::prog());
         return Some(Node {
             path: path.to_path_buf(),
             depth: 0,
@@ -216,7 +348,7 @@ fn root_ignore(path: &Path, is_dir: bool, follow: bool, errors: &AtomicBool) -> 
     let (Some(root), Some(name)) = (repo, abs.file_name()) else {
         return Some(plain_node(path.to_path_buf()));
     };
-    let (seed, opts) = repo_sources(root, errors, false, PROG);
+    let (seed, opts) = repo_sources(root, errors, false, super::prog());
     let mut rel = Vec::new();
     let mut ignore = seed;
     for (idx, dir) in chain.iter().rev().enumerate() {
@@ -231,7 +363,7 @@ fn root_ignore(path: &Path, is_dir: bool, follow: bool, errors: &AtomicBool) -> 
             opts.fold,
             errors,
             false,
-            PROG,
+            super::prog(),
         );
     }
     let rel = child_rel(&rel, name, opts);
@@ -258,7 +390,7 @@ fn resolve(path: &Path, follow: bool, errors: &AtomicBool) -> Option<(fs::Metada
                 Some((m, kind))
             }
             Err(e) => {
-                report(path, e, errors);
+                report(path, &e, errors);
                 None
             }
         };
@@ -272,12 +404,12 @@ fn resolve(path: &Path, follow: bool, errors: &AtomicBool) -> Option<(fs::Metada
             Ok(m) => {
                 let kind = kind_from_meta(&m);
                 if kind == Kind::Link {
-                    report(path, e, errors);
+                    report(path, &e, errors);
                 }
                 Some((m, kind))
             }
             Err(e2) => {
-                report(path, e2, errors);
+                report(path, &e2, errors);
                 None
             }
         },
@@ -289,7 +421,7 @@ fn classify(
     ft: fs::FileType,
     follow: bool,
     need_meta: bool,
-    errors: &AtomicBool,
+    sink: &mut Sink<'_>,
 ) -> (Option<fs::Metadata>, Kind) {
     if follow && ft.is_symlink() {
         match fs::metadata(path) {
@@ -298,11 +430,11 @@ fn classify(
                 (Some(m), kind)
             }
             Err(e) => {
-                report(path, e, errors);
+                sink.report(path, &e);
                 match fs::symlink_metadata(path) {
                     Ok(m) => (Some(m), Kind::Link),
                     Err(e2) => {
-                        report(path, e2, errors);
+                        sink.report(path, &e2);
                         (None, Kind::Link)
                     }
                 }
@@ -316,24 +448,11 @@ fn classify(
         match fs::symlink_metadata(path) {
             Ok(m) => (Some(m), kind),
             Err(e) => {
-                report(path, e, errors);
+                sink.report(path, &e);
                 (None, kind)
             }
         }
     }
-}
-
-fn consider<F: Fn(&Item<'_>)>(
-    ctx: &Ctx<'_, F>,
-    path: &Path,
-    kind: Kind,
-    meta: Option<&fs::Metadata>,
-    depth: usize,
-) {
-    if depth < ctx.cfg.mindepth {
-        return;
-    }
-    (ctx.visit)(&Item { path, kind, meta });
 }
 
 fn push_anc(parent: Option<&Arc<Anc>>, id: (u64, u64), path: PathBuf) -> Arc<Anc> {
@@ -344,55 +463,17 @@ fn push_anc(parent: Option<&Arc<Anc>>, id: (u64, u64), path: PathBuf) -> Arc<Anc
     })
 }
 
-struct Child {
-    path: PathBuf,
-    depth: usize,
-    kind: Kind,
-    ignore_rel: Vec<u8>,
-    ignore: Option<Arc<Ignore>>,
-    opts: RepoOpts,
-    in_repo: bool,
-    repo: Option<PathBuf>,
+struct Ent {
+    name: OsString,
+    ft: fs::FileType,
+    ino: u64,
 }
 
-fn maybe_enqueue(
-    ctx: &Ctx<'_, impl Fn(&Item<'_>)>,
-    child: Child,
-    meta: Option<&fs::Metadata>,
-    parent: &Node,
-    next: &mut Vec<Node>,
-) {
-    if child.kind != Kind::Dir || !should_descend(ctx.cfg.maxdepth, child.depth) {
-        return;
-    }
-    if let Some(m) = meta
-        && let Some(hit) = parent
-            .ancestors
-            .as_ref()
-            .and_then(|a| a.contains(file_id(m)))
-    {
-        report_loop(&child.path, hit, ctx.errors);
-        return;
-    }
-    let ancestors =
-        meta.map(|m| push_anc(parent.ancestors.as_ref(), file_id(m), child.path.clone()));
-    next.push(Node {
-        path: child.path,
-        depth: child.depth,
-        ignore_rel: child.ignore_rel,
-        ignore: child.ignore,
-        opts: child.opts,
-        in_repo: child.in_repo,
-        ancestors,
-        repo: child.repo,
-    });
-}
-
-fn read_entries(path: &Path, errors: &AtomicBool) -> Vec<fs::DirEntry> {
+fn read_entries(path: &Path, sink: &mut Sink<'_>) -> Vec<Ent> {
     let rd = match fs::read_dir(path) {
         Ok(rd) => rd,
         Err(e) => {
-            report(path, e, errors);
+            sink.report(path, &e);
             return Vec::new();
         }
     };
@@ -400,22 +481,33 @@ fn read_entries(path: &Path, errors: &AtomicBool) -> Vec<fs::DirEntry> {
     for ent in rd {
         #[cfg(test)]
         let ent = if FORCE_DIR_ENTRY_ERR.with(|f| f.replace(false)) {
-            Err(std::io::Error::other("forced"))
+            Err(io::Error::other("forced"))
         } else {
             ent
         };
         match ent {
-            Ok(e) => out.push(e),
-            Err(e) => report(path, e, errors),
+            Ok(e) => {
+                if let Some(ft) = entry_type(&e, sink) {
+                    out.push(Ent {
+                        ino: entry_ino(&e),
+                        name: e.file_name(),
+                        ft,
+                    });
+                }
+            }
+            Err(e) => sink.report(path, &e),
         }
+    }
+    if GNU_FIND && out.len() > INODE_SORT_THRESHOLD {
+        out.sort_by_key(|e| e.ino);
     }
     out
 }
 
-fn entry_type(entry: &fs::DirEntry, errors: &AtomicBool) -> Option<fs::FileType> {
+fn entry_type(entry: &fs::DirEntry, sink: &mut Sink<'_>) -> Option<fs::FileType> {
     #[cfg(test)]
     let typed = if FORCE_ENTRY_TYPE_ERR.with(|f| f.replace(false)) {
-        Err(std::io::Error::other("forced"))
+        Err(io::Error::other("forced"))
     } else {
         entry.file_type()
     };
@@ -424,7 +516,7 @@ fn entry_type(entry: &fs::DirEntry, errors: &AtomicBool) -> Option<fs::FileType>
     match typed {
         Ok(ft) => Some(ft),
         Err(e) => {
-            report(&entry.path(), e, errors);
+            sink.report(&entry.path(), &e);
             None
         }
     }
@@ -456,7 +548,7 @@ fn skip_followed_dir(
     };
     if real
         .file_name()
-        .is_some_and(|n| is_dot_git(n.as_bytes(), opts.fold))
+        .is_some_and(|n| is_dot_git(n.as_encoded_bytes(), opts.fold))
     {
         return true;
     }
@@ -469,399 +561,344 @@ fn skip_followed_dir(
     ignore.is_some_and(|ig| ig.ignored(&rel_from_path(suffix, opts), true))
 }
 
-#[cfg(all(unix, not(test)))]
-fn kind_from_dtype(d_type: u8) -> Option<Kind> {
-    match crate::hc_internal::unixdir::is_dir(d_type) {
-        None => None,
-        Some(true) => Some(Kind::Dir),
-        Some(false) if crate::hc_internal::unixdir::is_file(d_type) == Some(true) => {
-            Some(Kind::File)
-        }
-        Some(false) if crate::hc_internal::unixdir::is_lnk(d_type) => Some(Kind::Link),
-        Some(false) => Some(Kind::Other),
-    }
+struct Scope<'n> {
+    parent_rel: &'n [u8],
+    ignore: Option<Arc<Ignore>>,
+    opts: RepoOpts,
+    in_repo: bool,
+    repo: Option<PathBuf>,
 }
 
-#[cfg(all(unix, not(test)))]
-fn classify_dtype(
-    path: &Path,
-    d_type: u8,
-    follow: bool,
-    need_meta: bool,
-    errors: &AtomicBool,
-) -> (Option<fs::Metadata>, Kind) {
-    if follow && crate::hc_internal::unixdir::is_lnk(d_type) {
-        return match fs::metadata(path) {
-            Ok(m) => {
-                let kind = kind_from_meta(&m);
-                (Some(m), kind)
-            }
-            Err(e) => {
-                report(path, e, errors);
-                match fs::symlink_metadata(path) {
-                    Ok(m) => (Some(m), Kind::Link),
-                    Err(e2) => {
-                        report(path, e2, errors);
-                        (None, Kind::Link)
-                    }
-                }
-            }
-        };
-    }
-    let Some(kind) = kind_from_dtype(d_type) else {
-        return match fs::symlink_metadata(path) {
-            Ok(m) => {
-                let kind = kind_from_meta(&m);
-                if !need_meta && (kind != Kind::Dir || !follow) {
-                    (None, kind)
-                } else {
-                    (Some(m), kind)
-                }
-            }
-            Err(e) => {
-                report(path, e, errors);
-                (None, Kind::Other)
-            }
-        };
-    };
-    if !need_meta && (kind != Kind::Dir || !follow) {
-        return (None, kind);
-    }
-    match fs::symlink_metadata(path) {
-        Ok(m) => (Some(m), kind),
-        Err(e) => {
-            report(path, e, errors);
-            (None, kind)
-        }
-    }
+struct Walk<'a, V> {
+    cfg: &'a WalkCfg,
+    errors: &'a AtomicBool,
+    visit: &'a V,
+    queue: Mutex<(Vec<Arc<Slot>>, bool)>,
+    wake: Condvar,
+    ahead: AtomicUsize,
 }
 
-fn scan_plain<F: Fn(&Item<'_>)>(node: &Node, ctx: &Ctx<'_, F>, follow_child: bool) -> Vec<Node> {
-    let mut next = Vec::new();
-    let mut child = node.path.clone();
-    let depth = node.depth + 1;
-    #[cfg(all(unix, not(test)))]
-    {
-        let (dirfd, ents) = match crate::hc_internal::unixdir::list(&node.path) {
-            Ok(v) => v,
-            Err(e) => {
-                report(&node.path, e, ctx.errors);
-                return next;
-            }
-        };
-        for ent in ents {
-            child.push(&ent.name);
-            let d_type = if crate::hc_internal::unixdir::is_dir(ent.d_type).is_none() {
-                crate::hc_internal::unixdir::dtype_at(&dirfd, &ent.name).unwrap_or(ent.d_type)
-            } else {
-                ent.d_type
+impl<V: Fn(&Item<'_>, &mut Sink<'_>) + Sync> Walk<'_, V> {
+    fn scope<'n>(&self, node: &'n Node, entries: &[Ent]) -> Scope<'n> {
+        if !self.cfg.gitignore {
+            return Scope {
+                parent_rel: &[],
+                ignore: None,
+                opts: RepoOpts::default(),
+                in_repo: false,
+                repo: None,
             };
-            let (meta, kind) =
-                classify_dtype(&child, d_type, follow_child, ctx.cfg.need_meta, ctx.errors);
-            consider(ctx, &child, kind, meta.as_ref(), depth);
-            if kind == Kind::Dir && should_descend(ctx.cfg.maxdepth, depth) {
-                maybe_enqueue(
-                    ctx,
-                    Child {
+        }
+        let always = self.cfg.follow == Follow::Always;
+        let boundary = entries
+            .iter()
+            .any(|entry| entry.name.as_encoded_bytes() == b".git")
+            .then(|| repo_sources(&node.path, self.errors, false, super::prog()));
+        let (parent_rel, inherited, opts, in_repo, repo) = match boundary {
+            Some((seed, opts)) => (
+                &[][..],
+                seed,
+                opts,
+                true,
+                always.then(|| {
+                    node.path
+                        .canonicalize()
+                        .unwrap_or_else(|_| node.path.clone())
+                }),
+            ),
+            None => (
+                &node.ignore_rel[..],
+                node.ignore.clone(),
+                node.opts,
+                node.in_repo,
+                if always { node.repo.clone() } else { None },
+            ),
+        };
+        let ignore = if !in_repo {
+            None
+        } else if entries.iter().any(|entry| {
+            let name = entry.name.as_encoded_bytes();
+            if opts.fold {
+                name.eq_ignore_ascii_case(b".gitignore")
+            } else {
+                name == b".gitignore"
+            }
+        }) {
+            let base = if parent_rel.is_empty() {
+                0
+            } else {
+                parent_rel.len() + 1
+            };
+            load_ignore(
+                &node.path.join(".gitignore"),
+                base,
+                inherited,
+                opts.fold,
+                self.errors,
+                false,
+                super::prog(),
+            )
+        } else {
+            inherited
+        };
+        Scope {
+            parent_rel,
+            ignore,
+            opts,
+            in_repo,
+            repo,
+        }
+    }
+
+    fn list(&self, node: &Node) -> Listing {
+        let cfg = self.cfg;
+        let mut sink = Sink::new(self.errors);
+        let entries = read_entries(&node.path, &mut sink);
+        let scope = self.scope(node, &entries);
+        let follow_child = cfg.follow == Follow::Always;
+        let depth = node.depth + 1;
+        let mut child = node.path.clone();
+        for entry in &entries {
+            if cfg.gitignore && is_dot_git(entry.name.as_encoded_bytes(), scope.opts.fold) {
+                continue;
+            }
+            child.push(&entry.name);
+            let (meta, kind) = classify(&child, entry.ft, follow_child, cfg.need_meta, &mut sink);
+            let rel = if cfg.gitignore {
+                if skip_followed_dir(
+                    &child,
+                    kind,
+                    entry.ft.is_symlink(),
+                    scope.ignore.as_deref(),
+                    scope.opts,
+                    scope.repo.as_deref(),
+                ) {
+                    child.pop();
+                    continue;
+                }
+                let rel = child_rel(scope.parent_rel, &entry.name, scope.opts);
+                if let Some(ig) = &scope.ignore
+                    && ig.ignored(&rel, kind == Kind::Dir)
+                {
+                    child.pop();
+                    continue;
+                }
+                rel
+            } else {
+                Vec::new()
+            };
+            if depth >= cfg.mindepth {
+                (self.visit)(
+                    &Item {
+                        path: &child,
+                        kind,
+                        meta: meta.as_ref(),
+                    },
+                    &mut sink,
+                );
+            }
+            if kind == Kind::Dir && should_descend(cfg.maxdepth, depth) {
+                let id = meta.as_ref().map(|m| file_id(m, &child));
+                if let Some(hit) = id.and_then(|id| node.ancestors.as_ref()?.contains(id)) {
+                    sink.message(loop_message(&child, hit));
+                } else {
+                    let next = Node {
                         path: child.clone(),
                         depth,
-                        kind,
-                        ignore_rel: Vec::new(),
-                        ignore: None,
-                        opts: RepoOpts::default(),
-                        in_repo: false,
-                        repo: None,
-                    },
-                    meta.as_ref(),
-                    node,
-                    &mut next,
-                );
+                        ignore_rel: rel,
+                        ignore: scope.ignore.clone(),
+                        opts: scope.opts,
+                        in_repo: scope.in_repo,
+                        ancestors: id
+                            .map(|id| push_anc(node.ancestors.as_ref(), id, child.clone())),
+                        repo: scope.repo.clone(),
+                    };
+                    sink.events.push(Event {
+                        at: sink.out.len(),
+                        msg: None,
+                        next: Some(Slot::new(next)),
+                    });
+                }
             }
             child.pop();
         }
-        next
+        Listing::from(sink)
     }
-    #[cfg(not(all(unix, not(test))))]
-    {
-        for entry in read_entries(&node.path, ctx.errors) {
-            let Some(ft) = entry_type(&entry, ctx.errors) else {
+
+    fn queue_children(&self, listing: &mut Listing) {
+        if listing.queued {
+            return;
+        }
+        listing.queued = true;
+        let mut queue = lock(&self.queue);
+        if queue.1 {
+            return;
+        }
+        let before = queue.0.len();
+        queue.0.extend(
+            listing
+                .events
+                .iter()
+                .rev()
+                .filter_map(|ev| ev.next.as_ref().map(Arc::clone)),
+        );
+        let added = queue.0.len() - before;
+        drop(queue);
+        match added {
+            0 => {}
+            1 => self.wake.notify_one(),
+            _ => self.wake.notify_all(),
+        }
+    }
+
+    fn pop(&self) -> Option<Arc<Slot>> {
+        let mut queue = lock(&self.queue);
+        loop {
+            if queue.1 {
+                return None;
+            }
+            if let Some(slot) = queue.0.pop() {
+                return Some(slot);
+            }
+            queue = self
+                .wake
+                .wait(queue)
+                .unwrap_or_else(PoisonError::into_inner);
+        }
+    }
+
+    fn close(&self) {
+        let mut queue = lock(&self.queue);
+        queue.1 = true;
+        queue.0.clear();
+        drop(queue);
+        self.wake.notify_all();
+    }
+
+    fn helper(&self) {
+        while let Some(slot) = self.pop() {
+            if let Some(node) = slot.claim() {
+                let mut listing = self.list(&node);
+                if self.ahead.load(Ordering::Relaxed) < AHEAD_LIMIT {
+                    self.queue_children(&mut listing);
+                }
+                self.ahead.fetch_add(1, Ordering::Relaxed);
+                slot.put(listing);
+            }
+        }
+    }
+
+    fn take(&self, slot: &Slot) -> Listing {
+        let mut listing = if let Some(node) = slot.claim() {
+            self.list(&node)
+        } else {
+            let listing = slot.wait();
+            self.ahead.fetch_sub(1, Ordering::Relaxed);
+            listing
+        };
+        self.queue_children(&mut listing);
+        listing
+    }
+
+    fn drain(&self, first: Listing, out: &mut dyn Write) -> io::Result<()> {
+        let mut stack = vec![(first, 0usize, 0usize)];
+        while let Some((listing, ev, pos)) = stack.last_mut() {
+            let Some(event) = listing.events.get_mut(*ev) else {
+                out.write_all(&listing.out[*pos..])?;
+                stack.pop();
                 continue;
             };
-            child.push(entry.file_name());
-            let (meta, kind) = classify(&child, ft, follow_child, ctx.cfg.need_meta, ctx.errors);
-            consider(ctx, &child, kind, meta.as_ref(), depth);
-            if kind == Kind::Dir && should_descend(ctx.cfg.maxdepth, depth) {
-                maybe_enqueue(
-                    ctx,
-                    Child {
-                        path: child.clone(),
-                        depth,
+            *ev += 1;
+            out.write_all(&listing.out[*pos..event.at])?;
+            *pos = event.at;
+            if let Some(msg) = event.msg.take() {
+                out.flush()?;
+                eprintln!("{msg}");
+            }
+            if let Some(next) = event.next.take() {
+                let child = self.take(&next);
+                stack.push((child, 0, 0));
+            }
+        }
+        Ok(())
+    }
+
+    fn roots(&self, roots: &[OsString], out: &mut dyn Write) -> io::Result<()> {
+        let cfg = self.cfg;
+        let follow_root = matches!(cfg.follow, Follow::Cli | Follow::Always);
+        for root in roots {
+            let path = PathBuf::from(root);
+            let Some((meta, kind)) = resolve(&path, follow_root, self.errors) else {
+                continue;
+            };
+            let mut node = if cfg.gitignore {
+                match root_ignore(&path, kind == Kind::Dir, follow_root, self.errors) {
+                    None => continue,
+                    Some(n) => n,
+                }
+            } else {
+                plain_node(path.clone())
+            };
+            node.ancestors = Some(push_anc(None, file_id(&meta, &path), path.clone()));
+            let mut sink = Sink::new(self.errors);
+            if cfg.mindepth == 0 {
+                (self.visit)(
+                    &Item {
+                        path: &path,
                         kind,
-                        ignore_rel: Vec::new(),
-                        ignore: None,
-                        opts: RepoOpts::default(),
-                        in_repo: false,
-                        repo: None,
+                        meta: Some(&meta),
                     },
-                    meta.as_ref(),
-                    node,
-                    &mut next,
+                    &mut sink,
                 );
             }
-            child.pop();
-        }
-        next
-    }
-}
-
-fn scan<F: Fn(&Item<'_>)>(node: &Node, ctx: &Ctx<'_, F>) -> Vec<Node> {
-    let follow_child = ctx.cfg.follow == Follow::Always;
-    if !ctx.cfg.gitignore {
-        return scan_plain(node, ctx, follow_child);
-    }
-    let entries = read_entries(&node.path, ctx.errors);
-    let mut next = Vec::new();
-    let boundary = entries
-        .iter()
-        .any(|entry| entry.file_name().as_bytes() == b".git")
-        .then(|| repo_sources(&node.path, ctx.errors, false, PROG));
-    let (parent_rel, inherited, opts, in_repo, repo) = match &boundary {
-        Some((seed, opts)) => (
-            &[][..],
-            seed.clone(),
-            *opts,
-            true,
-            (ctx.cfg.follow == Follow::Always).then(|| {
-                node.path
-                    .canonicalize()
-                    .unwrap_or_else(|_| node.path.clone())
-            }),
-        ),
-        None => (
-            &node.ignore_rel[..],
-            node.ignore.clone(),
-            node.opts,
-            node.in_repo,
-            if ctx.cfg.follow == Follow::Always {
-                node.repo.clone()
-            } else {
-                None
-            },
-        ),
-    };
-    let ignore = if !in_repo {
-        None
-    } else if entries.iter().any(|entry| {
-        let name = entry.file_name();
-        if opts.fold {
-            name.as_bytes().eq_ignore_ascii_case(b".gitignore")
-        } else {
-            name.as_bytes() == b".gitignore"
-        }
-    }) {
-        let base = if parent_rel.is_empty() {
-            0
-        } else {
-            parent_rel.len() + 1
-        };
-        load_ignore(
-            &node.path.join(".gitignore"),
-            base,
-            inherited,
-            opts.fold,
-            ctx.errors,
-            false,
-            PROG,
-        )
-    } else {
-        inherited
-    };
-    let mut child = node.path.clone();
-    let depth = node.depth + 1;
-    for entry in entries {
-        let Some(ft) = entry_type(&entry, ctx.errors) else {
-            continue;
-        };
-        let name = entry.file_name();
-        if is_dot_git(name.as_bytes(), opts.fold) {
-            continue;
-        }
-        child.push(&name);
-        let (meta, kind) = classify(&child, ft, follow_child, ctx.cfg.need_meta, ctx.errors);
-        if skip_followed_dir(
-            &child,
-            kind,
-            ft.is_symlink(),
-            ignore.as_deref(),
-            opts,
-            repo.as_deref(),
-        ) {
-            child.pop();
-            continue;
-        }
-        let rel = child_rel(parent_rel, &name, opts);
-        if let Some(ig) = &ignore
-            && ig.ignored(&rel, kind == Kind::Dir)
-        {
-            child.pop();
-            continue;
-        }
-        consider(ctx, &child, kind, meta.as_ref(), depth);
-        if kind == Kind::Dir && should_descend(ctx.cfg.maxdepth, depth) {
-            maybe_enqueue(
-                ctx,
-                Child {
-                    path: child.clone(),
-                    depth,
-                    kind,
-                    ignore_rel: rel,
-                    ignore: ignore.clone(),
-                    opts,
-                    in_repo,
-                    repo: repo.clone(),
-                },
-                meta.as_ref(),
-                node,
-                &mut next,
-            );
-        }
-        child.pop();
-    }
-    next
-}
-
-fn walk_from<F: Fn(&Item<'_>) + Sync>(mut node: Node, ctx: &Ctx<'_, F>) {
-    loop {
-        let mut next = scan(&node, ctx);
-        match next.len() {
-            0 => return,
-            1 => node = next.pop().unwrap(),
-            _ => {
-                next.into_par_iter().for_each(|n| walk_from(n, ctx));
-                return;
+            if kind == Kind::Dir && should_descend(cfg.maxdepth, 0) {
+                node.path = path;
+                sink.events.push(Event {
+                    at: sink.out.len(),
+                    msg: None,
+                    next: Some(Slot::new(node)),
+                });
             }
+            self.drain(Listing::from(sink), out)?;
         }
+        Ok(())
     }
 }
 
-pub(crate) fn for_each<F>(roots: &[OsString], cfg: &WalkCfg, errors: &AtomicBool, visit: F)
+pub(crate) fn for_each<V>(
+    roots: &[OsString],
+    cfg: &WalkCfg,
+    errors: &AtomicBool,
+    out: &mut dyn Write,
+    visit: &V,
+) -> io::Result<()>
 where
-    F: Fn(&Item<'_>) + Sync,
+    V: Fn(&Item<'_>, &mut Sink<'_>) + Sync,
 {
-    let ctx = Ctx { cfg, errors, visit };
-    let mut seeds = Vec::new();
-    for root in roots {
-        let path = PathBuf::from(root);
-        let follow_root = matches!(cfg.follow, Follow::Cli | Follow::Always);
-        let Some((meta, kind)) = resolve(&path, follow_root, errors) else {
-            continue;
-        };
-        let mut node = if cfg.gitignore {
-            match root_ignore(&path, kind == Kind::Dir, follow_root, errors) {
-                None => continue,
-                Some(n) => n,
-            }
-        } else {
-            plain_node(path.clone())
-        };
-        node.ancestors = Some(push_anc(None, file_id(&meta), path.clone()));
-        consider(&ctx, &path, kind, Some(&meta), 0);
-        if kind == Kind::Dir && should_descend(cfg.maxdepth, 0) {
-            node.path = path;
-            seeds.push(node);
+    let walk = Walk {
+        cfg,
+        errors,
+        visit,
+        queue: Mutex::new((Vec::new(), false)),
+        wake: Condvar::new(),
+        ahead: AtomicUsize::new(0),
+    };
+    let helpers = std::thread::available_parallelism().map_or(1, |n| n.get().min(8));
+    std::thread::scope(|scope| {
+        let walk = &walk;
+        for _ in 0..helpers {
+            scope.spawn(move || walk.helper());
         }
-    }
-    match seeds.len() {
-        0 => {}
-        1 => walk_from(seeds.pop().unwrap(), &ctx),
-        _ => seeds.into_par_iter().for_each(|n| walk_from(n, &ctx)),
-    }
+        let result = walk.roots(roots, out);
+        walk.close();
+        result
+    })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::time::{SystemTime, UNIX_EPOCH};
-
-    #[test]
-    fn nfc_ascii_and_invalid() {
-        assert!(nfc::precomposed(b"ascii").is_none());
-        let _ = nfc::precomposed(&[0xff, 0xff, 0xff]);
-        let _ = nfc::precomposed("e\u{0301}".as_bytes());
-    }
-
-    #[test]
-    fn classify_stats_directories_without_need_meta() {
-        let nanos = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-        let dir =
-            std::env::temp_dir().join(format!("hfind_classify_{}_{nanos}", std::process::id()));
-        fs::create_dir_all(&dir).unwrap();
-        let ft = fs::symlink_metadata(&dir).unwrap().file_type();
-        let errors = AtomicBool::new(false);
-        let (meta, kind) = classify(&dir, ft, false, false, &errors);
-        assert!(meta.is_none());
-        assert!(kind == Kind::Dir);
-        assert!(!errors.load(Ordering::Relaxed));
-        fs::remove_dir_all(&dir).unwrap();
-    }
-
-    #[test]
-    fn enqueue_detects_directory_cycle() {
-        let nanos = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-        let dir = std::env::temp_dir().join(format!("hfind_cycle_{}_{nanos}", std::process::id()));
-        fs::create_dir_all(&dir).unwrap();
-        let meta = fs::symlink_metadata(&dir).unwrap();
-        let id = file_id(&meta);
-        let errors = AtomicBool::new(false);
-        let parent = plain_node(dir.clone());
-        let parent = Node {
-            ancestors: Some(push_anc(None, id, dir.clone())),
-            ..parent
-        };
-        let cfg = WalkCfg {
-            follow: Follow::Never,
-            gitignore: false,
-            mindepth: 0,
-            maxdepth: None,
-            need_meta: false,
-        };
-        let ctx = Ctx {
-            cfg: &cfg,
-            errors: &errors,
-            visit: |_: &Item| {},
-        };
-        (ctx.visit)(&Item {
-            path: &dir,
-            kind: Kind::Dir,
-            meta: None,
-        });
-        let mut next = Vec::new();
-        maybe_enqueue(
-            &ctx,
-            Child {
-                path: dir.join("again"),
-                depth: 1,
-                kind: Kind::Dir,
-                ignore_rel: Vec::new(),
-                ignore: None,
-                opts: RepoOpts::default(),
-                in_repo: false,
-                repo: None,
-            },
-            Some(&meta),
-            &parent,
-            &mut next,
-        );
-        assert!(errors.load(Ordering::Relaxed));
-        assert!(next.is_empty());
-        fs::remove_dir_all(&dir).unwrap();
-    }
 
     fn scratch_walk(tag: &str) -> PathBuf {
         let nanos = SystemTime::now()
@@ -873,6 +910,107 @@ mod tests {
         dir
     }
 
+    fn cfg(follow: Follow, gitignore: bool) -> WalkCfg {
+        WalkCfg {
+            follow,
+            gitignore,
+            mindepth: 0,
+            maxdepth: None,
+            need_meta: false,
+        }
+    }
+
+    fn print(item: &Item<'_>, sink: &mut Sink<'_>) {
+        sink.emit(item.path.as_os_str().as_encoded_bytes(), b'\n');
+    }
+
+    fn run(roots: &[PathBuf], cfg: &WalkCfg, errors: &AtomicBool) -> String {
+        let mut out = Vec::new();
+        let roots: Vec<OsString> = roots.iter().map(|p| p.clone().into_os_string()).collect();
+        for_each(&roots, cfg, errors, &mut out, &print).unwrap();
+        String::from_utf8(out).unwrap()
+    }
+
+    fn preorder(dir: &Path, out: &mut String) {
+        out.push_str(&dir.display().to_string());
+        out.push('\n');
+        if fs::symlink_metadata(dir).unwrap().is_dir() {
+            for entry in fs::read_dir(dir).unwrap() {
+                preorder(&entry.unwrap().path(), out);
+            }
+        }
+    }
+
+    #[test]
+    fn nfc_ascii_and_invalid() {
+        assert!(nfc::precomposed(b"ascii").is_none());
+        let _ = nfc::precomposed(&[0xff, 0xff, 0xff]);
+        let _ = nfc::precomposed("e\u{0301}".as_bytes());
+    }
+
+    #[test]
+    fn output_is_readdir_preorder() {
+        let dir = scratch_walk("preorder");
+        for rel in ["b/x", "a/y/z", "c", "a/w", "d/e/f/g", "b/q"] {
+            let path = dir.join(rel);
+            fs::create_dir_all(path.parent().unwrap()).unwrap();
+            fs::write(&path, b"").unwrap();
+        }
+        let mut want = String::new();
+        preorder(&dir, &mut want);
+        let errors = AtomicBool::new(false);
+        for _ in 0..20 {
+            assert_eq!(
+                run(
+                    std::slice::from_ref(&dir),
+                    &cfg(Follow::Never, false),
+                    &errors
+                ),
+                want
+            );
+        }
+        let twice = run(
+            &[dir.join("b"), dir.join("a")],
+            &cfg(Follow::Never, false),
+            &errors,
+        );
+        let mut want_b = String::new();
+        preorder(&dir.join("b"), &mut want_b);
+        preorder(&dir.join("a"), &mut want_b);
+        assert_eq!(twice, want_b);
+        assert!(!errors.load(Ordering::Relaxed));
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn classify_stats_directories_without_need_meta() {
+        let dir = scratch_walk("classify");
+        let ft = fs::symlink_metadata(&dir).unwrap().file_type();
+        let errors = AtomicBool::new(false);
+        let mut sink = Sink::new(&errors);
+        let (meta, kind) = classify(&dir, ft, false, false, &mut sink);
+        assert!(meta.is_none());
+        assert!(kind == Kind::Dir);
+        assert!(!errors.load(Ordering::Relaxed));
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn follow_reports_directory_cycle_once() {
+        let dir = scratch_walk("cycle");
+        fs::create_dir(dir.join("sub")).unwrap();
+        std::os::unix::fs::symlink("..", dir.join("sub/up")).unwrap();
+        let errors = AtomicBool::new(false);
+        let out = run(
+            std::slice::from_ref(&dir),
+            &cfg(Follow::Always, false),
+            &errors,
+        );
+        assert!(errors.load(Ordering::Relaxed));
+        assert_eq!(out.lines().count(), 3, "{out}");
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
     #[test]
     fn classify_reports_vanished_paths() {
         let dir = scratch_walk("vanish");
@@ -881,17 +1019,20 @@ mod tests {
         let ft = fs::symlink_metadata(&link).unwrap().file_type();
         fs::remove_file(&link).unwrap();
         let errors = AtomicBool::new(false);
-        let (meta, kind) = classify(&link, ft, true, false, &errors);
+        let mut sink = Sink::new(&errors);
+        let (meta, kind) = classify(&link, ft, true, false, &mut sink);
         assert!(meta.is_none());
         assert!(kind == Kind::Link);
         assert!(errors.load(Ordering::Relaxed));
+        assert_eq!(sink.events.len(), 2);
 
         let file = dir.join("gone");
         fs::write(&file, b"x").unwrap();
         let ft = fs::symlink_metadata(&file).unwrap().file_type();
         fs::remove_file(&file).unwrap();
         let errors = AtomicBool::new(false);
-        let (meta, kind) = classify(&file, ft, false, true, &errors);
+        let mut sink = Sink::new(&errors);
+        let (meta, kind) = classify(&file, ft, false, true, &mut sink);
         assert!(meta.is_none());
         assert!(kind == Kind::File);
         assert!(errors.load(Ordering::Relaxed));
@@ -952,68 +1093,30 @@ mod tests {
         assert!(!missing_follow.in_repo);
     }
 
-    fn dummy_item(path: &Path) -> Item<'_> {
-        Item {
-            path,
-            kind: Kind::File,
-            meta: None,
-        }
-    }
-
     #[test]
-    fn scan_reports_forced_entry_errors() {
+    fn read_entries_reports_forced_errors() {
         let dir = scratch_walk("scan_err");
         fs::write(dir.join("a"), b"").unwrap();
-        let node = plain_node(dir.clone());
-        let mut cfg = WalkCfg {
-            follow: Follow::Never,
-            gitignore: false,
-            mindepth: 0,
-            maxdepth: None,
-            need_meta: false,
-        };
 
         let errors = AtomicBool::new(false);
-        let ctx = Ctx {
-            cfg: &cfg,
-            errors: &errors,
-            visit: |_: &Item| {},
-        };
-        let _ = scan(&node, &ctx);
+        let mut sink = Sink::new(&errors);
+        assert_eq!(read_entries(&dir, &mut sink).len(), 1);
         assert!(!errors.load(Ordering::Relaxed));
 
-        let errors = AtomicBool::new(false);
         FORCE_DIR_ENTRY_ERR.with(|f| f.set(true));
-        let ctx = Ctx {
-            cfg: &cfg,
-            errors: &errors,
-            visit: |_: &Item| {},
-        };
-        (ctx.visit)(&dummy_item(&dir));
-        let _ = scan(&node, &ctx);
+        let mut sink = Sink::new(&errors);
+        let _ = read_entries(&dir, &mut sink);
         assert!(errors.load(Ordering::Relaxed));
 
         let errors = AtomicBool::new(false);
         FORCE_ENTRY_TYPE_ERR.with(|f| f.set(true));
-        let ctx = Ctx {
-            cfg: &cfg,
-            errors: &errors,
-            visit: |_: &Item| {},
-        };
-        (ctx.visit)(&dummy_item(&dir));
-        let _ = scan(&node, &ctx);
+        let mut sink = Sink::new(&errors);
+        assert!(read_entries(&dir, &mut sink).is_empty());
         assert!(errors.load(Ordering::Relaxed));
 
         let errors = AtomicBool::new(false);
-        FORCE_ENTRY_TYPE_ERR.with(|f| f.set(true));
-        cfg.gitignore = true;
-        let ctx = Ctx {
-            cfg: &cfg,
-            errors: &errors,
-            visit: |_: &Item| {},
-        };
-        (ctx.visit)(&dummy_item(&dir));
-        let _ = scan(&node, &ctx);
+        let mut sink = Sink::new(&errors);
+        assert!(read_entries(&dir.join("missing"), &mut sink).is_empty());
         assert!(errors.load(Ordering::Relaxed));
         fs::remove_dir_all(&dir).unwrap();
     }
@@ -1072,17 +1175,18 @@ mod tests {
         let _ = root_ignore(&dir.join("repo"), true, true, &errors);
         let deep = root_ignore(&dir.join("repo/a/b"), true, false, &errors).unwrap();
         assert!(deep.in_repo);
-        assert!(!deep.ignore_rel.is_empty());
+        assert_ne!(deep.ignore_rel.len(), 0);
         let _ = root_ignore(&dir.join("repo/build"), true, false, &errors);
 
         let link = dir.join("todir");
         std::os::unix::fs::symlink("sub", &link).unwrap();
         let ft = fs::symlink_metadata(&link).unwrap().file_type();
-        let (meta, kind) = classify(&link, ft, true, false, &errors);
+        let mut sink = Sink::new(&errors);
+        let (meta, kind) = classify(&link, ft, true, false, &mut sink);
         assert!(kind == Kind::Dir);
         assert!(meta.is_some());
         let ft = fs::symlink_metadata(dir.join("a.txt")).unwrap().file_type();
-        let (meta, kind) = classify(&dir.join("a.txt"), ft, false, false, &errors);
+        let (meta, kind) = classify(&dir.join("a.txt"), ft, false, false, &mut sink);
         assert!(kind == Kind::File);
         assert!(meta.is_none());
 
@@ -1110,41 +1214,47 @@ mod tests {
             Some(&dir.join("repo")),
         );
 
-        let seen = std::sync::atomic::AtomicUsize::new(0);
-        let cfg = WalkCfg {
-            follow: Follow::Never,
-            gitignore: false,
-            mindepth: 0,
-            maxdepth: None,
-            need_meta: true,
-        };
-        for_each(&[dir.clone().into_os_string()], &cfg, &errors, |_| {
-            seen.fetch_add(1, Ordering::Relaxed);
-        });
-        assert!(seen.load(Ordering::Relaxed) >= 2);
-        let cfg = WalkCfg {
-            follow: Follow::Always,
-            gitignore: true,
-            mindepth: 1,
-            maxdepth: Some(2),
-            need_meta: false,
-        };
-        fn touch(_: &Item) {}
-        for_each(&[dir.join("repo").into_os_string()], &cfg, &errors, touch);
-        let cfg = WalkCfg {
+        let mut all = cfg(Follow::Never, false);
+        all.need_meta = true;
+        assert!(
+            run(std::slice::from_ref(&dir), &all, &errors)
+                .lines()
+                .count()
+                >= 2
+        );
+        let repo = run(
+            &[dir.join("repo")],
+            &WalkCfg {
+                follow: Follow::Always,
+                gitignore: true,
+                mindepth: 1,
+                maxdepth: Some(2),
+                need_meta: false,
+            },
+            &errors,
+        );
+        assert!(repo.contains("repo/a/b"), "{repo}");
+        let shallow = WalkCfg {
             follow: Follow::Cli,
             gitignore: false,
             mindepth: 0,
             maxdepth: Some(0),
             need_meta: false,
         };
-        for_each(&[dir.join("a.txt").into_os_string()], &cfg, &errors, touch);
-        for_each(
-            &[OsString::from("/hfind-no-such-walk-root")],
-            &cfg,
-            &errors,
-            touch,
+        assert_eq!(
+            run(&[dir.join("a.txt")], &shallow, &errors),
+            format!("{}\n", dir.join("a.txt").display())
         );
+        let missing = AtomicBool::new(false);
+        assert_eq!(
+            run(
+                &[PathBuf::from("/hfind-no-such-walk-root")],
+                &shallow,
+                &missing
+            ),
+            ""
+        );
+        assert!(missing.load(Ordering::Relaxed));
         fs::remove_dir_all(&dir).unwrap();
     }
 }

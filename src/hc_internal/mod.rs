@@ -1,12 +1,13 @@
 //! Shared filesystem, gitignore, and I/O helpers used by `hgrep` and `hfind`.
 
-#[cfg(unix)]
+pub mod encoding;
 pub mod gitconfig;
+pub mod gnu;
+pub mod grep;
 pub mod ignore;
 pub mod nfc;
-pub mod outbuf;
+pub mod pcre;
 
 #[cfg(unix)]
-pub mod unixdir;
-#[cfg(unix)]
 pub mod unixhome;
+pub mod walker;

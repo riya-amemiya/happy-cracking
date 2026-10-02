@@ -1,6 +1,5 @@
 use std::env;
 use std::ffi::{OsStr, OsString};
-use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
 
 use super::expr::{self, Expr};
@@ -20,10 +19,249 @@ pub(crate) struct Parsed {
     pub(crate) maxdepth: Option<usize>,
 }
 
-pub(crate) fn parse_args() -> Result<Outcome, String> {
+pub(crate) fn argv() -> (Vec<OsString>, String) {
     let mut args = env::args_os();
     let argv0 = args.next();
-    parse(args, bin_name(argv0.as_deref()))
+    (args.collect(), bin_name(argv0.as_deref()))
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum Mode {
+    Find,
+    Fd,
+}
+
+const FIND_TOKENS: &[&str] = &[
+    "-name",
+    "-iname",
+    "-path",
+    "-ipath",
+    "-regex",
+    "-iregex",
+    "-type",
+    "-size",
+    "-empty",
+    "-mtime",
+    "-mmin",
+    "-newer",
+    "-true",
+    "-false",
+    "-print",
+    "-print0",
+    "-maxdepth",
+    "-mindepth",
+    "-not",
+    "-and",
+    "-or",
+    "(",
+    ")",
+    "!",
+    "-amin",
+    "-anewer",
+    "-atime",
+    "-cmin",
+    "-cnewer",
+    "-ctime",
+    "-daystart",
+    "-delete",
+    "-depth",
+    "-exec",
+    "-execdir",
+    "-executable",
+    "-fls",
+    "-follow",
+    "-fprint",
+    "-fprint0",
+    "-fprintf",
+    "-fstype",
+    "-gid",
+    "-group",
+    "-ignore_readdir_race",
+    "-ilname",
+    "-inum",
+    "-iwholename",
+    "-links",
+    "-lname",
+    "-ls",
+    "-mount",
+    "-newermt",
+    "-nogroup",
+    "-noleaf",
+    "-nouser",
+    "-ok",
+    "-okdir",
+    "-perm",
+    "-printf",
+    "-prune",
+    "-quit",
+    "-readable",
+    "-regextype",
+    "-samefile",
+    "-uid",
+    "-used",
+    "-user",
+    "-wholename",
+    "-writable",
+    "-xdev",
+    "-xtype",
+];
+const FIND_GLOBALS: &[&str] = &["-H", "-L", "-P", "--gitignore", "--no-ignore"];
+const NEUTRAL: &[&str] = &["--help", "-h", "--version", "-V"];
+const AMBIGUOUS: &[&str] = &["-a", "-o"];
+const FD_LONG_VALUE: &[&str] = &[
+    "and",
+    "max-depth",
+    "maxdepth",
+    "min-depth",
+    "mindepth",
+    "exact-depth",
+    "exclude",
+    "type",
+    "extension",
+    "size",
+    "changed-within",
+    "change-newer-than",
+    "newer",
+    "changed-after",
+    "changed-before",
+    "change-older-than",
+    "older",
+    "owner",
+    "format",
+    "batch-size",
+    "ignore-file",
+    "color",
+    "ignore-contain",
+    "threads",
+    "max-buffer-time",
+    "max-results",
+    "base-directory",
+    "path-separator",
+    "search-path",
+];
+const FD_LONG_FLAG: &[&str] = &[
+    "hidden",
+    "no-hidden",
+    "no-ignore",
+    "ignore",
+    "no-ignore-vcs",
+    "ignore-vcs",
+    "no-require-git",
+    "require-git",
+    "no-ignore-parent",
+    "no-global-ignore-file",
+    "unrestricted",
+    "case-sensitive",
+    "ignore-case",
+    "glob",
+    "regex",
+    "fixed-strings",
+    "literal",
+    "absolute-path",
+    "relative-path",
+    "list-details",
+    "follow",
+    "dereference",
+    "no-follow",
+    "full-path",
+    "print0",
+    "prune",
+    "quiet",
+    "has-results",
+    "show-errors",
+    "one-file-system",
+    "mount",
+    "xdev",
+    "hyperlink",
+    "hyper",
+    "strip-cwd-prefix",
+    "gen-completions",
+];
+const FD_SHORT_FLAG: &[u8] = b"HIusigFalLp0q1hV";
+const FD_SHORT_VALUE: &[u8] = b"dEteSocjC";
+
+enum FdToken {
+    Flag,
+    Value,
+    Exec,
+}
+
+fn fd_token(tok: &[u8]) -> Option<FdToken> {
+    if let Some(long) = tok.strip_prefix(b"--") {
+        let (name, attached) = match long.iter().position(|&b| b == b'=') {
+            Some(eq) => (&long[..eq], true),
+            None => (long, false),
+        };
+        let name = std::str::from_utf8(name).ok()?;
+        return if name == "exec" || name == "exec-batch" {
+            Some(FdToken::Exec)
+        } else if FD_LONG_VALUE.contains(&name) {
+            Some(if attached {
+                FdToken::Flag
+            } else {
+                FdToken::Value
+            })
+        } else if FD_LONG_FLAG.contains(&name) {
+            Some(FdToken::Flag)
+        } else {
+            None
+        };
+    }
+    let cluster = tok.strip_prefix(b"-").filter(|c| !c.is_empty())?;
+    for (i, c) in cluster.iter().enumerate() {
+        let last = i + 1 == cluster.len();
+        if matches!(c, b'x' | b'X') {
+            return Some(FdToken::Exec);
+        }
+        if FD_SHORT_VALUE.contains(c) {
+            return Some(if last { FdToken::Value } else { FdToken::Flag });
+        }
+        if !FD_SHORT_FLAG.contains(c) {
+            return None;
+        }
+    }
+    Some(FdToken::Flag)
+}
+
+pub(crate) fn mode(args: &[OsString], name: &str) -> Mode {
+    let mut fd_flag = false;
+    let mut i = 0;
+    while i < args.len() {
+        let tok = args[i].as_encoded_bytes();
+        i += 1;
+        let text = std::str::from_utf8(tok).unwrap_or("");
+        if FIND_TOKENS.contains(&text) {
+            return Mode::Find;
+        }
+        if tok == b"--" {
+            fd_flag = true;
+            break;
+        }
+        if FIND_GLOBALS.contains(&text) || NEUTRAL.contains(&text) || AMBIGUOUS.contains(&text) {
+            continue;
+        }
+        match fd_token(tok) {
+            Some(FdToken::Flag) => fd_flag = true,
+            Some(FdToken::Value) => {
+                fd_flag = true;
+                i += 1;
+            }
+            Some(FdToken::Exec) => {
+                fd_flag = true;
+                while i < args.len() && args[i].as_encoded_bytes() != b";" {
+                    i += 1;
+                }
+                i += 1;
+            }
+            None => {}
+        }
+    }
+    let base = name.strip_suffix(".exe").unwrap_or(name);
+    if fd_flag || base.ends_with("fd") {
+        Mode::Fd
+    } else {
+        Mode::Find
+    }
 }
 
 fn bin_name(argv0: Option<&OsStr>) -> String {
@@ -34,7 +272,7 @@ fn bin_name(argv0: Option<&OsStr>) -> String {
 }
 
 fn is_expr_start(tok: &OsStr) -> bool {
-    let b = tok.as_bytes();
+    let b = tok.as_encoded_bytes();
     matches!(b, b"(" | b"!" | b",") || b.first() == Some(&b'-')
 }
 
@@ -46,7 +284,7 @@ where
     let mut follow = Follow::Never;
     let mut gitignore = true;
     loop {
-        match args.peek().map(|s| s.as_bytes()) {
+        match args.peek().map(|s| s.as_encoded_bytes()) {
             Some(b"-H") => {
                 follow = Follow::Cli;
                 args.next();
@@ -139,6 +377,7 @@ Operators:
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::os::unix::ffi::OsStrExt;
 
     #[test]
     fn bin_name_falls_back() {
@@ -220,5 +459,74 @@ mod tests {
         assert!(help_text("hfind").contains("--no-ignore"));
         let off = parse([OsString::from("--no-ignore")], "hfind".into()).unwrap();
         assert!(matches!(off, Outcome::Run(ref p) if !p.gitignore));
+    }
+
+    fn mode_of(args: &[&str], name: &str) -> Mode {
+        let args: Vec<OsString> = args.iter().map(OsString::from).collect();
+        mode(&args, name)
+    }
+
+    #[test]
+    fn disambiguation_table() {
+        let find = [
+            (&[][..], "hfind"),
+            (&["src"][..], "hfind"),
+            (&["-H", "src"][..], "hfind"),
+            (&["--no-ignore", "src"][..], "hfind"),
+            (&["--gitignore"][..], "hfind"),
+            (&["--help"][..], "hfind"),
+            (&["src", "-a"][..], "hfind"),
+            (&["src", "-unknown"][..], "hfind"),
+            (&[".", "-name", "x"][..], "hfd"),
+            (&["-L", ".", "-type", "f"][..], "hfd"),
+            (&["(", "-true", ")"][..], "hfd"),
+            (&["!"][..], "hfd"),
+            (&["src", "-o", "-print0"][..], "hfd"),
+            (&["-H", "x", "-name", "y"][..], "/usr/bin/hfd"),
+            (&["src", "-exec", "rm", "{}", ";"][..], "hfind"),
+            (&["src"][..], "find"),
+            (&["src"][..], "find.exe"),
+            (&["src"][..], "fdx"),
+            (&["-e", "rs", "-empty"][..], "hfd"),
+        ];
+        for (args, name) in find {
+            assert_eq!(mode_of(args, name), Mode::Find, "{args:?} {name}");
+        }
+        let fd = [
+            (&[][..], "hfd"),
+            (&["src"][..], "hfd"),
+            (&["src"][..], "fd"),
+            (&["-a"][..], "hfd"),
+            (&["-o", "root"][..], "hfd"),
+            (&["-H"][..], "hfd"),
+            (&["--gitignore"][..], "hfd"),
+            (&["-e", "rs"][..], "hfind"),
+            (&["-H", "-e", "rs"][..], "hfind"),
+            (&["-HI"][..], "hfind"),
+            (&["-tf"][..], "hfind"),
+            (&["--exclude", "-name"][..], "hfind"),
+            (&["--exclude=x", "src"][..], "hfind"),
+            (&["--hidden"][..], "hfind"),
+            (&["-x", "find", "{}", "-name", "x", ";"][..], "hfind"),
+            (&["-X", "ls", "-type"][..], "hfind"),
+            (&["--", "-name"][..], "hfind"),
+            (&["-1"][..], "hfind"),
+            (&["--exec", "echo"][..], "hfind"),
+            (&["-unknown"][..], "hfd"),
+            (&["--strip-cwd-prefix=never"][..], "hfind"),
+            (&["--and", "-type"][..], "hfind"),
+            (&["--gen-completions", "bash"][..], "hfind"),
+            (&["src"][..], "myfd"),
+            (&["src"][..], "fd.exe"),
+        ];
+        for (args, name) in fd {
+            assert_eq!(mode_of(args, name), Mode::Fd, "{args:?} {name}");
+        }
+        assert!(matches!(fd_token(b"--max-depth"), Some(FdToken::Value)));
+        assert!(fd_token(b"--nonsense").is_none());
+        assert!(fd_token(b"-").is_none());
+        assert!(matches!(fd_token(b"-Hd"), Some(FdToken::Value)));
+        assert!(matches!(fd_token(b"-d2"), Some(FdToken::Flag)));
+        assert!(matches!(fd_token(b"-HX"), Some(FdToken::Exec)));
     }
 }

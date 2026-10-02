@@ -740,7 +740,7 @@ fn gitignore_flag_is_documented_in_help() {
 }
 
 #[test]
-fn files_without_match_exits_zero_when_it_lists_a_file() {
+fn files_without_match_exit_status_follows_selected_lines() {
     let dir = scratch("without_match");
     put(&dir, "a.txt", b"hello\n");
     let path = dir.join("a.txt");
@@ -748,30 +748,40 @@ fn files_without_match_exits_zero_when_it_lists_a_file() {
 
     let listed = run(&["-L", "zzz", name]);
     assert_eq!(listed.stdout.trim(), name);
-    assert_eq!(listed.code, 0);
+    assert_eq!(listed.code, 1);
 
     let empty = run(&["-L", "hello", name]);
     assert!(empty.stdout.is_empty(), "got {:?}", empty.stdout);
-    assert_eq!(empty.code, 1);
+    assert_eq!(empty.code, 0);
 
     assert_eq!(run(&["-l", "hello", name]).code, 0);
-    assert_eq!(run(&["-qL", "zzz", name]).code, 0);
-    assert_eq!(hgrep(&["-L", "zzz"], "hi\n").1, 0);
+    assert_eq!(run(&["-qL", "zzz", name]).code, 1);
+    assert_eq!(hgrep(&["-L", "zzz"], "hi\n").1, 1);
     fs::remove_dir_all(&dir).unwrap();
 }
 
 #[test]
-fn directory_operand_without_recursive_exits_two() {
+fn directory_operand_is_searched_and_read_action_rejects_it() {
     let dir = scratch("dir_operand");
     seed(&dir, &["a.txt"]);
-    let out = run(&["needle", dir.to_str().unwrap()]);
-    assert!(
-        out.stderr.contains("Is a directory"),
-        "got {:?}",
+    let out = run(&["-l", "needle", dir.to_str().unwrap()]);
+    assert_eq!(
+        rels(&out.stdout, &dir),
+        ["a.txt"],
+        "stderr {:?}",
         out.stderr
     );
-    assert_eq!(out.code, 2);
-    assert_eq!(run(&["-s", "needle", dir.to_str().unwrap()]).code, 2);
+    assert_eq!(out.code, 0);
+    let read = run(&["-d", "read", "needle", dir.to_str().unwrap()]);
+    assert!(
+        read.stderr.contains("Is a directory"),
+        "got {:?}",
+        read.stderr
+    );
+    assert_eq!(read.code, 2);
+    let skip = run(&["-d", "skip", "needle", dir.to_str().unwrap()]);
+    assert!(skip.stdout.is_empty(), "got {:?}", skip.stdout);
+    assert_eq!(skip.code, 1);
     fs::remove_dir_all(&dir).unwrap();
 }
 
@@ -792,12 +802,14 @@ fn fixture_roots_never_collide() {
 fn binary_file_is_reported_not_dumped() {
     let dir = scratch("binary_case");
     put(&dir, "case.bin", b"secret\x00\x01\x02payload\n");
-    let out = run(&["secret", dir.join("case.bin").to_str().unwrap()]);
-    assert!(
-        out.stdout.starts_with("Binary file "),
-        "got {:?}",
-        out.stdout
+    let path = dir.join("case.bin");
+    let out = run(&["secret", path.to_str().unwrap()]);
+    assert!(out.stdout.is_empty(), "got {:?}", out.stdout);
+    assert_eq!(
+        out.stderr,
+        format!("hgrep: {}: binary file matches\n", path.display())
     );
+    assert_eq!(out.code, 0);
     fs::remove_dir_all(&dir).unwrap();
 }
 
@@ -1281,7 +1293,7 @@ fn gitignore_resolves_a_search_root_several_levels_down() {
 fn zero_width_match_adds_no_line_past_the_final_newline() {
     assert_eq!(hgrep(&["-c", "x*"], "a\nb\n").0, "2\n");
     assert_eq!(hgrep(&["-n", "x*"], "a\nb\n").0, "1:a\n2:b\n");
-    assert_eq!(hgrep(&["-o", "x*"], "a\nb\n").0.lines().count(), 4);
+    assert_eq!(hgrep(&["-o", "x*"], "a\nb\n"), (String::new(), 0));
     assert_eq!(hgrep(&["-c", "x*"], "a\nb").0, "2\n");
     assert_eq!(hgrep(&["-c", "-e", ""], ""), ("0\n".to_string(), 1));
     assert_eq!(hgrep(&["-c", "-v", "zzz"], ""), ("0\n".to_string(), 1));
@@ -1373,6 +1385,7 @@ fn non_utf8_pattern_and_path_operands_are_accepted() {
     let path = dir.join("menu.txt");
 
     let out = command()
+        .env("LC_ALL", "C")
         .arg(OsStr::from_bytes(pattern))
         .arg(&path)
         .output()
@@ -1381,6 +1394,7 @@ fn non_utf8_pattern_and_path_operands_are_accepted() {
     assert_eq!(out.status.code(), Some(0));
 
     let fixed = command()
+        .env("LC_ALL", "C")
         .arg("-F")
         .arg(OsStr::from_bytes(pattern))
         .arg(&path)
@@ -1389,6 +1403,7 @@ fn non_utf8_pattern_and_path_operands_are_accepted() {
     assert_eq!(fixed.stdout, b"caf\xe9 au lait\n");
 
     let missing = command()
+        .env("LC_ALL", "C")
         .arg(OsStr::from_bytes(b"z\xe9z"))
         .arg(&path)
         .output()
@@ -1400,10 +1415,7 @@ fn non_utf8_pattern_and_path_operands_are_accepted() {
 #[test]
 fn max_count_zero_selects_nothing() {
     assert_eq!(hgrep(&["-m", "0", "a"], SAMPLE), (String::new(), 1));
-    assert_eq!(
-        hgrep(&["-m", "0", "-c", "a"], SAMPLE),
-        ("0\n".to_string(), 1)
-    );
+    assert_eq!(hgrep(&["-m", "0", "-c", "a"], SAMPLE), (String::new(), 1));
     assert_eq!(hgrep(&["-m", "0", "-v", "zzz"], SAMPLE), (String::new(), 1));
     assert_eq!(hgrep(&["-m", "1", "a"], SAMPLE), ("alpha\n".to_string(), 0));
 }
@@ -1427,10 +1439,11 @@ fn text_flag_prints_binary_content_and_quiet_prints_nothing() {
     let name = path.to_str().unwrap();
 
     let plain = run(&["secret", name]);
+    assert!(plain.stdout.is_empty(), "{:?}", plain.stdout);
     assert!(
-        plain.stdout.starts_with("Binary file "),
+        plain.stderr.ends_with(": binary file matches\n"),
         "{:?}",
-        plain.stdout
+        plain.stderr
     );
     assert_eq!(plain.code, 0);
 
@@ -1443,7 +1456,7 @@ fn text_flag_prints_binary_content_and_quiet_prints_nothing() {
 
     let quiet_list = run(&["-qL", "zzz", name]);
     assert!(quiet_list.stdout.is_empty(), "got {:?}", quiet_list.stdout);
-    assert_eq!(quiet_list.code, 0);
+    assert_eq!(quiet_list.code, 1);
     fs::remove_dir_all(&dir).unwrap();
 }
 
@@ -1502,5 +1515,142 @@ fn pattern_file_run_rejects_device_without_eof() {
         "got {:?}",
         out.stderr
     );
+    fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn recursive_search_reports_every_file_beyond_the_reorder_window() {
+    let dir = scratch("reorder_window");
+    for i in 0..3000 {
+        put(&dir, &format!("d{}/f{i:04}.txt", i % 7), b"needle\n");
+    }
+    let out = run(&["-j4", "-rc", "needle", dir.to_str().unwrap()]);
+    assert_eq!(out.code, 0, "stderr {:?}", out.stderr);
+    assert_eq!(out.stdout.lines().count(), 3000);
+    assert!(
+        out.stdout.lines().all(|l| l.ends_with(":1")),
+        "got {:?}",
+        out.stdout
+    );
+    fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn file_operands_print_in_command_line_order() {
+    let dir = scratch("operand_order");
+    let names: Vec<String> = (0..40).map(|i| format!("f{i:02}.txt")).collect();
+    for name in &names {
+        put(&dir, name, b"needle\n");
+    }
+    let paths: Vec<String> = names
+        .iter()
+        .rev()
+        .map(|n| dir.join(n).to_str().unwrap().to_string())
+        .collect();
+    let mut args = vec!["-c", "needle"];
+    args.extend(paths.iter().map(String::as_str));
+    let out = run(&args);
+    let expected: Vec<String> = paths.iter().map(|p| format!("{p}:1")).collect();
+    assert_eq!(out.stdout.lines().collect::<Vec<_>>(), expected);
+    fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn output_file_inside_the_searched_tree_is_reported() {
+    let dir = scratch("self_output");
+    put(&dir, "a.txt", b"needle\n");
+    let out_path = dir.join("out.txt");
+    let status = command()
+        .current_dir(&dir)
+        .args(["-r", "needle", "."])
+        .stdout(fs::File::create(&out_path).unwrap())
+        .stderr(Stdio::piped())
+        .output()
+        .unwrap();
+    let stderr = String::from_utf8_lossy(&status.stderr);
+    assert_eq!(status.status.code(), Some(2), "stderr {stderr:?}");
+    assert!(
+        stderr.contains("out.txt: input file is also the output"),
+        "stderr {stderr:?}"
+    );
+    assert_eq!(fs::read_to_string(&out_path).unwrap(), "./a.txt:needle\n");
+    fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn dereference_recursion_warns_about_a_directory_loop() {
+    let dir = scratch("loop");
+    put(&dir, "a/b.txt", b"needle\n");
+    std::os::unix::fs::symlink("..", dir.join("a/up")).unwrap();
+    let out = run(&["-R", "needle", dir.join("a").to_str().unwrap()]);
+    assert_eq!(out.code, 0, "stderr {:?}", out.stderr);
+    assert!(
+        out.stderr.contains("warning: recursive directory loop"),
+        "stderr {:?}",
+        out.stderr
+    );
+    let quiet = run(&["-Rs", "needle", dir.join("a").to_str().unwrap()]);
+    assert!(quiet.stderr.is_empty(), "stderr {:?}", quiet.stderr);
+    fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn count_after_a_nul_counts_nul_separated_pieces() {
+    assert_eq!(hgrep(&["-c", "a"], "a\0a\n"), ("2\n".to_string(), 0));
+    assert_eq!(hgrep(&["-a", "-c", "a"], "a\0a\n"), ("1\n".to_string(), 0));
+}
+
+#[test]
+fn null_data_still_suppresses_lines_with_encoding_errors() {
+    let dir = scratch("null_data_encoding");
+    put(&dir, "menu.txt", b"caf\xe9\nok line\n");
+    let path = dir.join("menu.txt");
+    let out = command()
+        .env("LC_ALL", "en_US.UTF-8")
+        .args(["-z", "ok"])
+        .arg(&path)
+        .output()
+        .unwrap();
+    assert!(out.stdout.is_empty(), "{:?}", out.stdout);
+    assert!(
+        out.stderr.ends_with(b": binary file matches\n"),
+        "{:?}",
+        out.stderr
+    );
+    let text = command()
+        .env("LC_ALL", "en_US.UTF-8")
+        .args(["-z", "-a", "ok"])
+        .arg(&path)
+        .output()
+        .unwrap();
+    assert_eq!(text.stdout, b"caf\xe9\nok line\n\0");
+    fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn large_file_parallel_paths_match_the_streaming_paths() {
+    let dir = scratch("large_parallel");
+    let mut body = Vec::new();
+    for i in 0..400_000 {
+        body.extend_from_slice(
+            format!("line {i} {}\n", if i % 7 == 0 { "needle" } else { "hay" }).as_bytes(),
+        );
+    }
+    put(&dir, "big.txt", &body);
+    let path = dir.join("big.txt");
+    let path = path.to_str().unwrap();
+    for flags in [
+        &["-c"][..],
+        &["-n"][..],
+        &["-vc"][..],
+        &["-bo"][..],
+        &["-v", "-n"][..],
+    ] {
+        let mut many = flags.to_vec();
+        many.extend(["needle", path]);
+        let mut one = vec!["-j1"];
+        one.extend(many.iter().copied());
+        assert_eq!(run_bytes(&many), run_bytes(&one), "flags {flags:?}");
+    }
     fs::remove_dir_all(&dir).unwrap();
 }

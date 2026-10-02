@@ -12,10 +12,10 @@ happy-cracking/
 ├── src/
 │   ├── main.rs           # CLI entry point with clap subcommands
 │   ├── lib.rs            # Library root, exposes crypto, hgrep, and hfind
-│   ├── bin/              # hgrep, hg, hfind, hfd binaries
-│   ├── hgrep/            # Parallel grep-compatible line matcher
-│   ├── hfind/            # Parallel find-compatible walker
-│   ├── hc_internal/      # Shared gitignore, gitconfig, and fs helpers
+│   ├── bin/              # hgrep, hg, hrg, hfind, hfd binaries
+│   ├── hgrep/            # GNU grep + ripgrep compatible searcher (argv0 picks colliding flag meanings)
+│   ├── hfind/            # find + fd compatible walker
+│   ├── hc_internal/      # Shared walker, search, printer, regex, encoding, and fs helpers
 │   └── crypto/           # Cryptographic operations
 │       ├── mod.rs        # Module exports
 │       │

@@ -123,15 +123,17 @@ This produces `target/release/happy-cracking` and the companion binaries `target
 
 ### Companion binaries
 
-| Command | Description                                      |
-| ------- | ------------------------------------------------ |
-| `hgrep` | Parallel grep-compatible line matcher            |
-| `hg`    | `hgrep` alias that searches directories like rg  |
-| `hrg`   | Same as `hg`                                     |
-| `hfind` | Parallel find-compatible walker (gitignore on)   |
-| `hfd`   | Alias for `hfind`                                |
+| Command | Description                                                        |
+| ------- | ------------------------------------------------------------------ |
+| `hgrep` | Searcher accepting GNU grep 3.12 and ripgrep 15.1.0 command lines  |
+| `hg`    | Same binary with ripgrep meanings for colliding short flags        |
+| `hrg`   | Same as `hg`                                                       |
+| `hfind` | Walker accepting find expressions and fd 10.4.2 command lines      |
+| `hfd`   | Same binary that reads bare positionals as fd's pattern and paths  |
 
-`hgrep` and `hfind` are separate binaries installed alongside `happy-cracking`. They are listed at the bottom of `happy-cracking --help`. `hg` and `hrg` are argv0 aliases for `hgrep` that recursively search directory operands (gitignore on by default). `hfd` is another argv0 for `hfind`, which also honors gitignore by default.
+`hgrep`, `hg`, and `hrg` share one implementation that accepts every GNU grep flag and every ripgrep flag. The short flags whose meanings collide between the two tools (`-r -h -L -s -E -z -I -T -U -u -0`) take the GNU grep meaning under `hgrep` and the ripgrep meaning under `hg` and `hrg`; their other meaning stays reachable through the long option. Directory operands without `-r` are searched like ripgrep (ignore files, hidden-file and binary filtering); `-r`/`-R` search like GNU grep. `hgrep` defaults to GNU grep's BRE syntax and output conventions, `hg`/`hrg` to ripgrep's regex syntax and output conventions.
+
+`hfind` and `hfd` share one implementation. A command line containing a find expression (`-name`, `-type`, `-print0`, and so on) is parsed as find syntax; otherwise it is parsed as fd syntax, except that bare positional arguments are search paths under `hfind` and fd's `[pattern] [path...]` under `hfd`.
 
 ## Usage
 
@@ -358,13 +360,16 @@ The `chain` command supports the following operations: `base64-encode`, `base64-
 ### hgrep
 
 ```bash
-hgrep -r needle src/
+hgrep -rn needle src/
+hgrep -E 'foo|bar' notes.txt
 hgrep -n -i flag firmware.bin
 hgrep -r --gitignore TODO .
+hgrep needle src/
+hgrep -t rust -g '!target' needle
 hgrep --help
 hg needle src/
-hg --no-ignore needle src/
-hrg needle src/
+hg -r replacement 'needle' src/
+hrg --json needle src/
 ```
 
 ### hfind
@@ -375,7 +380,9 @@ hfind -L src -name '*.rs'
 hfind . -type f -size -10k
 hfind --no-ignore . -name '*.log'
 hfind --help
-hfd . -print0
+hfd '\.rs$' src
+hfd -e rs -x wc -l
+hfd -H -I -t f config
 ```
 
 ## Development
@@ -387,7 +394,7 @@ cargo fmt              # Format code
 cargo clippy -- -D warnings  # Lint
 ```
 
-`cargo run -- <command>` runs `happy-cracking`. Companion binaries ship in the same package: `cargo run --bin hgrep -- <args>` and `cargo run --bin hfind -- <args>`. `hg` is an alias for `hgrep`. `hfd` is an alias for `hfind`.
+`cargo run -- <command>` runs `happy-cracking`. Companion binaries ship in the same package: `cargo run --bin hgrep -- <args>` and `cargo run --bin hfind -- <args>`. `hg` and `hrg` are argv0 variants of `hgrep`. `hfd` is an argv0 variant of `hfind`.
 
 ## License
 
