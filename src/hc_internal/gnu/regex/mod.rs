@@ -461,7 +461,7 @@ struct Selector {
 
 #[derive(Clone, Debug)]
 enum LitFinder {
-    One(memchr::memmem::Finder<'static>),
+    One(Box<memchr::memmem::Finder<'static>>),
     Many(Regex),
 }
 
@@ -483,9 +483,9 @@ enum Strategy {
 
 fn lit_finder(lits: &[Vec<u8>]) -> Option<LitFinder> {
     if let [one] = lits {
-        return Some(LitFinder::One(
+        return Some(LitFinder::One(Box::new(
             memchr::memmem::Finder::new(one).into_owned(),
-        ));
+        )));
     }
     let mut pat = String::from("(?-u:");
     for (i, l) in lits.iter().enumerate() {

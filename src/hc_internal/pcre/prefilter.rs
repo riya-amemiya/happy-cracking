@@ -12,7 +12,7 @@ enum Searcher {
     Byte2(u8, u8),
     Byte3(u8, u8, u8),
     Table(Box<[bool; 256]>, bool),
-    Memmem(memmem::Finder<'static>),
+    Memmem(Box<memmem::Finder<'static>>),
     Multi(regex::bytes::Regex),
 }
 
@@ -36,7 +36,9 @@ impl Searcher {
             return Some(Searcher::from_bytes(&set));
         }
         if lits.len() == 1 {
-            return Some(Searcher::Memmem(memmem::Finder::new(&lits[0]).into_owned()));
+            return Some(Searcher::Memmem(Box::new(
+                memmem::Finder::new(&lits[0]).into_owned(),
+            )));
         }
         let mut pat = String::from("(?s-u:");
         for (i, l) in lits.iter().enumerate() {
