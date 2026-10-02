@@ -77,42 +77,82 @@ fn visit_zigzag_indices(len: usize, rails: usize, mut visit: impl FnMut(usize)) 
     }
 }
 
-pub fn encrypt(input: &str, rails: usize) -> Result<String> {
-    if rails < 2 {
-        anyhow::bail!("Number of rails must be at least 2");
+fn encrypt_ascii(input: &str, rails: usize) -> String {
+    let bytes = input.as_bytes();
+    if bytes.is_empty() {
+        return String::new();
+    }
+    if rails >= bytes.len() {
+        return input.to_string();
     }
 
+    let mut out = vec![0u8; bytes.len()];
+    let mut pos = 0usize;
+    visit_zigzag_indices(bytes.len(), rails, |i| {
+        out[pos] = bytes[i];
+        pos += 1;
+    });
+    String::from_utf8(out).expect("railfence encrypt of ASCII input stays ASCII")
+}
+
+fn encrypt_chars(input: &str, rails: usize) -> String {
     let chars: Vec<char> = input.chars().collect();
     if chars.is_empty() {
-        return Ok(String::new());
+        return String::new();
     }
 
     // If rails >= length, it's just the identity transformation
     // This prevents DoS via massive allocation (e.g. 100M rails for 10 chars)
     if rails >= chars.len() {
-        return Ok(input.to_string());
+        return input.to_string();
     }
 
     let mut out = String::with_capacity(chars.len());
     visit_zigzag_indices(chars.len(), rails, |i| out.push(chars[i]));
-    Ok(out)
+    out
 }
 
-pub fn decrypt(input: &str, rails: usize) -> Result<String> {
+pub fn encrypt(input: &str, rails: usize) -> Result<String> {
     if rails < 2 {
         anyhow::bail!("Number of rails must be at least 2");
     }
+    if input.is_ascii() {
+        Ok(encrypt_ascii(input, rails))
+    } else {
+        Ok(encrypt_chars(input, rails))
+    }
+}
 
+fn decrypt_ascii(input: &str, rails: usize) -> String {
+    let bytes = input.as_bytes();
+    let len = bytes.len();
+    if len == 0 {
+        return String::new();
+    }
+    if rails >= len {
+        return input.to_string();
+    }
+
+    let mut out = vec![0u8; len];
+    let mut src = 0usize;
+    visit_zigzag_indices(len, rails, |i| {
+        out[i] = bytes[src];
+        src += 1;
+    });
+    String::from_utf8(out).expect("railfence decrypt of ASCII input stays ASCII")
+}
+
+fn decrypt_chars(input: &str, rails: usize) -> String {
     let chars: Vec<char> = input.chars().collect();
     let len = chars.len();
     if len == 0 {
-        return Ok(String::new());
+        return String::new();
     }
 
     // If rails >= length, it's just the identity transformation
     // This prevents DoS via massive allocation (e.g. 100M rails for 10 chars)
     if rails >= len {
-        return Ok(input.to_string());
+        return input.to_string();
     }
 
     let mut out = vec!['\0'; len];
@@ -121,5 +161,16 @@ pub fn decrypt(input: &str, rails: usize) -> Result<String> {
         out[i] = chars[src];
         src += 1;
     });
-    Ok(out.into_iter().collect())
+    out.into_iter().collect()
+}
+
+pub fn decrypt(input: &str, rails: usize) -> Result<String> {
+    if rails < 2 {
+        anyhow::bail!("Number of rails must be at least 2");
+    }
+    if input.is_ascii() {
+        Ok(decrypt_ascii(input, rails))
+    } else {
+        Ok(decrypt_chars(input, rails))
+    }
 }
