@@ -178,12 +178,17 @@ fn ct_eq(a: &[u8], b: &[u8]) -> bool {
     diff == 0
 }
 
+pub const MAX_HMAC_TAG_HEX_LEN: usize = 128;
+
 fn verify_with<D: Digest>(
     key: &[u8],
     message: &[u8],
     expected_tag_hex: &str,
     block_size: usize,
 ) -> bool {
+    if expected_tag_hex.len() > MAX_HMAC_TAG_HEX_LEN {
+        return false;
+    }
     match hex::decode(expected_tag_hex) {
         Ok(expected) => ct_eq(&hmac::<D>(key, message, block_size), &expected),
         Err(_) => false,
