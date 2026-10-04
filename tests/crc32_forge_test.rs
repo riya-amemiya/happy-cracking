@@ -99,3 +99,48 @@ fn test_crc32_compute_single_byte() {
     let crc = crc32_forge::crc32_compute(b"a");
     assert_eq!(crc, 0xe8b7be43);
 }
+
+#[test]
+fn decode_crc32_hex_with_limit_rejects_oversized_dump() {
+    let err = crc32_forge::decode_crc32_hex_with_limit("41424344", 2).unwrap_err();
+    assert!(err.to_string().contains("Denial of Service"));
+}
+
+#[test]
+fn decode_crc32_hex_with_limit_accepts_dump_at_limit() {
+    let data = crc32_forge::decode_crc32_hex_with_limit("4142", 2).unwrap();
+    assert_eq!(data, b"AB");
+}
+
+#[test]
+fn decode_crc32_hex_with_limit_accepts_empty() {
+    let data = crc32_forge::decode_crc32_hex_with_limit("", 16).unwrap();
+    assert!(data.is_empty());
+}
+
+#[test]
+fn decode_crc32_hex_with_limit_rejects_invalid_hex() {
+    let err = crc32_forge::decode_crc32_hex_with_limit("zz", 16).unwrap_err();
+    assert!(!err.to_string().contains("Denial of Service"));
+}
+
+#[test]
+fn forge_run_accepts_hex_under_limit() {
+    crc32_forge::run(crc32_forge::Crc32ForgeAction::Forge {
+        input: hex::encode(b"hello"),
+        target: "deadbeef".into(),
+    })
+    .unwrap();
+}
+
+#[test]
+fn verify_run_accepts_hex_under_limit() {
+    let data = b"hello";
+    let suffix = crc32_forge::forge_crc32(data, 0xDEAD_BEEF);
+    crc32_forge::run(crc32_forge::Crc32ForgeAction::Verify {
+        input: hex::encode(data),
+        suffix: hex::encode(suffix),
+        target: "deadbeef".into(),
+    })
+    .unwrap();
+}
