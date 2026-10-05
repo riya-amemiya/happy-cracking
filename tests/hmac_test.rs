@@ -151,6 +151,24 @@ fn test_verify_rejects_wrong_length_tag() {
 }
 
 #[test]
+fn test_verify_rejects_oversized_tag_hex() {
+    let tag = "a".repeat(hmac::MAX_HMAC_TAG_HEX_LEN + 1);
+    assert!(!hmac::verify_md5(b"k", b"m", &tag));
+    assert!(!hmac::verify_sha1(b"k", b"m", &tag));
+    assert!(!hmac::verify_sha256(b"k", b"m", &tag));
+    assert!(!hmac::verify_sha512(b"k", b"m", &tag));
+}
+
+#[test]
+fn test_verify_sha512_accepts_max_tag_hex_len() {
+    let key = vec![0x0b; 20];
+    let msg = b"Hi There";
+    let tag = hmac::hmac_sha512(&key, msg);
+    assert_eq!(tag.len(), hmac::MAX_HMAC_TAG_HEX_LEN);
+    assert!(hmac::verify_sha512(&key, msg, &tag));
+}
+
+#[test]
 fn test_verify_accepts_empty_message() {
     let key = b"key";
     let tag = hmac::hmac_sha256(key, b"");
