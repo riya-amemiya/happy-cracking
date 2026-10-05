@@ -23,10 +23,24 @@ pub enum Crc32ForgeAction {
     },
 }
 
+pub const MAX_CRC32_FORGE_BYTES: usize = 16 * 1024 * 1024;
+
+pub fn decode_crc32_hex_with_limit(hex_str: &str, max_bytes: usize) -> Result<Vec<u8>> {
+    let hex_str = hex_str.trim();
+    let max_bytes = max_bytes.min(MAX_CRC32_FORGE_BYTES);
+    let max_chars = max_bytes.saturating_mul(2);
+    if hex_str.len() > max_chars {
+        anyhow::bail!(
+            "Input exceeds maximum size of {max_bytes} bytes to prevent Denial of Service"
+        );
+    }
+    hex::decode(hex_str).context("Invalid hex input")
+}
+
 pub fn run(action: Crc32ForgeAction) -> Result<()> {
     match action {
         Crc32ForgeAction::Forge { input, target } => {
-            let data = hex::decode(&input).context("Invalid hex input")?;
+            let data = decode_crc32_hex_with_limit(&input, MAX_CRC32_FORGE_BYTES)?;
             let target_crc =
                 u32::from_str_radix(&target, 16).context("Invalid hex target CRC32")?;
             let forge_bytes = forge_crc32(&data, target_crc);
@@ -37,8 +51,8 @@ pub fn run(action: Crc32ForgeAction) -> Result<()> {
             suffix,
             target,
         } => {
-            let data = hex::decode(&input).context("Invalid hex input")?;
-            let suffix_bytes = hex::decode(&suffix).context("Invalid hex suffix")?;
+            let data = decode_crc32_hex_with_limit(&input, MAX_CRC32_FORGE_BYTES)?;
+            let suffix_bytes = decode_crc32_hex_with_limit(&suffix, MAX_CRC32_FORGE_BYTES)?;
             let target_crc =
                 u32::from_str_radix(&target, 16).context("Invalid hex target CRC32")?;
             let mut combined = data;
