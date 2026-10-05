@@ -21,6 +21,12 @@ fn test_reverse_ctf_flag() {
 }
 
 #[test]
+fn test_reverse_unicode_scalars() {
+    assert_eq!(strtools::reverse("café"), "éfac");
+    assert_eq!(strtools::reverse("あいう"), "ういあ");
+}
+
+#[test]
 fn test_ord_basic() {
     assert_eq!(strtools::ord("ABC"), "A=65 B=66 C=67");
 }

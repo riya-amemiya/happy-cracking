@@ -19,6 +19,12 @@ fn chain_single_reverse() {
 }
 
 #[test]
+fn chain_reverse_unicode_scalars() {
+    assert_eq!(chain::chain("café", "reverse").unwrap(), "éfac");
+    assert_eq!(chain::chain("あいう", "reverse").unwrap(), "ういあ");
+}
+
+#[test]
 fn chain_single_upper() {
     let result = chain::chain("hello", "upper").unwrap();
     assert_eq!(result, "HELLO");
