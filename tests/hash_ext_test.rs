@@ -156,3 +156,27 @@ fn extend_accepts_append_at_cap() {
     let append = vec![b'a'; hash_ext::MAX_APPEND_LEN];
     verify_extension(b"key", b"msg", &append);
 }
+
+#[test]
+fn extend_rejects_original_hash_hex_above_cap() {
+    let start = std::time::Instant::now();
+    let too_long = "a".repeat(hash_ext::MAX_ORIGINAL_HASH_HEX_LEN + 1);
+    let err = hash_ext::sha256_extend(&too_long, 10, b"x")
+        .err()
+        .expect("oversized original hash hex should fail")
+        .to_string();
+    assert!(
+        err.contains(&hash_ext::MAX_ORIGINAL_HASH_HEX_LEN.to_string()),
+        "unexpected error: {err}"
+    );
+    assert!(
+        start.elapsed().as_millis() < 100,
+        "oversized original hash hex must be rejected before decode"
+    );
+}
+
+#[test]
+fn extend_accepts_trimmed_original_hash_at_hex_cap() {
+    let padded = format!("  {}  ", dummy_sha256_hex());
+    hash_ext::sha256_extend(&padded, 10, b"x").expect("trimmed 64-char hash should decode");
+}
