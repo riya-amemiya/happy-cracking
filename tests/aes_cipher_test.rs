@@ -100,3 +100,44 @@ fn test_invalid_iv_length() {
     let plaintext = "00112233445566778899aabbccddeeff";
     assert!(aes_cipher::cbc_encrypt(plaintext, key, iv).is_err());
 }
+
+#[test]
+fn decode_aes_hex_with_limit_rejects_oversized_dump() {
+    let err = aes_cipher::decode_aes_hex_with_limit("41424344", 2).unwrap_err();
+    assert!(err.to_string().contains("Denial of Service"));
+}
+
+#[test]
+fn decode_aes_hex_with_limit_accepts_dump_at_limit() {
+    let data = aes_cipher::decode_aes_hex_with_limit("4142", 2).unwrap();
+    assert_eq!(data, b"AB");
+}
+
+#[test]
+fn decode_aes_hex_with_limit_accepts_empty() {
+    let data = aes_cipher::decode_aes_hex_with_limit("", 16).unwrap();
+    assert!(data.is_empty());
+}
+
+#[test]
+fn decode_aes_hex_with_limit_rejects_invalid_hex() {
+    let err = aes_cipher::decode_aes_hex_with_limit("zz", 16).unwrap_err();
+    assert!(!err.to_string().contains("Denial of Service"));
+}
+
+#[test]
+fn ecb_encrypt_rejects_oversized_key_hex() {
+    let key = "00".repeat(17);
+    let plaintext = "00112233445566778899aabbccddeeff";
+    let err = aes_cipher::ecb_encrypt(plaintext, &key).unwrap_err();
+    assert!(err.to_string().contains("Denial of Service"));
+}
+
+#[test]
+fn cbc_encrypt_rejects_oversized_iv_hex() {
+    let key = "00112233445566778899aabbccddeeff";
+    let iv = "00".repeat(17);
+    let plaintext = "00112233445566778899aabbccddeeff";
+    let err = aes_cipher::cbc_encrypt(plaintext, key, &iv).unwrap_err();
+    assert!(err.to_string().contains("Denial of Service"));
+}
