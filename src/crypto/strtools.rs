@@ -1,6 +1,5 @@
 use anyhow::Result;
 use clap::Subcommand;
-use umt_rust::string::umt_reverse_string;
 
 #[derive(Subcommand)]
 pub enum StrToolsAction {
@@ -38,7 +37,13 @@ pub fn run(action: StrToolsAction) -> Result<()> {
 
 #[must_use]
 pub fn reverse(input: &str) -> String {
-    umt_reverse_string(input)
+    if input.is_ascii() {
+        let mut bytes = input.as_bytes().to_vec();
+        bytes.reverse();
+        String::from_utf8(bytes).expect("reversing ASCII bytes stays valid UTF-8")
+    } else {
+        input.chars().rev().collect()
+    }
 }
 
 #[must_use]

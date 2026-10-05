@@ -44,7 +44,7 @@ fn apply_operation(input: &str, op: &str) -> Result<String> {
         "binary-decode" => crypto::binary::decode(input),
         "rot13" => Ok(crypto::rot::rot13(input)),
         "rot47" => Ok(crypto::rot::rot47(input)),
-        "reverse" => Ok(input.chars().rev().collect()),
+        "reverse" => Ok(crypto::strtools::reverse(input)),
         "upper" => Ok(input.to_uppercase()),
         "lower" => Ok(input.to_lowercase()),
         _ => anyhow::bail!("Unknown operation: {op}"),
