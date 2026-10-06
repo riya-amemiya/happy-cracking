@@ -54,8 +54,24 @@ pub fn run(action: DesCipherAction) -> Result<()> {
     Ok(())
 }
 
+pub const MAX_DES_BYTES: usize = 16 * 1024 * 1024;
+const DES_KEY_BYTES: usize = 8;
+const TDES_KEY_BYTES: usize = 24;
+
+pub fn decode_des_hex_with_limit(hex_str: &str, max_bytes: usize) -> Result<Vec<u8>> {
+    let hex_str = hex_str.trim();
+    let max_bytes = max_bytes.min(MAX_DES_BYTES);
+    let max_chars = max_bytes.saturating_mul(2);
+    if hex_str.len() > max_chars {
+        anyhow::bail!(
+            "Input exceeds maximum size of {max_bytes} bytes to prevent Denial of Service"
+        );
+    }
+    hex::decode(hex_str).context("Failed to decode hex input")
+}
+
 fn parse_des_blocks(hex_input: &str) -> Result<Vec<u8>> {
-    let bytes = hex::decode(hex_input.trim()).context("Failed to decode hex input")?;
+    let bytes = decode_des_hex_with_limit(hex_input, MAX_DES_BYTES)?;
     if bytes.is_empty() {
         anyhow::bail!("Input must not be empty");
     }
@@ -69,7 +85,7 @@ fn parse_des_blocks(hex_input: &str) -> Result<Vec<u8>> {
 }
 
 pub fn des_encrypt(hex_input: &str, hex_key: &str) -> Result<String> {
-    let key_bytes = hex::decode(hex_key.trim()).context("Failed to decode hex key")?;
+    let key_bytes = decode_des_hex_with_limit(hex_key, DES_KEY_BYTES)?;
     if key_bytes.len() != 8 {
         anyhow::bail!(
             "DES key must be exactly 8 bytes (16 hex chars), got {} bytes",
@@ -90,7 +106,7 @@ pub fn des_encrypt(hex_input: &str, hex_key: &str) -> Result<String> {
 }
 
 pub fn des_decrypt(hex_input: &str, hex_key: &str) -> Result<String> {
-    let key_bytes = hex::decode(hex_key.trim()).context("Failed to decode hex key")?;
+    let key_bytes = decode_des_hex_with_limit(hex_key, DES_KEY_BYTES)?;
     if key_bytes.len() != 8 {
         anyhow::bail!(
             "DES key must be exactly 8 bytes (16 hex chars), got {} bytes",
@@ -111,7 +127,7 @@ pub fn des_decrypt(hex_input: &str, hex_key: &str) -> Result<String> {
 }
 
 pub fn tdes_encrypt(hex_input: &str, hex_key: &str) -> Result<String> {
-    let key_bytes = hex::decode(hex_key.trim()).context("Failed to decode hex key")?;
+    let key_bytes = decode_des_hex_with_limit(hex_key, TDES_KEY_BYTES)?;
     if key_bytes.len() != 24 {
         anyhow::bail!(
             "Triple-DES key must be exactly 24 bytes (48 hex chars), got {} bytes",
@@ -133,7 +149,7 @@ pub fn tdes_encrypt(hex_input: &str, hex_key: &str) -> Result<String> {
 }
 
 pub fn tdes_decrypt(hex_input: &str, hex_key: &str) -> Result<String> {
-    let key_bytes = hex::decode(hex_key.trim()).context("Failed to decode hex key")?;
+    let key_bytes = decode_des_hex_with_limit(hex_key, TDES_KEY_BYTES)?;
     if key_bytes.len() != 24 {
         anyhow::bail!(
             "Triple-DES key must be exactly 24 bytes (48 hex chars), got {} bytes",
