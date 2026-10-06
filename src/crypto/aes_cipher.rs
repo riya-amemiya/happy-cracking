@@ -74,8 +74,23 @@ pub fn run(action: AesCipherAction) -> Result<()> {
     Ok(())
 }
 
+pub const MAX_AES_BYTES: usize = 16 * 1024 * 1024;
+const AES128_KEY_BYTES: usize = 16;
+
+pub fn decode_aes_hex_with_limit(hex_str: &str, max_bytes: usize) -> Result<Vec<u8>> {
+    let hex_str = hex_str.trim();
+    let max_bytes = max_bytes.min(MAX_AES_BYTES);
+    let max_chars = max_bytes.saturating_mul(2);
+    if hex_str.len() > max_chars {
+        anyhow::bail!(
+            "Input exceeds maximum size of {max_bytes} bytes to prevent Denial of Service"
+        );
+    }
+    hex::decode(hex_str).context("Failed to decode hex input")
+}
+
 fn parse_key(hex_key: &str) -> Result<Array<u8, <Aes128 as KeySizeUser>::KeySize>> {
-    let key_bytes = hex::decode(hex_key.trim()).context("Failed to decode hex key")?;
+    let key_bytes = decode_aes_hex_with_limit(hex_key, AES128_KEY_BYTES)?;
     Array::try_from(key_bytes.as_slice()).map_err(|_| {
         anyhow::anyhow!(
             "AES-128 key must be exactly 16 bytes (32 hex chars), got {} bytes",
@@ -85,7 +100,7 @@ fn parse_key(hex_key: &str) -> Result<Array<u8, <Aes128 as KeySizeUser>::KeySize
 }
 
 fn parse_blocks(hex_input: &str) -> Result<Vec<u8>> {
-    let bytes = hex::decode(hex_input.trim()).context("Failed to decode hex input")?;
+    let bytes = decode_aes_hex_with_limit(hex_input, MAX_AES_BYTES)?;
     if bytes.is_empty() {
         anyhow::bail!("Input must not be empty");
     }
@@ -99,7 +114,7 @@ fn parse_blocks(hex_input: &str) -> Result<Vec<u8>> {
 }
 
 fn parse_iv(hex_iv: &str) -> Result<[u8; 16]> {
-    let iv_bytes = hex::decode(hex_iv.trim()).context("Failed to decode hex IV")?;
+    let iv_bytes = decode_aes_hex_with_limit(hex_iv, AES128_KEY_BYTES)?;
     if iv_bytes.len() != 16 {
         anyhow::bail!(
             "IV must be exactly 16 bytes (32 hex chars), got {} bytes",
@@ -179,7 +194,7 @@ pub fn cbc_decrypt(hex_input: &str, hex_key: &str, hex_iv: &str) -> Result<Strin
 }
 
 pub fn ecb_detect(hex_input: &str) -> Result<(bool, usize)> {
-    let bytes = hex::decode(hex_input.trim()).context("Failed to decode hex input")?;
+    let bytes = decode_aes_hex_with_limit(hex_input, MAX_AES_BYTES)?;
     if bytes.len() < 16 {
         return Ok((false, 0));
     }
