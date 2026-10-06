@@ -106,7 +106,7 @@ pub fn decode(s: &str) -> Result<Vec<u8>> {
         anyhow::bail!("Missing uuencode 'begin' header");
     }
 
-    let mut result = Vec::new();
+    let mut result = Vec::with_capacity(s.len().saturating_mul(3) / 4);
     for line in lines {
         if line.starts_with("end") {
             return Ok(result);
@@ -121,7 +121,7 @@ pub fn decode(s: &str) -> Result<Vec<u8>> {
             continue;
         }
 
-        let mut decoded = Vec::new();
+        let start = result.len();
         let body = &bytes[1..];
         for group in body.chunks(4) {
             let v0 = uu_value(group[0]).context("Failed to decode uuencode data")?;
@@ -132,16 +132,15 @@ pub fn decode(s: &str) -> Result<Vec<u8>> {
             let v3 = uu_value(*group.get(3).unwrap_or(&b'`'))
                 .context("Failed to decode uuencode data")?;
 
-            decoded.push((v0 << 2) | (v1 >> 4));
-            decoded.push((v1 << 4) | (v2 >> 2));
-            decoded.push((v2 << 6) | v3);
+            result.push((v0 << 2) | (v1 >> 4));
+            result.push((v1 << 4) | (v2 >> 2));
+            result.push((v2 << 6) | v3);
         }
 
-        if count > decoded.len() {
+        if count > result.len() - start {
             anyhow::bail!("uuencode line declares more bytes than it contains");
         }
-        decoded.truncate(count);
-        result.extend_from_slice(&decoded);
+        result.truncate(start + count);
     }
 
     anyhow::bail!("Missing uuencode 'end' footer");
