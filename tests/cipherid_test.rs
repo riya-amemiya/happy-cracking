@@ -75,6 +75,15 @@ fn test_english_plaintext() {
 }
 
 #[test]
+fn test_detects_nato() {
+    let candidates = cipherid::analyze("HOTEL ECHO LIMA LIMA OSCAR");
+    assert!(
+        confidence_of(&candidates, "NATO").unwrap() >= 0.6,
+        "expected a NATO phonetic candidate"
+    );
+}
+
+#[test]
 fn test_empty_input() {
     let candidates = cipherid::analyze("");
     assert!(candidates.is_empty());
@@ -103,6 +112,23 @@ fn test_flag_marker() {
             .iter()
             .any(|c| c.reason.contains("flag") && c.confidence >= 0.9)
     );
+}
+
+#[test]
+fn test_uppercase_flag_marker_reason_is_lowercased() {
+    let candidates = cipherid::analyze("FLAG{this_is_a_ctf_flag}");
+    assert!(
+        candidates
+            .iter()
+            .any(|c| c.reason.contains("contains 'flag{...}'") && c.confidence >= 0.9)
+    );
+}
+
+#[test]
+fn test_detects_spaced_binary() {
+    let candidates = cipherid::analyze("01001000 01100101 01101100 01101100 01101111");
+    assert!(top_name(&candidates).contains("Binary"));
+    assert!(confidence_of(&candidates, "Binary").unwrap() >= 0.7);
 }
 
 #[test]

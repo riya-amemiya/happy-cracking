@@ -88,17 +88,12 @@ fn detect_formats(s: &str, out: &mut Vec<Candidate>) {
         });
     }
 
-    let non_ws: Vec<char> = s.chars().filter(|c| !c.is_whitespace()).collect();
-    if non_ws.len() >= 8 && non_ws.iter().all(|&c| c == '0' || c == '1') {
-        let confidence = if non_ws.len().is_multiple_of(8) {
-            0.92
-        } else {
-            0.7
-        };
+    if let Some(bits) = binary_bit_count(s) {
+        let confidence = if bits.is_multiple_of(8) { 0.92 } else { 0.7 };
         out.push(Candidate {
             name: "Binary".to_string(),
             confidence,
-            reason: format!("{} bits of 0/1 only", non_ws.len()),
+            reason: format!("{bits} bits of 0/1 only"),
         });
     }
 
@@ -199,21 +194,52 @@ fn detect_formats(s: &str, out: &mut Vec<Candidate>) {
 }
 
 fn looks_like_flag(s: &str) -> Option<String> {
-    let lower = s.to_lowercase();
-
-    if let Some(open) = lower.find('{')
-        && lower[open..].contains('}')
-    {
-        let prefix = &lower[..open];
-        if !prefix.is_empty()
-            && prefix
-                .chars()
-                .all(|c| c.is_ascii_alphanumeric() || c == '_')
+    let open = s.find('{')?;
+    if !s.as_bytes()[open + 1..].contains(&b'}') {
+        return None;
+    }
+    let prefix = &s[..open];
+    if prefix.is_empty() {
+        return None;
+    }
+    if prefix.is_ascii() {
+        if prefix
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'_')
         {
+            let prefix = prefix.to_ascii_lowercase();
             return Some(format!("contains '{prefix}{{...}}' CTF flag marker"));
         }
+        return None;
+    }
+    let lower = s.to_lowercase();
+    let open = lower.find('{')?;
+    if !lower[open..].contains('}') {
+        return None;
+    }
+    let prefix = &lower[..open];
+    if !prefix.is_empty()
+        && prefix
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_')
+    {
+        return Some(format!("contains '{prefix}{{...}}' CTF flag marker"));
     }
     None
+}
+
+fn binary_bit_count(s: &str) -> Option<usize> {
+    let mut n = 0usize;
+    for c in s.chars() {
+        if c.is_whitespace() {
+            continue;
+        }
+        if c != '0' && c != '1' {
+            return None;
+        }
+        n += 1;
+    }
+    (n >= 8).then_some(n)
 }
 
 fn detect_decimal(s: &str) -> Option<Candidate> {
@@ -249,21 +275,26 @@ fn detect_decimal(s: &str) -> Option<Candidate> {
 }
 
 fn detect_nato(s: &str) -> Option<Candidate> {
-    let tokens: Vec<&str> = s.split_whitespace().collect();
-    if tokens.len() < 2 {
+    let mut total = 0usize;
+    let mut matched = 0usize;
+    for token in s.split_whitespace() {
+        total += 1;
+        if NATO_WORDS
+            .iter()
+            .any(|word| token.eq_ignore_ascii_case(word))
+        {
+            matched += 1;
+        }
+    }
+    if total < 2 {
         return None;
     }
-    let lower_tokens: Vec<String> = tokens.iter().map(|t| t.to_lowercase()).collect();
-    let matched = lower_tokens
-        .iter()
-        .filter(|t| NATO_WORDS.contains(&t.as_str()))
-        .count();
-    let ratio = matched as f64 / tokens.len() as f64;
+    let ratio = matched as f64 / total as f64;
     if ratio >= 0.6 {
         Some(Candidate {
             name: "NATO phonetic".to_string(),
             confidence: 0.5 + 0.45 * ratio,
-            reason: format!("{}/{} tokens are NATO words", matched, tokens.len()),
+            reason: format!("{matched}/{total} tokens are NATO words"),
         })
     } else {
         None
@@ -308,18 +339,44 @@ fn detect_statistics(s: &str, out: &mut Vec<Candidate>) {
 }
 
 fn detect_english(s: &str) -> Option<Candidate> {
-    let lower = s.to_lowercase();
-    let words: Vec<&str> = lower
-        .split(|c: char| !c.is_ascii_alphabetic())
-        .filter(|w| !w.is_empty())
-        .collect();
+    if s.is_ascii() {
+        detect_english_words(
+            s.split(|c: char| !c.is_ascii_alphabetic())
+                .filter(|w| !w.is_empty()),
+            s,
+        )
+    } else {
+        let lower = s.to_lowercase();
+        detect_english_words(
+            lower
+                .split(|c: char| !c.is_ascii_alphabetic())
+                .filter(|w| !w.is_empty()),
+            s,
+        )
+    }
+}
 
-    if words.is_empty() {
+fn detect_english_words<'a, I>(words: I, original: &str) -> Option<Candidate>
+where
+    I: Iterator<Item = &'a str>,
+{
+    let mut total = 0usize;
+    let mut common_hits = 0usize;
+    for word in words {
+        total += 1;
+        if COMMON_WORDS
+            .iter()
+            .any(|needle| word.eq_ignore_ascii_case(needle))
+        {
+            common_hits += 1;
+        }
+    }
+
+    if total == 0 {
         return None;
     }
 
-    let common_hits = words.iter().filter(|w| COMMON_WORDS.contains(w)).count();
-    let chi = frequency::chi_squared(s);
+    let chi = frequency::chi_squared(original);
 
     if common_hits >= 2 {
         let confidence = (0.6 + 0.1 * common_hits as f64).min(0.95);
