@@ -24,11 +24,25 @@ pub enum Rc4Action {
     },
 }
 
+pub const MAX_RC4_BYTES: usize = 16 * 1024 * 1024;
+
+pub fn decode_rc4_hex_with_limit(hex_str: &str, max_bytes: usize) -> Result<Vec<u8>> {
+    let hex_str = hex_str.trim();
+    let max_bytes = max_bytes.min(MAX_RC4_BYTES);
+    let max_chars = max_bytes.saturating_mul(2);
+    if hex_str.len() > max_chars {
+        anyhow::bail!(
+            "Input exceeds maximum size of {max_bytes} bytes to prevent Denial of Service"
+        );
+    }
+    hex::decode(hex_str).context("Failed to decode hex input")
+}
+
 pub fn run(action: Rc4Action) -> Result<()> {
     match action {
         Rc4Action::Cipher { input, key } => {
-            let key_bytes = hex::decode(key.trim()).context("Failed to decode hex key")?;
-            let input_bytes = hex::decode(input.trim()).context("Failed to decode hex input")?;
+            let key_bytes = decode_rc4_hex_with_limit(&key, MAX_RC4_BYTES)?;
+            let input_bytes = decode_rc4_hex_with_limit(&input, MAX_RC4_BYTES)?;
             let result = rc4(&input_bytes, &key_bytes)?;
             println!("Hex: {}", hex::encode(&result));
             if let Ok(s) = String::from_utf8(result) {
@@ -43,7 +57,7 @@ pub fn run(action: Rc4Action) -> Result<()> {
             }
         }
         Rc4Action::Sbox { key } => {
-            let key_bytes = hex::decode(key.trim()).context("Failed to decode hex key")?;
+            let key_bytes = decode_rc4_hex_with_limit(&key, MAX_RC4_BYTES)?;
             let sbox = rc4_sbox(&key_bytes)?;
             print_sbox(&sbox);
         }
