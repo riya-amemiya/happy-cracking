@@ -131,3 +131,27 @@ fn test_pkcs7_unpad_not_multiple_of_block_size() {
     let data = vec![0x01, 0x02, 0x03, 0x04, 0x05];
     assert!(padding::pkcs7_unpad(&data, 4).is_err());
 }
+
+#[test]
+fn decode_padding_hex_with_limit_rejects_oversized_dump() {
+    let err = padding::decode_padding_hex_with_limit("41424344", 2).unwrap_err();
+    assert!(err.to_string().contains("Denial of Service"));
+}
+
+#[test]
+fn decode_padding_hex_with_limit_accepts_dump_at_limit() {
+    let data = padding::decode_padding_hex_with_limit("4142", 2).unwrap();
+    assert_eq!(data, b"AB");
+}
+
+#[test]
+fn decode_padding_hex_with_limit_accepts_empty() {
+    let data = padding::decode_padding_hex_with_limit("", 16).unwrap();
+    assert!(data.is_empty());
+}
+
+#[test]
+fn decode_padding_hex_with_limit_rejects_invalid_hex() {
+    let err = padding::decode_padding_hex_with_limit("zz", 16).unwrap_err();
+    assert!(!err.to_string().contains("Denial of Service"));
+}

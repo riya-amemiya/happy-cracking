@@ -31,25 +31,39 @@ pub enum PaddingAction {
     },
 }
 
+pub const MAX_PADDING_BYTES: usize = 16 * 1024 * 1024;
+
+pub fn decode_padding_hex_with_limit(hex_str: &str, max_bytes: usize) -> Result<Vec<u8>> {
+    let hex_str = hex_str.trim();
+    let max_bytes = max_bytes.min(MAX_PADDING_BYTES);
+    let max_chars = max_bytes.saturating_mul(2);
+    if hex_str.len() > max_chars {
+        anyhow::bail!(
+            "Input exceeds maximum size of {max_bytes} bytes to prevent Denial of Service"
+        );
+    }
+    hex::decode(hex_str).context("Failed to decode input hex")
+}
+
 pub fn run(action: PaddingAction) -> Result<()> {
     match action {
         PaddingAction::Pkcs7Pad { input, block_size } => {
-            let data = hex::decode(input.trim()).context("Failed to decode input hex")?;
+            let data = decode_padding_hex_with_limit(&input, MAX_PADDING_BYTES)?;
             let padded = pkcs7_pad(&data, block_size)?;
             println!("{}", hex::encode(&padded));
         }
         PaddingAction::Pkcs7Unpad { input, block_size } => {
-            let data = hex::decode(input.trim()).context("Failed to decode input hex")?;
+            let data = decode_padding_hex_with_limit(&input, MAX_PADDING_BYTES)?;
             let unpadded = pkcs7_unpad(&data, block_size)?;
             println!("{}", hex::encode(&unpadded));
         }
         PaddingAction::ZeroPad { input, block_size } => {
-            let data = hex::decode(input.trim()).context("Failed to decode input hex")?;
+            let data = decode_padding_hex_with_limit(&input, MAX_PADDING_BYTES)?;
             let padded = zero_pad(&data, block_size)?;
             println!("{}", hex::encode(&padded));
         }
         PaddingAction::ZeroUnpad { input } => {
-            let data = hex::decode(input.trim()).context("Failed to decode input hex")?;
+            let data = decode_padding_hex_with_limit(&input, MAX_PADDING_BYTES)?;
             let unpadded = zero_unpad(&data);
             println!("{}", hex::encode(&unpadded));
         }
