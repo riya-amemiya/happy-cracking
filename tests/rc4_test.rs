@@ -72,3 +72,27 @@ fn test_rc4_long_input() {
 fn test_rc4_sbox_empty_key() {
     assert!(rc4::rc4_sbox(b"").is_err());
 }
+
+#[test]
+fn decode_rc4_hex_with_limit_rejects_oversized_dump() {
+    let err = rc4::decode_rc4_hex_with_limit("41424344", 2).unwrap_err();
+    assert!(err.to_string().contains("Denial of Service"));
+}
+
+#[test]
+fn decode_rc4_hex_with_limit_accepts_dump_at_limit() {
+    let data = rc4::decode_rc4_hex_with_limit("4142", 2).unwrap();
+    assert_eq!(data, b"AB");
+}
+
+#[test]
+fn decode_rc4_hex_with_limit_accepts_empty() {
+    let data = rc4::decode_rc4_hex_with_limit("", 16).unwrap();
+    assert!(data.is_empty());
+}
+
+#[test]
+fn decode_rc4_hex_with_limit_rejects_invalid_hex() {
+    let err = rc4::decode_rc4_hex_with_limit("zz", 16).unwrap_err();
+    assert!(!err.to_string().contains("Denial of Service"));
+}
