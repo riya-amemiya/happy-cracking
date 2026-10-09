@@ -111,3 +111,27 @@ fn test_multiple_bytes_8() {
     let right = bitrot::rotate_right(&left, 4, 8).unwrap();
     assert_eq!(right, data);
 }
+
+#[test]
+fn decode_bitrot_hex_with_limit_rejects_oversized_dump() {
+    let err = bitrot::decode_bitrot_hex_with_limit("41424344", 2).unwrap_err();
+    assert!(err.to_string().contains("Denial of Service"));
+}
+
+#[test]
+fn decode_bitrot_hex_with_limit_accepts_dump_at_limit() {
+    let data = bitrot::decode_bitrot_hex_with_limit("4142", 2).unwrap();
+    assert_eq!(data, b"AB");
+}
+
+#[test]
+fn decode_bitrot_hex_with_limit_accepts_empty() {
+    let data = bitrot::decode_bitrot_hex_with_limit("", 16).unwrap();
+    assert!(data.is_empty());
+}
+
+#[test]
+fn decode_bitrot_hex_with_limit_rejects_invalid_hex() {
+    let err = bitrot::decode_bitrot_hex_with_limit("zz", 16).unwrap_err();
+    assert!(!err.to_string().contains("Denial of Service"));
+}
