@@ -23,15 +23,29 @@ pub enum BitrotAction {
     },
 }
 
+pub const MAX_BITROT_BYTES: usize = 16 * 1024 * 1024;
+
+pub fn decode_bitrot_hex_with_limit(hex_str: &str, max_bytes: usize) -> Result<Vec<u8>> {
+    let hex_str = hex_str.trim();
+    let max_bytes = max_bytes.min(MAX_BITROT_BYTES);
+    let max_chars = max_bytes.saturating_mul(2);
+    if hex_str.len() > max_chars {
+        anyhow::bail!(
+            "Input exceeds maximum size of {max_bytes} bytes to prevent Denial of Service"
+        );
+    }
+    hex::decode(hex_str).context("Failed to decode hex input")
+}
+
 pub fn run(action: BitrotAction) -> Result<()> {
     match action {
         BitrotAction::Rotl { input, bits, width } => {
-            let data = hex::decode(input.trim()).context("Failed to decode input hex")?;
+            let data = decode_bitrot_hex_with_limit(&input, MAX_BITROT_BYTES)?;
             let result = rotate_left(&data, bits, width)?;
             println!("{}", hex::encode(&result));
         }
         BitrotAction::Rotr { input, bits, width } => {
-            let data = hex::decode(input.trim()).context("Failed to decode input hex")?;
+            let data = decode_bitrot_hex_with_limit(&input, MAX_BITROT_BYTES)?;
             let result = rotate_right(&data, bits, width)?;
             println!("{}", hex::encode(&result));
         }
