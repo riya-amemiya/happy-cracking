@@ -93,7 +93,7 @@ fn run_cipher(input: &str, key: &str, ascii_key: bool) -> Result<()> {
     let key_bytes = if ascii_key {
         key.as_bytes().to_vec()
     } else {
-        hex::decode(key.trim()).context("Failed to decode key hex")?
+        decode_xor_hex_with_limit(key, MAX_XOR_BYTES)?
     };
 
     let result = xor_bytes(&input_bytes, &key_bytes);
