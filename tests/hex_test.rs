@@ -52,3 +52,27 @@ fn decode_invalid_hex() {
 fn decode_odd_length() {
     assert!(hex::decode("ABC").is_err());
 }
+
+#[test]
+fn decode_hex_with_limit_rejects_oversized_dump() {
+    let err = hex::decode_hex_with_limit("41424344", 2).unwrap_err();
+    assert!(err.to_string().contains("Denial of Service"));
+}
+
+#[test]
+fn decode_hex_with_limit_accepts_dump_at_limit() {
+    let data = hex::decode_hex_with_limit("4142", 2).unwrap();
+    assert_eq!(data, b"AB");
+}
+
+#[test]
+fn decode_hex_with_limit_accepts_empty() {
+    let data = hex::decode_hex_with_limit("", 16).unwrap();
+    assert!(data.is_empty());
+}
+
+#[test]
+fn decode_hex_with_limit_rejects_invalid_hex() {
+    let err = hex::decode_hex_with_limit("zz", 16).unwrap_err();
+    assert!(!err.to_string().contains("Denial of Service"));
+}
