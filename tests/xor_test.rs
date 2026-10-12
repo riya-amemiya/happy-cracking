@@ -102,6 +102,27 @@ fn bruteforce_run_reads_hex_under_limit() {
 }
 
 #[test]
+fn cipher_run_reads_key_hex_under_limit() {
+    xor::run(xor::XorAction::Cipher {
+        input: hex::encode(b"Hello"),
+        key: hex::encode(b"A"),
+        ascii: false,
+    })
+    .unwrap();
+}
+
+#[test]
+fn cipher_run_rejects_invalid_key_hex() {
+    let err = xor::run(xor::XorAction::Cipher {
+        input: "00".into(),
+        key: "zz".into(),
+        ascii: false,
+    })
+    .unwrap_err();
+    assert!(!err.to_string().contains("Denial of Service"));
+}
+
+#[test]
 fn single_byte_xor_is_printable_matches_allocated_filter() {
     let data: Vec<u8> = (0u8..=255).cycle().take(64).collect();
     let expected: Vec<u8> = xor::single_byte_xor_bruteforce(&data)
