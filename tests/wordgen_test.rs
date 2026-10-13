@@ -10,6 +10,19 @@ fn enumerate_streams_shorter_lengths_first() {
 }
 
 #[test]
+fn enumerate_ascii_flush_keeps_odometer_order() {
+    let mut output = Vec::new();
+    write_enumerated(&mut output, "0123456789abcdef", 4, 4, false).unwrap();
+    assert_eq!(output.len(), 65_536 * 5);
+    assert!(output.starts_with(b"0000\n"));
+    assert!(output.ends_with(b"ffff\n"));
+    assert_eq!(
+        output.iter().filter(|&&value| value == b'\n').count(),
+        65_536
+    );
+}
+
+#[test]
 fn enumerate_deduplicates_unicode_charset_in_first_seen_order() {
     let mut output = Vec::new();
     write_enumerated(&mut output, "猫犬猫", 1, 1, false).unwrap();

@@ -359,6 +359,8 @@ fn parse_mask(mask: &str, custom: &[char]) -> Result<Vec<MaskPosition>> {
     Ok(positions)
 }
 
+const OUTPUT_BATCH: usize = 64 * 1024;
+
 pub fn write_enumerated<W: Write>(
     writer: &mut W,
     charset: &str,
@@ -371,6 +373,49 @@ pub fn write_enumerated<W: Write>(
     let total = enumerated_total(&chars, min_len, max_len)?;
     validate_candidate_count(total, force)?;
 
+    if chars.iter().all(char::is_ascii) {
+        write_enumerated_ascii(writer, &chars, min_len, max_len)
+    } else {
+        write_enumerated_chars(writer, &chars, min_len, max_len)
+    }
+}
+
+fn write_enumerated_ascii<W: Write>(
+    writer: &mut W,
+    chars: &[char],
+    min_len: usize,
+    max_len: usize,
+) -> Result<()> {
+    let alphabet: Vec<u8> = chars.iter().map(|&c| c as u8).collect();
+    let base = alphabet.len();
+    let mut out = Vec::with_capacity(OUTPUT_BATCH);
+    for len in min_len..=max_len {
+        let count = combination_count(base, len)?;
+        let mut digits = vec![0usize; len];
+        for _ in 0..count {
+            if out.len() + len + 1 > out.capacity() {
+                writer.write_all(&out)?;
+                out.clear();
+            }
+            for &d in &digits {
+                out.push(alphabet[d]);
+            }
+            out.push(b'\n');
+            increment_digits(&mut digits, base);
+        }
+    }
+    if !out.is_empty() {
+        writer.write_all(&out)?;
+    }
+    Ok(())
+}
+
+fn write_enumerated_chars<W: Write>(
+    writer: &mut W,
+    chars: &[char],
+    min_len: usize,
+    max_len: usize,
+) -> Result<()> {
     let mut candidate = String::with_capacity(max_len.saturating_mul(4));
     for len in min_len..=max_len {
         let count = combination_count(chars.len(), len)?;
