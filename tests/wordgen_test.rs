@@ -113,6 +113,26 @@ fn mask_expands_only_custom_positions() {
 }
 
 #[test]
+fn mask_ascii_flush_keeps_odometer_order() {
+    let mut output = Vec::new();
+    write_masked(&mut output, "?c?c?c?c", "0123456789abcdef", false).unwrap();
+    assert_eq!(output.len(), 65_536 * 5);
+    assert!(output.starts_with(b"0000\n"));
+    assert!(output.ends_with(b"ffff\n"));
+    assert_eq!(
+        output.iter().filter(|&&value| value == b'\n').count(),
+        65_536
+    );
+}
+
+#[test]
+fn mask_unicode_charset_keeps_first_seen_order() {
+    let mut output = Vec::new();
+    write_masked(&mut output, "x?c", "猫犬猫", false).unwrap();
+    assert_eq!(String::from_utf8(output).unwrap(), "x猫\nx犬\n");
+}
+
+#[test]
 fn mask_supports_literal_question_mark() {
     let mut output = Vec::new();
     write_masked(&mut output, "A??B?c", "x", false).unwrap();

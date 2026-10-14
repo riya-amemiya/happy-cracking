@@ -302,6 +302,13 @@ impl MaskPlan {
         }
         candidate
     }
+
+    fn is_ascii(&self) -> bool {
+        self.positions.iter().all(|position| match position {
+            MaskPosition::Literal(value) => value.is_ascii(),
+            MaskPosition::Variable(chars) => chars.iter().all(char::is_ascii),
+        })
+    }
 }
 
 pub(crate) fn mask_plan(mask: &str, charset: &str) -> Result<MaskPlan> {
@@ -441,6 +448,43 @@ pub fn write_masked<W: Write>(
     let total = plan.total()?;
     validate_candidate_count(total, force)?;
 
+    if plan.is_ascii() {
+        write_masked_ascii(writer, &plan, total)
+    } else {
+        write_masked_chars(writer, &plan, total)
+    }
+}
+
+fn write_masked_ascii<W: Write>(writer: &mut W, plan: &MaskPlan, total: u128) -> Result<()> {
+    let bases = plan.variable_bases();
+    let mut digits = vec![0usize; bases.len()];
+    let line_len = plan.output_len();
+    let mut out = Vec::with_capacity(OUTPUT_BATCH);
+    for _ in 0..total {
+        if out.len() + line_len + 1 > out.capacity() {
+            writer.write_all(&out)?;
+            out.clear();
+        }
+        let mut variable = 0;
+        for position in &plan.positions {
+            match position {
+                MaskPosition::Literal(value) => out.push(*value as u8),
+                MaskPosition::Variable(chars) => {
+                    out.push(chars[digits[variable]] as u8);
+                    variable += 1;
+                }
+            }
+        }
+        out.push(b'\n');
+        increment_mixed(&mut digits, &bases);
+    }
+    if !out.is_empty() {
+        writer.write_all(&out)?;
+    }
+    Ok(())
+}
+
+fn write_masked_chars<W: Write>(writer: &mut W, plan: &MaskPlan, total: u128) -> Result<()> {
     let bases = plan.variable_bases();
     let mut digits = vec![0usize; bases.len()];
     let mut candidate = String::with_capacity(plan.output_len().saturating_mul(4));
