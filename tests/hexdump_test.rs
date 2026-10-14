@@ -114,3 +114,33 @@ fn test_reverse_all_byte_values_roundtrip() {
     let reversed = hexdump::reverse(&dumped).unwrap();
     assert_eq!(reversed, original);
 }
+
+#[test]
+fn reverse_with_limit_rejects_oversized_dump() {
+    let err = hexdump::reverse_with_limit("00000000: 41424344", 2).unwrap_err();
+    assert!(err.to_string().contains("Denial of Service"));
+}
+
+#[test]
+fn reverse_with_limit_rejects_oversized_decoded_bytes() {
+    let err = hexdump::reverse_with_limit("0:41424344", 2).unwrap_err();
+    assert!(err.to_string().contains("Denial of Service"));
+}
+
+#[test]
+fn reverse_with_limit_accepts_dump_at_limit() {
+    let data = hexdump::reverse_with_limit("00000000: 4142", 2).unwrap();
+    assert_eq!(data, b"AB");
+}
+
+#[test]
+fn reverse_with_limit_accepts_empty() {
+    let data = hexdump::reverse_with_limit("", 16).unwrap();
+    assert!(data.is_empty());
+}
+
+#[test]
+fn reverse_with_limit_rejects_odd_hex_digits() {
+    let err = hexdump::reverse_with_limit("00000000: 486", 16).unwrap_err();
+    assert!(!err.to_string().contains("Denial of Service"));
+}

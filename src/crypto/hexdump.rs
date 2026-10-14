@@ -104,28 +104,45 @@ pub fn dump_bytes(data: &[u8]) -> String {
     String::from_utf8(output).expect("hexdump output is ASCII")
 }
 
+pub const MAX_HEXDUMP_BYTES: usize = 16 * 1024 * 1024;
+
 pub fn reverse(hex_dump: &str) -> Result<Vec<u8>> {
-    let mut result = Vec::with_capacity(hex_dump.len() / 4);
+    reverse_with_limit(hex_dump, MAX_HEXDUMP_BYTES)
+}
+
+pub fn reverse_with_limit(hex_dump: &str, max_bytes: usize) -> Result<Vec<u8>> {
+    let max_bytes = max_bytes.min(MAX_HEXDUMP_BYTES);
+    let max_chars = max_bytes.saturating_mul(8);
+    if hex_dump.len() > max_chars {
+        anyhow::bail!(
+            "Input exceeds maximum size of {max_bytes} bytes to prevent Denial of Service"
+        );
+    }
+    let mut result = Vec::with_capacity((hex_dump.len() / 4).min(max_bytes));
     for line in hex_dump.lines() {
         let line = line.trim();
         if line.is_empty() {
             continue;
         }
 
-        // Find the colon that separates offset from hex data
         let Some(colon_pos) = line.find(':') else {
             continue;
         };
 
         let after_colon = &line[colon_pos + 1..];
 
-        // Find where ASCII column starts (two spaces after hex section)
-        // The hex section contains hex chars and single spaces between pairs
         let hex_part = if let Some(ascii_start) = after_colon.find("  ") {
             &after_colon[..ascii_start]
         } else {
             after_colon
         };
+
+        let additional = hex_part.bytes().filter(u8::is_ascii_hexdigit).count() / 2;
+        if result.len().saturating_add(additional) > max_bytes {
+            anyhow::bail!(
+                "Input exceeds maximum size of {max_bytes} bytes to prevent Denial of Service"
+            );
+        }
 
         append_hex_pairs(hex_part.as_bytes(), &mut result)
             .context("Failed to decode hex in dump")?;
