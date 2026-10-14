@@ -15,6 +15,8 @@ pub const MAX_BRUTE_LEN: usize = 32;
 
 pub const MAX_SALT_LEN: usize = 1024;
 
+pub const MAX_TARGET_HASH_HEX_LEN: usize = 128;
+
 /// Stack buffer for ASCII mask/brute candidates (`?l`/`?u`/`?d`/`?s`/`?a`/`?h`).
 /// 32 bytes covers typical CTF masks; longer or non-ASCII inputs fall back to `String`.
 const MAX_STACK_MASK: usize = 32;
@@ -177,6 +179,15 @@ pub enum HashcrackAction {
 }
 
 pub fn run(action: HashcrackAction) -> Result<()> {
+    let hash = match &action {
+        HashcrackAction::Dict { hash, .. }
+        | HashcrackAction::Brute { hash, .. }
+        | HashcrackAction::Lookup { hash, .. }
+        | HashcrackAction::Rule { hash, .. }
+        | HashcrackAction::Mask { hash, .. }
+        | HashcrackAction::Hybrid { hash, .. } => hash.as_str(),
+    };
+    require_target_hash_len(hash)?;
     match action {
         HashcrackAction::Dict {
             hash,
@@ -233,6 +244,13 @@ fn require_salt_len(salt: Option<&str>) -> Result<()> {
         && s.len() > MAX_SALT_LEN
     {
         anyhow::bail!("Salt exceeds maximum length of {MAX_SALT_LEN}");
+    }
+    Ok(())
+}
+
+fn require_target_hash_len(hash: &str) -> Result<()> {
+    if hash.trim().len() > MAX_TARGET_HASH_HEX_LEN {
+        anyhow::bail!("Target hash exceeds maximum length of {MAX_TARGET_HASH_HEX_LEN}");
     }
     Ok(())
 }
@@ -321,6 +339,10 @@ fn digest_matches(algo: HashAlgo, input: &str, target: &[u8]) -> bool {
 }
 
 fn decode_target_digest(target: &str) -> Option<Vec<u8>> {
+    let target = target.trim();
+    if target.len() > MAX_TARGET_HASH_HEX_LEN {
+        return None;
+    }
     hex::decode(normalize_hash(target)).ok()
 }
 

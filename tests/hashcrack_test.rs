@@ -1,7 +1,7 @@
 use happy_cracking::crypto::hashcrack::{
-    HashAlgo, MAX_BRUTE_LEN, MAX_SALT_LEN, SaltPosition, brute_force, compute_hash,
-    find_in_candidates, lookup_in_pairs, lookup_in_table_file, lookup_in_table_file_with_limit,
-    parse_table_line, read_wordlist_buf_with_limit,
+    HashAlgo, HashcrackAction, MAX_BRUTE_LEN, MAX_SALT_LEN, MAX_TARGET_HASH_HEX_LEN, SaltPosition,
+    brute_force, compute_hash, find_in_candidates, lookup_in_pairs, lookup_in_table_file,
+    lookup_in_table_file_with_limit, parse_table_line, read_wordlist_buf_with_limit, run,
 };
 use std::fs;
 use std::path::PathBuf;
@@ -581,4 +581,61 @@ fn read_wordlist_buf_with_limit_accepts_file_at_limit() {
 fn read_wordlist_buf_with_limit_bounds_device_without_eof() {
     let err = read_wordlist_buf_with_limit(std::path::Path::new("/dev/zero"), 64).unwrap_err();
     assert!(err.to_string().contains("Denial of Service"));
+}
+
+#[test]
+fn find_in_candidates_rejects_oversized_target_hash_hex() {
+    let start = std::time::Instant::now();
+    let too_long = "a".repeat(MAX_TARGET_HASH_HEX_LEN + 1);
+    let found = find_in_candidates(
+        &too_long,
+        HashAlgo::Md5,
+        None,
+        SaltPosition::Suffix,
+        &candidates(),
+    );
+    assert_eq!(found, None);
+    assert!(
+        start.elapsed().as_millis() < 100,
+        "oversized target hash must be rejected before hex decode"
+    );
+}
+
+#[test]
+fn find_in_candidates_accepts_sha512_target_at_hex_cap() {
+    let target = compute_hash(HashAlgo::Sha512, "hello");
+    assert_eq!(target.len(), MAX_TARGET_HASH_HEX_LEN);
+    let found = find_in_candidates(
+        &format!("  {target}  "),
+        HashAlgo::Sha512,
+        None,
+        SaltPosition::Suffix,
+        &candidates(),
+    );
+    assert_eq!(found, Some("hello".to_string()));
+}
+
+#[test]
+fn run_rejects_oversized_target_hash_hex() {
+    let start = std::time::Instant::now();
+    let err = run(HashcrackAction::Brute {
+        hash: "a".repeat(MAX_TARGET_HASH_HEX_LEN + 1),
+        algo: HashAlgo::Md5,
+        charset: "a".to_string(),
+        preset: None,
+        min_len: 1,
+        max_len: 1,
+        salt: None,
+        salt_position: SaltPosition::Suffix,
+    })
+    .unwrap_err()
+    .to_string();
+    assert!(
+        err.contains(&MAX_TARGET_HASH_HEX_LEN.to_string()),
+        "unexpected error: {err}"
+    );
+    assert!(
+        start.elapsed().as_millis() < 100,
+        "oversized target hash must be rejected before brute-force setup"
+    );
 }
