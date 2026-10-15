@@ -521,10 +521,49 @@ pub fn write_random<W: Write>(
     }
     validate_candidate_count(u128::from(count), force)?;
 
+    if chars.iter().all(char::is_ascii) {
+        write_random_ascii(writer, &chars, length, count)
+    } else {
+        write_random_chars(writer, &chars, length, count)
+    }
+}
+
+fn write_random_ascii<W: Write>(
+    writer: &mut W,
+    chars: &[char],
+    length: usize,
+    count: u64,
+) -> Result<()> {
+    let alphabet: Vec<u8> = chars.iter().map(|&c| c as u8).collect();
+    let base = alphabet.len();
+    let mut rng = rand::rng();
+    let mut out = Vec::with_capacity(OUTPUT_BATCH);
+    for _ in 0..count {
+        if out.len() + length + 1 > out.capacity() {
+            writer.write_all(&out)?;
+            out.clear();
+        }
+        for _ in 0..length {
+            out.push(alphabet[rng.random_range(0..base)]);
+        }
+        out.push(b'\n');
+    }
+    if !out.is_empty() {
+        writer.write_all(&out)?;
+    }
+    Ok(())
+}
+
+fn write_random_chars<W: Write>(
+    writer: &mut W,
+    chars: &[char],
+    length: usize,
+    count: u64,
+) -> Result<()> {
     let mut rng = rand::rng();
     let mut candidate = String::with_capacity(length.saturating_mul(4));
     for _ in 0..count {
-        append_random(&mut candidate, &chars, length, &mut rng);
+        append_random(&mut candidate, chars, length, &mut rng);
         writer.write_all(candidate.as_bytes())?;
         writer.write_all(b"\n")?;
     }
