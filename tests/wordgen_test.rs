@@ -212,6 +212,40 @@ fn random_writes_requested_shape_and_count() {
 }
 
 #[test]
+fn random_ascii_flush_keeps_line_shape() {
+    let mut output = Vec::new();
+    write_random(&mut output, "ab", 4, 20_000, false).unwrap();
+    assert_eq!(output.len(), 20_000 * 5);
+    assert_eq!(
+        output.iter().filter(|&&value| value == b'\n').count(),
+        20_000
+    );
+    for line in output
+        .split(|&value| value == b'\n')
+        .filter(|line| !line.is_empty())
+    {
+        assert_eq!(line.len(), 4);
+        assert!(line.iter().all(|&value| value == b'a' || value == b'b'));
+    }
+}
+
+#[test]
+fn random_unicode_charset_emits_requested_length() {
+    let mut output = Vec::new();
+    write_random(&mut output, "猫犬", 3, 5, false).unwrap();
+    let lines: Vec<_> = String::from_utf8(output)
+        .unwrap()
+        .lines()
+        .map(str::to_string)
+        .collect();
+    assert_eq!(lines.len(), 5);
+    for line in lines {
+        assert_eq!(line.chars().count(), 3);
+        assert!(line.chars().all(|value| value == '猫' || value == '犬'));
+    }
+}
+
+#[test]
 fn random_rejects_zero_count() {
     let error = write_random(&mut std::io::sink(), "ab", 4, 0, false).unwrap_err();
     assert!(error.to_string().contains("--count"));
