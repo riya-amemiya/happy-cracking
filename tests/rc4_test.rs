@@ -96,3 +96,43 @@ fn decode_rc4_hex_with_limit_rejects_invalid_hex() {
     let err = rc4::decode_rc4_hex_with_limit("zz", 16).unwrap_err();
     assert!(!err.to_string().contains("Denial of Service"));
 }
+
+#[test]
+fn cipher_ascii_with_limit_rejects_oversized_input() {
+    let start = std::time::Instant::now();
+    let err = rc4::cipher_ascii_with_limit("abcd", "k", 2).unwrap_err();
+    assert!(err.to_string().contains("Denial of Service"));
+    assert!(
+        start.elapsed().as_millis() < 100,
+        "oversized ASCII input must be rejected before RC4"
+    );
+}
+
+#[test]
+fn cipher_ascii_with_limit_rejects_oversized_key() {
+    let start = std::time::Instant::now();
+    let err = rc4::cipher_ascii_with_limit("Hi", "abcd", 2).unwrap_err();
+    assert!(err.to_string().contains("Denial of Service"));
+    assert!(
+        start.elapsed().as_millis() < 100,
+        "oversized ASCII key must be rejected before RC4"
+    );
+}
+
+#[test]
+fn cipher_ascii_with_limit_accepts_len_at_limit() {
+    let data = rc4::cipher_ascii_with_limit("Hi", "K", 2).unwrap();
+    assert_eq!(data, rc4::rc4(b"Hi", b"K").unwrap());
+}
+
+#[test]
+fn cipher_ascii_with_limit_accepts_empty_input() {
+    let data = rc4::cipher_ascii_with_limit("", "Key", 16).unwrap();
+    assert!(data.is_empty());
+}
+
+#[test]
+fn cipher_ascii_with_limit_known_vector() {
+    let data = rc4::cipher_ascii_with_limit("Plaintext", "Key", 16).unwrap();
+    assert_eq!(hex::encode(&data), "bbf316e8d940af0ad3");
+}

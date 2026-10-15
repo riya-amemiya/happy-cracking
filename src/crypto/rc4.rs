@@ -38,6 +38,16 @@ pub fn decode_rc4_hex_with_limit(hex_str: &str, max_bytes: usize) -> Result<Vec<
     hex::decode(hex_str).context("Failed to decode hex input")
 }
 
+pub fn cipher_ascii_with_limit(input: &str, key: &str, max_bytes: usize) -> Result<Vec<u8>> {
+    let max_bytes = max_bytes.min(MAX_RC4_BYTES);
+    if input.len() > max_bytes || key.len() > max_bytes {
+        anyhow::bail!(
+            "Input exceeds maximum size of {max_bytes} bytes to prevent Denial of Service"
+        );
+    }
+    rc4(input.as_bytes(), key.as_bytes())
+}
+
 pub fn run(action: Rc4Action) -> Result<()> {
     match action {
         Rc4Action::Cipher { input, key } => {
@@ -50,7 +60,7 @@ pub fn run(action: Rc4Action) -> Result<()> {
             }
         }
         Rc4Action::CipherAscii { input, key } => {
-            let result = rc4(input.as_bytes(), key.as_bytes())?;
+            let result = cipher_ascii_with_limit(&input, &key, MAX_RC4_BYTES)?;
             println!("Hex: {}", hex::encode(&result));
             if let Ok(s) = String::from_utf8(result) {
                 println!("ASCII: {s}");
