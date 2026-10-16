@@ -24,8 +24,9 @@ pub fn run(action: Crc32Action) -> Result<()> {
             println!("{}", compute(&input));
         }
         Crc32Action::Verify { input, checksum } => {
+            let expected = normalize_crc32_checksum(&checksum)?;
             let computed = compute(&input);
-            if computed == checksum.to_lowercase() {
+            if computed == expected {
                 println!("Match");
             } else {
                 println!("Mismatch (expected {checksum}, got {computed})");
@@ -33,6 +34,15 @@ pub fn run(action: Crc32Action) -> Result<()> {
         }
     }
     Ok(())
+}
+
+pub const MAX_CRC32_CHECKSUM_HEX_LEN: usize = 8;
+
+pub fn normalize_crc32_checksum(checksum: &str) -> Result<String> {
+    if checksum.len() > MAX_CRC32_CHECKSUM_HEX_LEN {
+        anyhow::bail!("Checksum exceeds maximum length of {MAX_CRC32_CHECKSUM_HEX_LEN}");
+    }
+    Ok(checksum.to_ascii_lowercase())
 }
 
 static CRC32_TABLE: LazyLock<[u32; 256]> = LazyLock::new(|| {
