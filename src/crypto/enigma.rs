@@ -184,13 +184,13 @@ impl Rotor {
     }
 
     fn step(&mut self) {
-        self.pos = (self.pos + 1) % 26;
+        self.pos = if self.pos == 25 { 0 } else { self.pos + 1 };
     }
 
     fn map(&self, table: &[u8; 26], c: u8) -> u8 {
-        let shift = (self.pos + 26 - self.ring) % 26;
-        let wired = table[((c + shift) % 26) as usize];
-        (wired + 26 - shift) % 26
+        let shift = wrap26(self.pos + 26 - self.ring);
+        let wired = table[wrap26(c + shift) as usize];
+        wrap26(wired + 26 - shift)
     }
 
     fn forward(&self, c: u8) -> u8 {
@@ -200,6 +200,11 @@ impl Rotor {
     fn inverse(&self, c: u8) -> u8 {
         self.map(&self.rev, c)
     }
+}
+
+#[inline]
+fn wrap26(x: u8) -> u8 {
+    if x >= 26 { x - 26 } else { x }
 }
 
 fn wiring(text: &str) -> [u8; 26] {
@@ -470,6 +475,15 @@ struct Machine {
 }
 
 impl Machine {
+    fn set_pos(&mut self, pos: [u8; 4]) {
+        if let Some(g) = self.greek.as_mut() {
+            g.pos = pos[0];
+        }
+        self.left.pos = pos[1];
+        self.mid.pos = pos[2];
+        self.right.pos = pos[3];
+    }
+
     fn step(&mut self) {
         let mid_notch = self.mid.at_notch();
         let right_notch = self.right.at_notch();
@@ -672,6 +686,8 @@ fn scan_job(
         named_moving(job.moving_names[2]).expect("rotor"),
     ];
     let (_, ukw) = named_reflector(job.reflector_name, m4).expect("ukw");
+    let mut machine = assemble(greek.clone(), moving.clone(), ukw, job.rings, [0; 4], plug);
+    let mut decoded = vec![0u8; cipher.len()];
     let mut hits = Vec::new();
     let pos_span = if m4 { 26 * 26 * 26 * 26 } else { 26 * 26 * 26 };
     for raw in 0..pos_span {
@@ -690,8 +706,10 @@ fn scan_job(
                 (raw % 26) as u8,
             ]
         };
-        let machine = assemble(greek.clone(), moving.clone(), ukw, job.rings, pos, plug);
-        let decoded = decode_letters(cipher, machine);
+        machine.set_pos(pos);
+        for (slot, &c) in decoded.iter_mut().zip(cipher) {
+            *slot = machine.encode(c);
+        }
         let Some(at) = find_crib(&decoded, crib) else {
             continue;
         };
