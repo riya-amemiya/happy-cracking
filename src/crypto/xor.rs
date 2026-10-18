@@ -87,11 +87,21 @@ pub fn decode_xor_hex_with_limit(hex_str: &str, max_bytes: usize) -> Result<Vec<
     hex::decode(hex_str).context("Failed to decode input hex")
 }
 
+pub fn ascii_key_bytes_with_limit(key: &str, max_bytes: usize) -> Result<Vec<u8>> {
+    let max_bytes = max_bytes.min(MAX_XOR_BYTES);
+    if key.len() > max_bytes {
+        anyhow::bail!(
+            "Input exceeds maximum size of {max_bytes} bytes to prevent Denial of Service"
+        );
+    }
+    Ok(key.as_bytes().to_vec())
+}
+
 fn run_cipher(input: &str, key: &str, ascii_key: bool) -> Result<()> {
     let input_bytes = decode_xor_hex_with_limit(input, MAX_XOR_BYTES)?;
 
     let key_bytes = if ascii_key {
-        key.as_bytes().to_vec()
+        ascii_key_bytes_with_limit(key, MAX_XOR_BYTES)?
     } else {
         decode_xor_hex_with_limit(key, MAX_XOR_BYTES)?
     };
