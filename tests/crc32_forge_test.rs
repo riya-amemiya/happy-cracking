@@ -1,4 +1,4 @@
-use happy_cracking::crypto::crc32_forge;
+use happy_cracking::crypto::crc32_forge::{self, MAX_CRC32_TARGET_HEX_LEN};
 
 #[test]
 fn test_crc32_compute_known_values() {
@@ -143,4 +143,92 @@ fn verify_run_accepts_hex_under_limit() {
         target: "deadbeef".into(),
     })
     .unwrap();
+}
+
+#[test]
+fn parse_crc32_target_rejects_oversized() {
+    let start = std::time::Instant::now();
+    let err = crc32_forge::parse_crc32_target(&"0".repeat(MAX_CRC32_TARGET_HEX_LEN + 1))
+        .unwrap_err()
+        .to_string();
+    assert!(
+        err.contains(&MAX_CRC32_TARGET_HEX_LEN.to_string()),
+        "unexpected error: {err}"
+    );
+    assert!(
+        start.elapsed().as_millis() < 100,
+        "oversized target must be rejected before from_str_radix"
+    );
+}
+
+#[test]
+fn parse_crc32_target_accepts_len_at_limit() {
+    assert_eq!(
+        crc32_forge::parse_crc32_target("DEADBEEF").unwrap(),
+        0xDEAD_BEEF
+    );
+}
+
+#[test]
+fn parse_crc32_target_accepts_shorter() {
+    assert_eq!(crc32_forge::parse_crc32_target("abc").unwrap(), 0xABC);
+}
+
+#[test]
+fn parse_crc32_target_rejects_empty() {
+    let err = crc32_forge::parse_crc32_target("").unwrap_err().to_string();
+    assert!(
+        err.contains("Invalid hex target CRC32"),
+        "unexpected error: {err}"
+    );
+}
+
+#[test]
+fn parse_crc32_target_rejects_invalid() {
+    let err = crc32_forge::parse_crc32_target("zz")
+        .unwrap_err()
+        .to_string();
+    assert!(
+        err.contains("Invalid hex target CRC32"),
+        "unexpected error: {err}"
+    );
+}
+
+#[test]
+fn forge_run_rejects_oversized_target() {
+    let start = std::time::Instant::now();
+    let err = crc32_forge::run(crc32_forge::Crc32ForgeAction::Forge {
+        input: hex::encode(b"hello"),
+        target: "0".repeat(MAX_CRC32_TARGET_HEX_LEN + 1),
+    })
+    .unwrap_err()
+    .to_string();
+    assert!(
+        err.contains(&MAX_CRC32_TARGET_HEX_LEN.to_string()),
+        "unexpected error: {err}"
+    );
+    assert!(
+        start.elapsed().as_millis() < 100,
+        "oversized target must be rejected before CRC32 forge"
+    );
+}
+
+#[test]
+fn verify_run_rejects_oversized_target() {
+    let start = std::time::Instant::now();
+    let err = crc32_forge::run(crc32_forge::Crc32ForgeAction::Verify {
+        input: hex::encode(b"hello"),
+        suffix: "00000000".into(),
+        target: "a".repeat(MAX_CRC32_TARGET_HEX_LEN + 1),
+    })
+    .unwrap_err()
+    .to_string();
+    assert!(
+        err.contains(&MAX_CRC32_TARGET_HEX_LEN.to_string()),
+        "unexpected error: {err}"
+    );
+    assert!(
+        start.elapsed().as_millis() < 100,
+        "oversized target must be rejected before CRC32 verify"
+    );
 }

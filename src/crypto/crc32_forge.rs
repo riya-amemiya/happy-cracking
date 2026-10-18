@@ -24,6 +24,7 @@ pub enum Crc32ForgeAction {
 }
 
 pub const MAX_CRC32_FORGE_BYTES: usize = 16 * 1024 * 1024;
+pub const MAX_CRC32_TARGET_HEX_LEN: usize = 8;
 
 pub fn decode_crc32_hex_with_limit(hex_str: &str, max_bytes: usize) -> Result<Vec<u8>> {
     let hex_str = hex_str.trim();
@@ -37,12 +38,18 @@ pub fn decode_crc32_hex_with_limit(hex_str: &str, max_bytes: usize) -> Result<Ve
     hex::decode(hex_str).context("Invalid hex input")
 }
 
+pub fn parse_crc32_target(target: &str) -> Result<u32> {
+    if target.len() > MAX_CRC32_TARGET_HEX_LEN {
+        anyhow::bail!("Target exceeds maximum length of {MAX_CRC32_TARGET_HEX_LEN}");
+    }
+    u32::from_str_radix(target, 16).context("Invalid hex target CRC32")
+}
+
 pub fn run(action: Crc32ForgeAction) -> Result<()> {
     match action {
         Crc32ForgeAction::Forge { input, target } => {
             let data = decode_crc32_hex_with_limit(&input, MAX_CRC32_FORGE_BYTES)?;
-            let target_crc =
-                u32::from_str_radix(&target, 16).context("Invalid hex target CRC32")?;
+            let target_crc = parse_crc32_target(&target)?;
             let forge_bytes = forge_crc32(&data, target_crc);
             println!("{}", hex::encode(forge_bytes));
         }
@@ -53,8 +60,7 @@ pub fn run(action: Crc32ForgeAction) -> Result<()> {
         } => {
             let data = decode_crc32_hex_with_limit(&input, MAX_CRC32_FORGE_BYTES)?;
             let suffix_bytes = decode_crc32_hex_with_limit(&suffix, MAX_CRC32_FORGE_BYTES)?;
-            let target_crc =
-                u32::from_str_radix(&target, 16).context("Invalid hex target CRC32")?;
+            let target_crc = parse_crc32_target(&target)?;
             let mut combined = data;
             combined.extend_from_slice(&suffix_bytes);
             let actual = crc32_compute(&combined);
