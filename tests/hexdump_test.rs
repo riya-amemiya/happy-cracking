@@ -144,3 +144,34 @@ fn reverse_with_limit_rejects_odd_hex_digits() {
     let err = hexdump::reverse_with_limit("00000000: 486", 16).unwrap_err();
     assert!(!err.to_string().contains("Denial of Service"));
 }
+
+#[test]
+fn dump_with_limit_rejects_oversized_input() {
+    let start = std::time::Instant::now();
+    let err = hexdump::dump_with_limit("abcd", 2).unwrap_err();
+    assert!(err.to_string().contains("Denial of Service"));
+    assert!(
+        start.elapsed().as_millis() < 100,
+        "oversized dump input must be rejected before formatting"
+    );
+}
+
+#[test]
+fn dump_with_limit_accepts_len_at_limit() {
+    let data = hexdump::dump_with_limit("AB", 2).unwrap();
+    assert_eq!(data, hexdump::dump("AB"));
+}
+
+#[test]
+fn dump_with_limit_accepts_empty() {
+    let data = hexdump::dump_with_limit("", 16).unwrap();
+    assert!(data.is_empty());
+}
+
+#[test]
+fn dump_run_dumps_under_limit() {
+    hexdump::run(hexdump::HexdumpAction::Dump {
+        input: "Hello".into(),
+    })
+    .unwrap();
+}

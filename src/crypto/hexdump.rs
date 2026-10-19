@@ -18,7 +18,7 @@ pub enum HexdumpAction {
 pub fn run(action: HexdumpAction) -> Result<()> {
     match action {
         HexdumpAction::Dump { input } => {
-            print!("{}", dump(&input));
+            print!("{}", dump_with_limit(&input, MAX_HEXDUMP_BYTES)?);
         }
         HexdumpAction::Reverse { input } => {
             let bytes = reverse(&input)?;
@@ -32,6 +32,16 @@ pub fn run(action: HexdumpAction) -> Result<()> {
 #[must_use]
 pub fn dump(input: &str) -> String {
     dump_bytes(input.as_bytes())
+}
+
+pub fn dump_with_limit(input: &str, max_bytes: usize) -> Result<String> {
+    let max_bytes = max_bytes.min(MAX_HEXDUMP_BYTES);
+    if input.len() > max_bytes {
+        anyhow::bail!(
+            "Input exceeds maximum size of {max_bytes} bytes to prevent Denial of Service"
+        );
+    }
+    Ok(dump(input))
 }
 
 #[must_use]
