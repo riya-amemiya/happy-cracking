@@ -112,6 +112,39 @@ fn cipher_run_reads_key_hex_under_limit() {
 }
 
 #[test]
+fn ascii_key_bytes_with_limit_rejects_oversized_key() {
+    let start = std::time::Instant::now();
+    let err = xor::ascii_key_bytes_with_limit("abcd", 2).unwrap_err();
+    assert!(err.to_string().contains("Denial of Service"));
+    assert!(
+        start.elapsed().as_millis() < 100,
+        "oversized ASCII key must be rejected before XOR"
+    );
+}
+
+#[test]
+fn ascii_key_bytes_with_limit_accepts_len_at_limit() {
+    let data = xor::ascii_key_bytes_with_limit("AB", 2).unwrap();
+    assert_eq!(data, b"AB");
+}
+
+#[test]
+fn ascii_key_bytes_with_limit_accepts_empty() {
+    let data = xor::ascii_key_bytes_with_limit("", 16).unwrap();
+    assert!(data.is_empty());
+}
+
+#[test]
+fn cipher_run_reads_ascii_key_under_limit() {
+    xor::run(xor::XorAction::Cipher {
+        input: hex::encode(b"Hello"),
+        key: "A".into(),
+        ascii: true,
+    })
+    .unwrap();
+}
+
+#[test]
 fn cipher_run_rejects_invalid_key_hex() {
     let err = xor::run(xor::XorAction::Cipher {
         input: "00".into(),
