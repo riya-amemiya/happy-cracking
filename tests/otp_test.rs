@@ -52,6 +52,21 @@ fn test_invalid_hex_key_error() {
 }
 
 #[test]
+fn test_invalid_hex_in_unused_key_bytes() {
+    assert!(otp::encrypt("A", "ffzz").is_err());
+}
+
+#[test]
+fn test_odd_length_hex_key() {
+    assert!(otp::encrypt("A", "f").is_err());
+}
+
+#[test]
+fn test_encrypt_mixed_case_key() {
+    assert_eq!(otp::encrypt("A", "FF").unwrap(), "be");
+}
+
+#[test]
 fn test_invalid_hex_ciphertext_error() {
     assert!(otp::decrypt("gggg", "0000").is_err());
 }
