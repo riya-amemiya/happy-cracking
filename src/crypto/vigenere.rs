@@ -80,48 +80,49 @@ pub fn run(action: VigenereAction) -> Result<()> {
 // Non-ASCII UTF-8 continuation bytes have the high bit set, so
 // `is_ascii_alphabetic()` returns false for them and they pass through
 // unchanged — preserving the original char-based semantics exactly.
-pub fn encrypt(input: &str, key: &str) -> Result<String> {
+fn key_shifts(key: &str) -> Result<Vec<u8>> {
     let key_bytes = key.as_bytes();
     if key_bytes.is_empty() || !key_bytes.iter().all(u8::is_ascii_alphabetic) {
         anyhow::bail!("Key must be non-empty and contain only alphabetic characters");
     }
+    Ok(key_bytes.iter().map(|&kb| (kb | 0x20) - b'a').collect())
+}
 
+fn crypt<const DECRYPT: bool>(input: &str, key: &str) -> Result<String> {
+    let shifts = key_shifts(key)?;
     let mut bytes = input.as_bytes().to_vec();
-    let key_len = key_bytes.len();
+    let key_len = shifts.len();
     let mut key_index = 0usize;
 
     for b in &mut bytes {
         if b.is_ascii_alphabetic() {
             let base = if b.is_ascii_uppercase() { b'A' } else { b'a' };
-            let shift = (key_bytes[key_index % key_len] | 0x20) - b'a';
-            *b = (*b - base + shift) % 26 + base;
+            let x = if DECRYPT {
+                *b - base + 26 - shifts[key_index]
+            } else {
+                *b - base + shifts[key_index]
+            };
+            *b = if x >= 26 { x - 26 } else { x } + base;
             key_index += 1;
+            if key_index == key_len {
+                key_index = 0;
+            }
         }
     }
 
-    String::from_utf8(bytes).context("vigenere encrypt: produced invalid UTF-8")
+    String::from_utf8(bytes).context(if DECRYPT {
+        "vigenere decrypt: produced invalid UTF-8"
+    } else {
+        "vigenere encrypt: produced invalid UTF-8"
+    })
+}
+
+pub fn encrypt(input: &str, key: &str) -> Result<String> {
+    crypt::<false>(input, key)
 }
 
 pub fn decrypt(input: &str, key: &str) -> Result<String> {
-    let key_bytes = key.as_bytes();
-    if key_bytes.is_empty() || !key_bytes.iter().all(u8::is_ascii_alphabetic) {
-        anyhow::bail!("Key must be non-empty and contain only alphabetic characters");
-    }
-
-    let mut bytes = input.as_bytes().to_vec();
-    let key_len = key_bytes.len();
-    let mut key_index = 0usize;
-
-    for b in &mut bytes {
-        if b.is_ascii_alphabetic() {
-            let base = if b.is_ascii_uppercase() { b'A' } else { b'a' };
-            let shift = (key_bytes[key_index % key_len] | 0x20) - b'a';
-            *b = (*b - base + 26 - shift) % 26 + base;
-            key_index += 1;
-        }
-    }
-
-    String::from_utf8(bytes).context("vigenere decrypt: produced invalid UTF-8")
+    crypt::<true>(input, key)
 }
 
 // English letter frequencies (A-Z) as proportions
