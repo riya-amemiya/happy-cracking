@@ -2203,7 +2203,7 @@ pub(crate) fn config_args(warn: &mut dyn FnMut(String)) -> Vec<OsString> {
         return Vec::new();
     }
     let path = PathBuf::from(path);
-    let data = match std::fs::read(&path) {
+    let data = match super::read_pattern_file_with_limit(&path, super::MAX_PATTERN_FILE_BYTES) {
         Ok(data) => data,
         Err(err) => {
             warn(format!(

@@ -257,3 +257,39 @@ fn hrg_matches_hg_directory_search() {
     assert_eq!(rels(&via_hrg.stdout, &dir), ["keep.txt"]);
     fs::remove_dir_all(&dir).unwrap();
 }
+
+#[test]
+fn hrg_applies_ripgrep_config_path() {
+    let dir = scratch("hrg_cfg_ok");
+    put(&dir, "keep.txt", b"Needle\n");
+    put(&dir, "rg.cfg", b"--ignore-case\n");
+    let mut cmd = hrg();
+    cmd.env("RIPGREP_CONFIG_PATH", dir.join("rg.cfg"));
+    let out = run(cmd, &["-l", "needle", dir.to_str().unwrap()]);
+    assert_eq!(
+        rels(&out.stdout, &dir),
+        ["keep.txt"],
+        "stderr {:?}",
+        out.stderr
+    );
+    assert_eq!(out.code, 0, "stderr {:?}", out.stderr);
+    fs::remove_dir_all(&dir).unwrap();
+}
+
+#[cfg(unix)]
+#[test]
+fn hrg_config_path_bounds_device_without_eof() {
+    let dir = scratch("hrg_cfg_devzero");
+    put(&dir, "keep.txt", b"needle\n");
+    let mut cmd = hrg();
+    cmd.env("RIPGREP_CONFIG_PATH", "/dev/zero");
+    let out = run(cmd, &["-l", "needle", dir.to_str().unwrap()]);
+    assert_eq!(out.code, 0, "stderr {:?}", out.stderr);
+    assert!(
+        out.stderr.contains("Denial of Service"),
+        "got {:?}",
+        out.stderr
+    );
+    assert_eq!(rels(&out.stdout, &dir), ["keep.txt"]);
+    fs::remove_dir_all(&dir).unwrap();
+}
