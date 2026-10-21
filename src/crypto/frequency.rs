@@ -222,7 +222,7 @@ fn print_analysis(result: &FrequencyResult) {
         let english_freq = ENGLISH_FREQ
             .iter()
             .find(|(ch, _)| *ch == c.to_ascii_uppercase())
-            .map_or_default(|(_, f)| format!("{f:.1}%"));
+            .map_or_else(String::new, |(_, f)| format!("{f:.1}%"));
 
         let display_char = if *c == ' ' {
             "SPACE".to_string()
