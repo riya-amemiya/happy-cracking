@@ -57,6 +57,56 @@ fn hgrep(args: &[&str], stdin: &str) -> (String, i32) {
 
 const SAMPLE: &str = "alpha\nBeta\ngamma beta\ndelta\n";
 
+fn exit_code_within(mut child: std::process::Child, limit: std::time::Duration) -> Option<i32> {
+    let deadline = std::time::Instant::now() + limit;
+    while std::time::Instant::now() < deadline {
+        if let Some(status) = child.try_wait().unwrap() {
+            return status.code();
+        }
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    let _ = child.kill();
+    let _ = child.wait();
+    None
+}
+
+#[test]
+fn quiet_match_exits_while_stdin_pipe_stays_open() {
+    let mut child = command()
+        .args(["-q", "foo"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .expect("spawn hgrep");
+    let mut stdin = child.stdin.take().unwrap();
+    stdin.write_all(b"foo\nbar\n").unwrap();
+    assert_eq!(
+        exit_code_within(child, std::time::Duration::from_secs(10)),
+        Some(0)
+    );
+    drop(stdin);
+}
+
+#[test]
+fn dev_null_match_on_stdin_pipe_exits_at_eof() {
+    let mut child = command()
+        .arg("foo")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .spawn()
+        .expect("spawn hgrep");
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(b"foo\nbar\n")
+        .unwrap();
+    assert_eq!(
+        exit_code_within(child, std::time::Duration::from_secs(10)),
+        Some(0)
+    );
+}
+
 #[test]
 fn hg_alias_behaves_like_hgrep() {
     let hg = Path::new(env!("CARGO_BIN_EXE_hg"));

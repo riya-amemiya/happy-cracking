@@ -722,6 +722,7 @@ impl HiArgs {
             count_matches,
             out_quiet: count_matches || done_on_match || exit_on_match,
             done_on_match,
+            exit_on_match,
             context: self.gnu.context_set,
             before,
             after,
