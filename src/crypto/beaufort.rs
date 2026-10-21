@@ -36,17 +36,20 @@ pub fn cipher(input: &str, key: &str) -> Result<String> {
         anyhow::bail!("Key must be non-empty and contain only alphabetic characters");
     }
 
+    let shifts: Vec<u8> = key_bytes.iter().map(|&kb| (kb | 0x20) - b'a').collect();
     let mut bytes = input.as_bytes().to_vec();
-    let key_len = key_bytes.len();
+    let key_len = shifts.len();
     let mut key_index = 0usize;
 
     for b in &mut bytes {
         if b.is_ascii_alphabetic() {
             let base = if b.is_ascii_uppercase() { b'A' } else { b'a' };
-            let k = (key_bytes[key_index % key_len] | 0x20) - b'a';
-            let p = *b - base;
-            *b = (k + 26 - p) % 26 + base;
+            let x = shifts[key_index] + 26 - (*b - base);
+            *b = if x >= 26 { x - 26 } else { x } + base;
             key_index += 1;
+            if key_index == key_len {
+                key_index = 0;
+            }
         }
     }
 
