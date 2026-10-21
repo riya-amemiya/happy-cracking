@@ -97,7 +97,7 @@ pub fn read_pattern_file_with_limit(path: &Path, max_bytes: usize) -> io::Result
     Ok(buf)
 }
 
-#[must_use]
+#[must_use = "return the exit code from main"]
 pub fn run() -> ExitCode {
     app::run()
 }

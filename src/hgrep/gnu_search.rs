@@ -218,6 +218,7 @@ pub(crate) struct GnuPrinterConfig {
     pub(crate) count_matches: bool,
     pub(crate) out_quiet: bool,
     pub(crate) done_on_match: bool,
+    pub(crate) exit_on_match: bool,
     pub(crate) context: bool,
     pub(crate) before: usize,
     pub(crate) after: usize,
@@ -1077,8 +1078,12 @@ impl<X: GnuExec + Sync, W: WriteColor> Grep<'_, X, W> {
                 String::from_utf8_lossy(self.input.name)
             )
         });
-        if self.input.stdin && self.config.list_files == ListFiles::None {
+        if self.input.stdin
+            && self.config.list_files == ListFiles::None
+            && !(self.config.exit_on_match && nlines > 0)
+        {
             finalize_stdin(
+                reader,
                 self.outleft > 0,
                 ineof,
                 self.after_last_match,
@@ -1095,7 +1100,13 @@ impl<X: GnuExec + Sync, W: WriteColor> Grep<'_, X, W> {
 }
 
 #[cfg(unix)]
-fn finalize_stdin(outleft: bool, ineof: bool, after_last_match: u64, bufoffset: u64) {
+fn finalize_stdin(
+    reader: &mut dyn Read,
+    outleft: bool,
+    ineof: bool,
+    after_last_match: u64,
+    bufoffset: u64,
+) {
     use std::os::fd::AsFd;
     let stdin = io::stdin();
     let fd = stdin.as_fd();
@@ -1108,8 +1119,7 @@ fn finalize_stdin(outleft: bool, ineof: bool, after_last_match: u64, bufoffset: 
             return;
         }
         let mut sink = vec![0u8; GOOD_READSIZE];
-        let mut lock = stdin.lock();
-        while let Ok(n) = read_once(&mut lock, &mut sink) {
+        while let Ok(n) = read_once(reader, &mut sink) {
             if n == 0 {
                 break;
             }
@@ -1123,12 +1133,16 @@ fn finalize_stdin(outleft: bool, ineof: bool, after_last_match: u64, bufoffset: 
 }
 
 #[cfg(not(unix))]
-fn finalize_stdin(outleft: bool, ineof: bool, _after_last_match: u64, _bufoffset: u64) {
+fn finalize_stdin(
+    reader: &mut dyn Read,
+    outleft: bool,
+    ineof: bool,
+    _after_last_match: u64,
+    _bufoffset: u64,
+) {
     if outleft && !ineof {
         let mut sink = vec![0u8; GOOD_READSIZE];
-        let stdin = io::stdin();
-        let mut lock = stdin.lock();
-        while let Ok(n) = read_once(&mut lock, &mut sink) {
+        while let Ok(n) = read_once(reader, &mut sink) {
             if n == 0 {
                 break;
             }
