@@ -44,6 +44,7 @@ impl Server {
                 match listener.accept() {
                     Ok((mut stream, _)) => {
                         accepts_bg.fetch_add(1, Ordering::Relaxed);
+                        stream.set_nonblocking(false).unwrap();
                         let _ = stream.set_read_timeout(Some(Duration::from_millis(200)));
                         thread::spawn(move || {
                             let mut buf = [0u8; 8192];
