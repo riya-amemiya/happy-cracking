@@ -145,7 +145,6 @@ fn special(inv: &Invocation, special: Special) -> ExitCode {
     ExitCode::from(code)
 }
 
-#[must_use]
 pub(crate) fn run() -> ExitCode {
     let mut os_args = std::env::args_os();
     let inv = invocation(os_args.next().as_deref());

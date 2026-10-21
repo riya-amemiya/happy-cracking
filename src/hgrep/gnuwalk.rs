@@ -196,7 +196,7 @@ impl Walker<'_> {
         root: &Path,
         emit: &mut dyn FnMut(Step) -> bool,
     ) {
-        let id = fs::metadata(root).map(|md| dir_id(&md)).unwrap_or_default();
+        let id = fs::metadata(root).map_or_default(|md| dir_id(&md));
         let children = match read_listing(root) {
             Ok(children) => children,
             Err(err) => {
@@ -260,9 +260,7 @@ impl Walker<'_> {
             }
             if self.deref {
                 if !follow {
-                    id = fs::metadata(&path)
-                        .map(|md| dir_id(&md))
-                        .unwrap_or_default();
+                    id = fs::metadata(&path).map_or_default(|md| dir_id(&md));
                 }
                 if stack.iter().any(|f| f.id == id) {
                     let warning =
