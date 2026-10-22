@@ -42,12 +42,9 @@ fn hgrep(args: &[&str], stdin: &str) -> (String, i32) {
         .stdout(Stdio::piped())
         .spawn()
         .expect("spawn hgrep");
-    child
-        .stdin
-        .as_mut()
-        .unwrap()
-        .write_all(stdin.as_bytes())
-        .unwrap();
+    if let Err(err) = child.stdin.as_mut().unwrap().write_all(stdin.as_bytes()) {
+        assert_eq!(err.kind(), std::io::ErrorKind::BrokenPipe);
+    }
     let out = child.wait_with_output().unwrap();
     (
         String::from_utf8_lossy(&out.stdout).into_owned(),
