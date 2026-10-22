@@ -187,20 +187,13 @@ impl GitignoreBuilder {
 
     pub fn add<P: AsRef<Path>>(&mut self, path: P) -> Option<Error> {
         let path = path.as_ref();
-        let mut file = match File::open(path) {
+        let data = match read_gitignore_file_with_limit(path, MAX_GITIGNORE_FILE_BYTES) {
             Err(err) => return Some(Error::Io(err).with_path(path)),
-            Ok(file) => file,
+            Ok(data) => data,
         };
-        let mut data = Vec::new();
-        let read_err = file.read_to_end(&mut data).err();
         let mut errs = PartialErrorBuilder::default();
-        let complete = if read_err.is_some() {
-            memchr::memrchr(b'\n', &data).map_or(0, |i| i + 1)
-        } else {
-            data.len()
-        };
         let mut lineno = 0u64;
-        let mut rest = &data[..complete];
+        let mut rest = data.as_slice();
         while !rest.is_empty() {
             lineno += 1;
             let (raw, next) = match memchr::memchr(b'\n', rest) {
@@ -227,9 +220,6 @@ impl GitignoreBuilder {
             if let Err(err) = self.add_line(line) {
                 errs.push(err.tagged(path, lineno));
             }
-        }
-        if let Some(err) = read_err {
-            errs.push(Error::Io(err).tagged(path, lineno + 1));
         }
         errs.into_error_option()
     }
@@ -319,10 +309,27 @@ pub fn gitconfig_excludes_path() -> Option<PathBuf> {
     excludes_file_default()
 }
 
+pub const MAX_GITIGNORE_FILE_BYTES: usize = 16 * 1024 * 1024;
+
+pub fn read_gitignore_file_with_limit(path: &Path, max_bytes: usize) -> io::Result<Vec<u8>> {
+    let max_bytes = max_bytes.min(MAX_GITIGNORE_FILE_BYTES);
+    let file = File::open(path)?;
+    let mut buf = Vec::new();
+    file.take((max_bytes as u64).saturating_add(1))
+        .read_to_end(&mut buf)?;
+    if buf.len() > max_bytes {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!(
+                "gitignore file exceeds maximum size of {max_bytes} bytes to prevent Denial of Service"
+            ),
+        ));
+    }
+    Ok(buf)
+}
+
 fn read_all(path: &Path) -> Option<Vec<u8>> {
-    let mut file = File::open(path).ok()?;
-    let mut contents = vec![];
-    file.read_to_end(&mut contents).ok().map(|_| contents)
+    read_gitignore_file_with_limit(path, MAX_GITIGNORE_FILE_BYTES).ok()
 }
 
 fn gitconfig_home_contents() -> Option<Vec<u8>> {
@@ -579,5 +586,80 @@ mod tests {
         );
         assert!(gi.matched("foo", false).is_ignore());
         assert!(gi.matched("baz", false).is_none());
+    }
+
+    #[test]
+    fn read_gitignore_file_with_limit_rejects_oversized_file() {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let dir =
+            std::env::temp_dir().join(format!("walker_gi_oversize_{}_{nanos}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("ignore");
+        std::fs::write(&path, vec![b'a'; 32]).unwrap();
+        let err = super::read_gitignore_file_with_limit(&path, 16).unwrap_err();
+        std::fs::remove_dir_all(&dir).unwrap();
+        assert!(err.to_string().contains("Denial of Service"));
+    }
+
+    #[test]
+    fn read_gitignore_file_with_limit_accepts_file_at_limit() {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let dir =
+            std::env::temp_dir().join(format!("walker_gi_at_limit_{}_{nanos}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("ignore");
+        let data = b"*.log\n";
+        std::fs::write(&path, data).unwrap();
+        let got = super::read_gitignore_file_with_limit(&path, data.len()).unwrap();
+        std::fs::remove_dir_all(&dir).unwrap();
+        assert_eq!(got, data);
+    }
+
+    #[test]
+    fn read_gitignore_file_with_limit_accepts_empty() {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let dir =
+            std::env::temp_dir().join(format!("walker_gi_empty_{}_{nanos}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("ignore");
+        std::fs::write(&path, b"").unwrap();
+        let got = super::read_gitignore_file_with_limit(&path, 16).unwrap();
+        std::fs::remove_dir_all(&dir).unwrap();
+        assert!(got.is_empty());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn read_gitignore_file_with_limit_bounds_device_without_eof() {
+        let err = super::read_gitignore_file_with_limit(Path::new("/dev/zero"), 64).unwrap_err();
+        assert!(err.to_string().contains("Denial of Service"));
+    }
+
+    #[test]
+    fn add_applies_gitignore_rules_from_capped_file() {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let dir =
+            std::env::temp_dir().join(format!("walker_gi_add_ok_{}_{nanos}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join(".gitignore");
+        std::fs::write(&path, b"*.log\n").unwrap();
+        let mut builder = GitignoreBuilder::new(&dir);
+        assert!(builder.add(&path).is_none());
+        let gi = builder.build().unwrap();
+        std::fs::remove_dir_all(&dir).unwrap();
+        assert!(gi.matched("debug.log", false).is_ignore());
+        assert!(!gi.matched("debug.txt", false).is_ignore());
     }
 }
