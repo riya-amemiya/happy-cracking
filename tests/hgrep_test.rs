@@ -1569,6 +1569,44 @@ fn pattern_file_run_rejects_device_without_eof() {
 }
 
 #[test]
+fn exclude_from_skips_matching_files() {
+    let dir = scratch("exclude_from_ok");
+    seed(&dir, &["keep.txt", "drop.log"]);
+    put(&dir, "excludes.txt", b"*.log\n");
+    let out = run(&[
+        "-rl",
+        "--exclude-from",
+        dir.join("excludes.txt").to_str().unwrap(),
+        "needle",
+        dir.to_str().unwrap(),
+    ]);
+    assert_eq!(rels(&out.stdout, &dir), ["keep.txt"]);
+    assert_eq!(out.code, 0, "stderr {:?}", out.stderr);
+    fs::remove_dir_all(&dir).unwrap();
+}
+
+#[cfg(unix)]
+#[test]
+fn exclude_from_rejects_device_without_eof() {
+    let dir = scratch("exclude_from_devzero");
+    seed(&dir, &["keep.txt"]);
+    let out = run(&[
+        "-rl",
+        "--exclude-from",
+        "/dev/zero",
+        "needle",
+        dir.to_str().unwrap(),
+    ]);
+    assert_eq!(out.code, 2);
+    assert!(
+        out.stderr.contains("Denial of Service"),
+        "got {:?}",
+        out.stderr
+    );
+    fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
 fn recursive_search_reports_every_file_beyond_the_reorder_window() {
     let dir = scratch("reorder_window");
     for i in 0..3000 {

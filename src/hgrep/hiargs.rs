@@ -999,16 +999,18 @@ fn excludes_of(rules: &[super::flags::ExcludeRule], utf8: bool) -> Result<Exclud
             ExcludeRule::Include(glob) => excludes.add_include(super::flags::os_bytes(glob)),
             ExcludeRule::Exclude(glob) => excludes.add_exclude(super::flags::os_bytes(glob)),
             ExcludeRule::ExcludeDir(glob) => excludes.add_exclude_dir(super::flags::os_bytes(glob)),
-            ExcludeRule::ExcludeFrom(path) => match std::fs::read(path) {
-                Ok(content) => excludes.add_exclude_from(&content),
-                Err(err) => {
-                    return Err(HiArgsError(format!(
-                        "{}: {}",
-                        path.display(),
-                        super::messages::strerror(&err)
-                    )));
+            ExcludeRule::ExcludeFrom(path) => {
+                match super::read_pattern_file_with_limit(path, super::MAX_PATTERN_FILE_BYTES) {
+                    Ok(content) => excludes.add_exclude_from(&content),
+                    Err(err) => {
+                        return Err(HiArgsError(format!(
+                            "{}: {}",
+                            path.display(),
+                            super::messages::strerror(&err)
+                        )));
+                    }
                 }
-            },
+            }
         }
     }
     Ok(excludes)
