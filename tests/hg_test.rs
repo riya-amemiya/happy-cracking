@@ -293,3 +293,28 @@ fn hrg_config_path_bounds_device_without_eof() {
     assert_eq!(rels(&out.stdout, &dir), ["keep.txt"]);
     fs::remove_dir_all(&dir).unwrap();
 }
+
+#[cfg(unix)]
+#[test]
+fn hg_gitdir_commondir_rejects_device_without_eof() {
+    let dir = scratch("gitdir_commondir_devzero");
+    put(&dir, "work/keep.md", b"needle\n");
+    put(
+        &dir,
+        "work/.git",
+        format!("gitdir: {}\n", dir.join("main/.git/worktrees/wt").display()).as_bytes(),
+    );
+    let commondir = dir.join("main/.git/worktrees/wt/commondir");
+    fs::create_dir_all(commondir.parent().unwrap()).unwrap();
+    std::os::unix::fs::symlink("/dev/zero", &commondir).unwrap();
+    let work = dir.join("work");
+    let out = run(hg(), &["-l", "needle", work.to_str().unwrap()]);
+    assert_eq!(out.code, 0, "stderr {:?}", out.stderr);
+    assert!(
+        out.stderr.contains("Denial of Service"),
+        "got {:?}",
+        out.stderr
+    );
+    assert_eq!(rels(&out.stdout, &work), ["keep.md"]);
+    fs::remove_dir_all(&dir).unwrap();
+}
