@@ -1,4 +1,4 @@
-use happy_cracking::hgrep::read_pattern_file_with_limit;
+use happy_cracking::hgrep::{read_pattern_file_with_limit, read_pattern_with_limit};
 use std::ffi::OsStr;
 use std::fs;
 use std::io::Write;
@@ -1536,6 +1536,32 @@ fn read_pattern_file_with_limit_bounds_device_without_eof() {
 }
 
 #[test]
+fn read_pattern_with_limit_rejects_oversized() {
+    let err = read_pattern_with_limit(&b"abcdefghijklmnop"[..], 8).unwrap_err();
+    assert!(err.to_string().contains("Denial of Service"));
+}
+
+#[test]
+fn read_pattern_with_limit_accepts_at_limit() {
+    let got = read_pattern_with_limit(&b"beta\n"[..], 5).unwrap();
+    assert_eq!(got, b"beta\n");
+}
+
+#[test]
+fn read_pattern_with_limit_accepts_empty() {
+    let got = read_pattern_with_limit(&b""[..], 16).unwrap();
+    assert!(got.is_empty());
+}
+
+#[cfg(unix)]
+#[test]
+fn read_pattern_with_limit_bounds_device_without_eof() {
+    let file = fs::File::open("/dev/zero").unwrap();
+    let err = read_pattern_with_limit(file, 64).unwrap_err();
+    assert!(err.to_string().contains("Denial of Service"));
+}
+
+#[test]
 fn pattern_file_run_reads_under_limit() {
     let dir = scratch("pat_run_ok");
     put(&dir, "patterns.txt", b"beta\n");
@@ -1563,6 +1589,37 @@ fn pattern_file_run_rejects_device_without_eof() {
         out.stderr
     );
     fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn pattern_stdin_run_reads_under_limit() {
+    let dir = scratch("pat_stdin_ok");
+    put(&dir, "s.txt", b"alpha\nbeta\n");
+    let (stdout, code) = hgrep(&["-f", "-", dir.join("s.txt").to_str().unwrap()], "beta\n");
+    fs::remove_dir_all(&dir).unwrap();
+    assert_eq!(stdout, "beta\n");
+    assert_eq!(code, 0);
+}
+
+#[cfg(unix)]
+#[test]
+fn pattern_stdin_run_rejects_device_without_eof() {
+    let dir = scratch("pat_stdin_devzero");
+    put(&dir, "s.txt", b"alpha\n");
+    let zero = fs::File::open("/dev/zero").unwrap();
+    let child = command()
+        .args(["-f", "-", dir.join("s.txt").to_str().unwrap()])
+        .stdin(zero)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("spawn hgrep");
+    let Some(code) = exit_code_within(child, std::time::Duration::from_secs(5)) else {
+        fs::remove_dir_all(&dir).unwrap();
+        panic!("hgrep -f - did not bound stdin without EOF");
+    };
+    fs::remove_dir_all(&dir).unwrap();
+    assert_eq!(code, 2);
 }
 
 #[test]
