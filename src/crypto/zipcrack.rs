@@ -321,7 +321,7 @@ pub fn list_entries(zip_bytes: &[u8]) -> Result<Vec<EntryInfo>> {
             .by_index_raw(i)
             .with_context(|| format!("Failed to read entry at index {i}"))?;
         entries.push(EntryInfo {
-            name: entry.name().to_string(),
+            name: entry.name()?.into_owned(),
             size: entry.size(),
             encrypted: entry.encrypted(),
             method: format!("{:?}", entry.compression()),
@@ -357,7 +357,7 @@ mod tests {
         let mut buf = Cursor::new(Vec::new());
         {
             let mut writer = ZipWriter::new(&mut buf);
-            let options: FileOptions<'_, ()> = FileOptions::default()
+            let options: FileOptions<'_, '_, ()> = FileOptions::default()
                 .compression_method(zip::CompressionMethod::Deflated)
                 .with_aes_encryption(AesMode::Aes256, password);
             writer.start_file("flag.txt", options).unwrap();
