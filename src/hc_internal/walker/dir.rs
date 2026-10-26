@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::ffi::{OsStr, OsString};
 use std::fs::File;
-use std::io::{self, BufRead};
+use std::io::{self, BufRead, Read};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, PoisonError, RwLock, Weak};
 
@@ -568,9 +568,44 @@ fn create_gitignore(
     (gi, errs.into_error_option())
 }
 
+pub const MAX_GITDIR_LINE_BYTES: usize = 16 * 1024 * 1024;
+
+pub(crate) fn read_gitdir_line_with_limit<R: Read>(
+    reader: R,
+    max_bytes: usize,
+) -> Result<Option<String>, io::Error> {
+    let max_bytes = max_bytes.min(MAX_GITDIR_LINE_BYTES);
+    let mut buf = Vec::new();
+    io::BufReader::new(reader.take((max_bytes as u64).saturating_add(1)))
+        .read_until(b'\n', &mut buf)?;
+    if buf.is_empty() {
+        return Ok(None);
+    }
+    if buf.ends_with(b"\n") {
+        buf.pop();
+        if buf.ends_with(b"\r") {
+            buf.pop();
+        }
+    }
+    if buf.len() > max_bytes {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!(
+                "gitdir file exceeds maximum size of {max_bytes} bytes to prevent Denial of Service"
+            ),
+        ));
+    }
+    let line = std::str::from_utf8(&buf).map_err(|_| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            "stream did not contain valid UTF-8",
+        )
+    })?;
+    Ok(Some(line.to_string()))
+}
+
 fn first_line(path: &Path) -> Result<Option<String>, io::Error> {
-    let file = io::BufReader::new(File::open(path)?);
-    file.lines().next().transpose()
+    read_gitdir_line_with_limit(File::open(path)?, MAX_GITDIR_LINE_BYTES)
 }
 
 fn resolve_git_commondir(dir: &Path, git_type: Option<FileType>) -> Result<PathBuf, Option<Error>> {
@@ -588,14 +623,13 @@ fn resolve_git_commondir(dir: &Path, git_type: Option<FileType>) -> Result<PathB
     };
     let real_git_dir = PathBuf::from(real);
     let commondir_file = real_git_dir.join("commondir");
-    let file = match File::open(&commondir_file) {
-        Ok(file) => io::BufReader::new(file),
-        Err(_) => return Err(None),
+    let Ok(file) = File::open(&commondir_file) else {
+        return Err(None);
     };
-    let commondir_line = match file.lines().next() {
-        Some(Ok(line)) => line,
-        Some(Err(err)) => return Err(Some(Error::Io(err).with_path(commondir_file))),
-        None => return Err(None),
+    let commondir_line = match read_gitdir_line_with_limit(file, MAX_GITDIR_LINE_BYTES) {
+        Ok(Some(line)) => line,
+        Ok(None) => return Err(None),
+        Err(err) => return Err(Some(Error::Io(err).with_path(commondir_file))),
     };
     Ok(if commondir_line.starts_with('.') {
         real_git_dir.join(commondir_line)
@@ -951,5 +985,80 @@ mod tests {
         assert!(std::sync::Arc::ptr_eq(&ig1.0, &ig2.0));
         assert!(ig2.should_skip(&td.path().join("a/foo"), false, false));
         assert!(!ig2.should_skip(&td.path().join("a/bar"), false, false));
+    }
+
+    fn read_gitdir_file(path: &Path, max_bytes: usize) -> Result<Option<String>, std::io::Error> {
+        super::read_gitdir_line_with_limit(std::fs::File::open(path)?, max_bytes)
+    }
+
+    #[test]
+    fn read_gitdir_line_with_limit_rejects_oversized_file() {
+        let td = TempDir::new();
+        let path = td.path().join("gitdir");
+        std::fs::write(&path, vec![b'a'; 32]).unwrap();
+        let err = read_gitdir_file(&path, 16).unwrap_err();
+        assert!(err.to_string().contains("Denial of Service"));
+    }
+
+    #[test]
+    fn read_gitdir_line_with_limit_accepts_file_at_limit() {
+        let td = TempDir::new();
+        let path = td.path().join("gitdir");
+        let data = b"gitdir: /tmp/repo/.git";
+        std::fs::write(&path, data).unwrap();
+        let got = read_gitdir_file(&path, data.len()).unwrap();
+        assert_eq!(got.as_deref(), Some("gitdir: /tmp/repo/.git"));
+    }
+
+    #[test]
+    fn read_gitdir_line_with_limit_accepts_empty() {
+        let td = TempDir::new();
+        let path = td.path().join("gitdir");
+        std::fs::write(&path, b"").unwrap();
+        let got = read_gitdir_file(&path, 16).unwrap();
+        assert!(got.is_none());
+    }
+
+    #[test]
+    fn read_gitdir_line_with_limit_returns_first_line_only() {
+        let td = TempDir::new();
+        let path = td.path().join("gitdir");
+        std::fs::write(&path, b"gitdir: /tmp/a\nsecond\n").unwrap();
+        let got = read_gitdir_file(&path, 64).unwrap();
+        assert_eq!(got.as_deref(), Some("gitdir: /tmp/a"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn read_gitdir_line_with_limit_bounds_device_without_eof() {
+        let err = read_gitdir_file(Path::new("/dev/zero"), 64).unwrap_err();
+        assert!(err.to_string().contains("Denial of Service"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn git_info_exclude_bounds_commondir_device_without_eof() {
+        let td = TempDir::new();
+        let git_dir = td.path().join(".git");
+        mkdirp(git_dir.join("info"));
+        wfile(git_dir.join("info/exclude"), "ignore_me");
+        mkdirp(git_dir.join("worktrees/linked-worktree"));
+        mkdirp(td.path().join("linked-worktree"));
+        let worktree_git_dir_abs = format!(
+            "gitdir: {}",
+            git_dir.join("worktrees/linked-worktree").to_str().unwrap(),
+        );
+        wfile(
+            td.path().join("linked-worktree/.git"),
+            &worktree_git_dir_abs,
+        );
+        std::os::unix::fs::symlink(
+            "/dev/zero",
+            git_dir.join("worktrees/linked-worktree/commondir"),
+        )
+        .unwrap();
+        let (_, err) = child(&build(&base()), &td.path().join("linked-worktree"));
+        let err = err.expect("commondir device should be reported");
+        assert!(err.to_string().contains("Denial of Service"));
     }
 }
