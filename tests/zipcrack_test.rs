@@ -20,7 +20,7 @@ fn make_encrypted_zip(raw: &str, content: &str) -> Vec<u8> {
     let mut buf = Cursor::new(Vec::new());
     {
         let mut writer = ZipWriter::new(&mut buf);
-        let options: FileOptions<'_, ()> = FileOptions::default()
+        let options: FileOptions<'_, '_, ()> = FileOptions::default()
             .compression_method(zip::CompressionMethod::Deflated)
             .with_aes_encryption(AesMode::Aes256, &secret);
         writer.start_file("flag.txt", options).unwrap();
