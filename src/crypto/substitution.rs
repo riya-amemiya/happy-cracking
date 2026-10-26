@@ -1,6 +1,5 @@
 use anyhow::Result;
 use clap::Subcommand;
-use std::sync::LazyLock;
 
 #[derive(Subcommand)]
 pub enum SubstitutionAction {
@@ -115,90 +114,96 @@ const ENGLISH_FREQ: [f64; 26] = [
     6.3, 9.1, 2.8, 1.0, 2.4, 0.15, 2.0, 0.07,
 ];
 
-// English bigram log-frequencies for scoring.
-static BIGRAM_TABLE: LazyLock<[[f64; 26]; 26]> = LazyLock::new(|| {
-    let common_bigrams = [
-        ("TH", 3.56),
-        ("HE", 3.07),
-        ("IN", 2.43),
-        ("ER", 2.05),
-        ("AN", 1.99),
-        ("RE", 1.85),
-        ("ON", 1.76),
-        ("AT", 1.49),
-        ("EN", 1.45),
-        ("ND", 1.35),
-        ("TI", 1.34),
-        ("ES", 1.34),
-        ("OR", 1.28),
-        ("TE", 1.27),
-        ("OF", 1.17),
-        ("ED", 1.17),
-        ("IS", 1.13),
-        ("IT", 1.12),
-        ("AL", 1.09),
-        ("AR", 1.07),
-        ("ST", 1.05),
-        ("TO", 1.04),
-        ("NT", 1.04),
-        ("NG", 0.95),
-        ("SE", 0.93),
-        ("HA", 0.93),
-        ("AS", 0.87),
-        ("OU", 0.87),
-        ("IO", 0.83),
-        ("LE", 0.83),
-        ("VE", 0.83),
-        ("CO", 0.79),
-        ("ME", 0.79),
-        ("DE", 0.76),
-        ("HI", 0.76),
-        ("RI", 0.73),
-        ("RO", 0.73),
-        ("IC", 0.70),
-        ("NE", 0.69),
-        ("EA", 0.69),
-        ("RA", 0.62),
-        ("CE", 0.65),
-    ];
-    let mut table = [[0.0f64; 26]; 26];
-    for (bg, score) in common_bigrams {
-        let bytes = bg.as_bytes();
-        let a = (bytes[0] - b'A') as usize;
-        let b = (bytes[1] - b'A') as usize;
-        table[a][b] = score;
+const BIGRAM_HUNDREDTHS: [([u8; 2], i32); 42] = [
+    (*b"TH", 356),
+    (*b"HE", 307),
+    (*b"IN", 243),
+    (*b"ER", 205),
+    (*b"AN", 199),
+    (*b"RE", 185),
+    (*b"ON", 176),
+    (*b"AT", 149),
+    (*b"EN", 145),
+    (*b"ND", 135),
+    (*b"TI", 134),
+    (*b"ES", 134),
+    (*b"OR", 128),
+    (*b"TE", 127),
+    (*b"OF", 117),
+    (*b"ED", 117),
+    (*b"IS", 113),
+    (*b"IT", 112),
+    (*b"AL", 109),
+    (*b"AR", 107),
+    (*b"ST", 105),
+    (*b"TO", 104),
+    (*b"NT", 104),
+    (*b"NG", 95),
+    (*b"SE", 93),
+    (*b"HA", 93),
+    (*b"AS", 87),
+    (*b"OU", 87),
+    (*b"IO", 83),
+    (*b"LE", 83),
+    (*b"VE", 83),
+    (*b"CO", 79),
+    (*b"ME", 79),
+    (*b"DE", 76),
+    (*b"HI", 76),
+    (*b"RI", 73),
+    (*b"RO", 73),
+    (*b"IC", 70),
+    (*b"NE", 69),
+    (*b"EA", 69),
+    (*b"RA", 62),
+    (*b"CE", 65),
+];
+
+const BIGRAM_TABLE: [[i32; 26]; 26] = {
+    let mut table = [[0i32; 26]; 26];
+    let mut i = 0;
+    while i < BIGRAM_HUNDREDTHS.len() {
+        let (bg, score) = BIGRAM_HUNDREDTHS[i];
+        table[(bg[0] - b'A') as usize][(bg[1] - b'A') as usize] = score;
+        i += 1;
     }
     table
-});
+};
 
 fn extract_alpha_indices(input: &str) -> Vec<u8> {
     input
-        .chars()
-        .filter(char::is_ascii_alphabetic)
-        .map(|c| c.to_ascii_uppercase() as u8 - b'A')
+        .bytes()
+        .filter(u8::is_ascii_alphabetic)
+        .map(|c| c.to_ascii_uppercase() - b'A')
         .collect()
 }
 
-fn score_with_key(indices: &[u8], key: &[u8; 26], table: &[[f64; 26]; 26]) -> f64 {
-    if indices.len() < 2 {
-        return 0.0;
+fn mapped_plain(key: &[u8; 26], cipher: u8, sa: usize, sb: usize) -> usize {
+    let idx = cipher as usize;
+    if idx == sa {
+        key[sb] as usize
+    } else if idx == sb {
+        key[sa] as usize
+    } else {
+        key[idx] as usize
     }
-    let mut score = 0.0;
-    for window in indices.windows(2) {
-        let a = (key[window[0] as usize] - b'A') as usize;
-        let b = (key[window[1] as usize] - b'A') as usize;
-        score += table[a][b];
-    }
-    score / (indices.len() - 1) as f64
+}
+
+fn window_delta(indices: &[u8], key: &[u8; 26], sa: usize, sb: usize, w: usize) -> i32 {
+    let c1 = indices[w];
+    let c2 = indices[w + 1];
+    let old = BIGRAM_TABLE[key[c1 as usize] as usize][key[c2 as usize] as usize];
+    let new = BIGRAM_TABLE[mapped_plain(key, c1, sa, sb)][mapped_plain(key, c2, sa, sb)];
+    new - old
 }
 
 fn apply_key(input: &str, key: &[u8; 26]) -> String {
     let mut bytes = input.as_bytes().to_vec();
     for b in &mut bytes {
         if b.is_ascii_uppercase() {
-            *b = key[(*b - b'A') as usize];
+            *b = b'A' + key[(*b - b'A') as usize];
         } else if b.is_ascii_lowercase() {
-            *b = key[(*b - b'a') as usize] - b'A' + b'a';
+            *b = b'a' + key[(*b - b'a') as usize];
         }
     }
     String::from_utf8(bytes).expect("substitution of ASCII alphabetic bytes preserves UTF-8")
@@ -206,9 +211,9 @@ fn apply_key(input: &str, key: &[u8; 26]) -> String {
 
 fn frequency_based_initial_key(input: &str) -> [u8; 26] {
     let mut counts = [0usize; 26];
-    for c in input.chars() {
+    for c in input.bytes() {
         if c.is_ascii_alphabetic() {
-            counts[(c.to_ascii_uppercase() as u8 - b'A') as usize] += 1;
+            counts[(c.to_ascii_uppercase() - b'A') as usize] += 1;
         }
     }
 
@@ -220,7 +225,7 @@ fn frequency_based_initial_key(input: &str) -> [u8; 26] {
 
     let mut key = [0u8; 26];
     for (i, &cipher_idx) in cipher_order.iter().enumerate() {
-        key[cipher_idx] = b'A' + english_order[i] as u8;
+        key[cipher_idx] = english_order[i] as u8;
     }
     key
 }
@@ -266,33 +271,60 @@ pub fn solve(input: &str, iterations: usize) -> Result<(String, String, f64)> {
     check_solve_iterations(iterations)?;
 
     let indices = extract_alpha_indices(input);
-    let table = &*BIGRAM_TABLE;
+    let mut pos: [Vec<usize>; 26] = std::array::from_fn(|_| Vec::new());
+    for (i, &idx) in indices.iter().enumerate() {
+        pos[idx as usize].push(i);
+    }
 
     let mut key = frequency_based_initial_key(input);
-    let mut best_score = score_with_key(&indices, &key, table);
-    let mut best_key = key;
-
+    let mut score = 0i64;
+    for window in indices.windows(2) {
+        score += i64::from(
+            BIGRAM_TABLE[key[window[0] as usize] as usize][key[window[1] as usize] as usize],
+        );
+    }
     let mut rng = SimpleRng::new(42);
+    let n = indices.len();
+    let mut stamp = vec![0u32; n.saturating_sub(1)];
+    let mut epoch = 1u32;
 
     for _ in 0..iterations {
-        let a = rng.next_usize(26);
-        let b = rng.next_usize(26);
-        if a == b {
+        let sa = rng.next_usize(26);
+        let sb = rng.next_usize(26);
+        if sa == sb {
             continue;
         }
-
-        key.swap(a, b);
-        let candidate_score = score_with_key(&indices, &key, table);
-
-        if candidate_score > best_score {
-            best_score = candidate_score;
-            best_key = key;
-        } else {
-            key.swap(a, b);
+        epoch = epoch.wrapping_add(1);
+        if epoch == 0 {
+            stamp.fill(0);
+            epoch = 1;
+        }
+        let mut delta = 0i64;
+        for &i in pos[sa].iter().chain(pos[sb].iter()) {
+            if i > 0 {
+                let w = i - 1;
+                if stamp[w] != epoch {
+                    stamp[w] = epoch;
+                    delta += i64::from(window_delta(&indices, &key, sa, sb, w));
+                }
+            }
+            if i + 1 < n && stamp[i] != epoch {
+                stamp[i] = epoch;
+                delta += i64::from(window_delta(&indices, &key, sa, sb, i));
+            }
+        }
+        if delta > 0 {
+            key.swap(sa, sb);
+            score += delta;
         }
     }
 
-    let best_text = apply_key(input, &best_key);
-    let key_str: String = best_key.iter().map(|&b| b as char).collect();
-    Ok((key_str, best_text, best_score))
+    let display = if n < 2 {
+        0.0
+    } else {
+        score as f64 / 100.0 / (n - 1) as f64
+    };
+    let best_text = apply_key(input, &key);
+    let key_str: String = key.iter().map(|&p| (b'A' + p) as char).collect();
+    Ok((key_str, best_text, display))
 }

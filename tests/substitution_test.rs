@@ -59,9 +59,23 @@ fn test_solve_returns_result() {
     let plaintext = "THE QUICK BROWN FOX JUMPS OVER THE LAZY DOG THIS IS A LONGER TEXT TO HELP WITH FREQUENCY ANALYSIS";
     let ciphertext = substitution::encode(plaintext, alphabet).unwrap();
     let (key, result, score) = substitution::solve(&ciphertext, 10000).unwrap();
-    assert!(!key.is_empty());
+    assert_eq!(key, "UCYLVMTNSDAGFKRJXIHPWEBQZO");
     assert!(!result.is_empty());
     assert!(score > 0.0);
+    assert_eq!(key.len(), 26);
+}
+
+#[test]
+fn test_solve_empty_and_single_letter() {
+    let (key, text, score) = substitution::solve("", 100).unwrap();
+    assert_eq!(key.len(), 26);
+    assert!(text.is_empty());
+    assert_eq!(score, 0.0);
+
+    let (key, text, score) = substitution::solve("A", 100).unwrap();
+    assert_eq!(key.len(), 26);
+    assert_eq!(text, "E");
+    assert_eq!(score, 0.0);
 }
 
 #[test]
