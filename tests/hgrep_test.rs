@@ -1660,6 +1660,52 @@ fn exclude_from_rejects_device_without_eof() {
     fs::remove_dir_all(&dir).unwrap();
 }
 
+#[cfg(unix)]
+fn hostname_bin_script(dir: &Path, body: &str) -> PathBuf {
+    let script = dir.join("host.sh");
+    fs::write(&script, body).unwrap();
+    let mut perms = fs::metadata(&script).unwrap().permissions();
+    std::os::unix::fs::PermissionsExt::set_mode(&mut perms, 0o755);
+    fs::set_permissions(&script, perms).unwrap();
+    script
+}
+
+#[cfg(unix)]
+#[test]
+fn hostname_bin_uses_trimmed_output() {
+    let dir = scratch("hostname_bin_ok");
+    seed(&dir, &["keep.txt"]);
+    let script = hostname_bin_script(&dir, "#!/bin/sh\nprintf '  example.test \\n'\n");
+    let out = run(&[
+        "-rl",
+        "--hostname-bin",
+        script.to_str().unwrap(),
+        "needle",
+        dir.to_str().unwrap(),
+    ]);
+    assert_eq!(rels(&out.stdout, &dir), ["keep.txt"]);
+    assert_eq!(out.code, 0, "stderr {:?}", out.stderr);
+    fs::remove_dir_all(&dir).unwrap();
+}
+
+#[cfg(unix)]
+#[test]
+fn hostname_bin_bounds_device_without_eof() {
+    let dir = scratch("hostname_bin_devzero");
+    seed(&dir, &["keep.txt"]);
+    let script = hostname_bin_script(&dir, "#!/bin/sh\nexec cat /dev/zero\n");
+    let out = run(&[
+        "-rl",
+        "--hostname-bin",
+        script.to_str().unwrap(),
+        "needle",
+        dir.to_str().unwrap(),
+    ]);
+    assert_eq!(out.code, 0, "stderr {:?}", out.stderr);
+    assert_eq!(rels(&out.stdout, &dir), ["keep.txt"]);
+    fs::remove_dir_all(&dir).unwrap();
+}
+
 #[test]
 fn recursive_search_reports_every_file_beyond_the_reorder_window() {
     let dir = scratch("reorder_window");
