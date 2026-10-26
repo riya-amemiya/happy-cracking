@@ -51,11 +51,45 @@ impl From<CommandError> for io::Error {
     }
 }
 
-fn read_stderr(stderr: &mut ChildStderr) -> CommandError {
-    let mut bytes = Vec::new();
-    match stderr.read_to_end(&mut bytes) {
-        Ok(_) => CommandError::Stderr(bytes),
-        Err(err) => CommandError::Io(err),
+const MAX_COMMAND_STDERR_BYTES: usize = 16 * 1024 * 1024;
+
+fn read_command_stderr_with_limit<R: Read>(reader: R, max_bytes: usize) -> io::Result<Vec<u8>> {
+    let max_bytes = max_bytes.min(MAX_COMMAND_STDERR_BYTES);
+    let mut buf = Vec::new();
+    reader
+        .take((max_bytes as u64).saturating_add(1))
+        .read_to_end(&mut buf)?;
+    if buf.len() > max_bytes {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!(
+                "command stderr exceeds maximum size of {max_bytes} bytes to prevent Denial of Service"
+            ),
+        ));
+    }
+    Ok(buf)
+}
+
+#[cfg(unix)]
+fn kill_child_pid(pid: u32) {
+    unsafe extern "C" {
+        fn kill(pid: i32, sig: i32) -> i32;
+    }
+    let _ = unsafe { kill(pid as i32, 9) };
+}
+
+#[cfg(not(unix))]
+fn kill_child_pid(_pid: u32) {}
+
+fn read_stderr(stderr: ChildStderr, pid: u32) -> CommandError {
+    match read_command_stderr_with_limit(stderr, MAX_COMMAND_STDERR_BYTES) {
+        Ok(bytes) => CommandError::Stderr(bytes),
+        Err(err) => {
+            if err.kind() == io::ErrorKind::InvalidData {
+                kill_child_pid(pid);
+            }
+            CommandError::Io(err)
+        }
     }
 }
 
@@ -72,8 +106,9 @@ impl CommandReader {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()?;
-        let mut stderr = child.stderr.take().expect("stderr was piped");
-        let handle = std::thread::spawn(move || read_stderr(&mut stderr));
+        let stderr = child.stderr.take().expect("stderr was piped");
+        let pid = child.id();
+        let handle = std::thread::spawn(move || read_stderr(stderr, pid));
         Ok(CommandReader {
             child,
             stderr: Some(handle),
@@ -298,5 +333,43 @@ mod tests {
         let err = reader.read_to_string(&mut out).unwrap_err();
         assert_eq!(out, "out");
         assert!(err.to_string().contains("err"));
+    }
+
+    #[test]
+    fn read_command_stderr_with_limit_rejects_oversized() {
+        let err = read_command_stderr_with_limit(&b"abcdefghijklmnop"[..], 8).unwrap_err();
+        assert!(err.to_string().contains("Denial of Service"));
+    }
+
+    #[test]
+    fn read_command_stderr_with_limit_accepts_at_limit() {
+        let got = read_command_stderr_with_limit(&b"err!"[..], 4).unwrap();
+        assert_eq!(got, b"err!");
+    }
+
+    #[test]
+    fn read_command_stderr_with_limit_accepts_empty() {
+        let got = read_command_stderr_with_limit(&b""[..], 16).unwrap();
+        assert!(got.is_empty());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn read_command_stderr_with_limit_bounds_device_without_eof() {
+        let file = File::open("/dev/zero").unwrap();
+        let err = read_command_stderr_with_limit(file, 64).unwrap_err();
+        assert!(err.to_string().contains("Denial of Service"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn command_reader_bounds_stderr_without_eof() {
+        let mut cmd = Command::new("sh");
+        cmd.args(["-c", "exec cat /dev/zero >&2"]);
+        let mut reader = CommandReader::new(&mut cmd).unwrap();
+        let mut out = String::new();
+        let err = reader.read_to_string(&mut out).unwrap_err();
+        assert!(out.is_empty());
+        assert!(err.to_string().contains("Denial of Service"));
     }
 }
