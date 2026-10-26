@@ -80,11 +80,11 @@ pub(crate) fn format_parallel_error(text: &str) -> String {
     format_error(&strip_io_prefix(text))
 }
 
-pub fn read_pattern_file_with_limit(path: &Path, max_bytes: usize) -> io::Result<Vec<u8>> {
+pub fn read_pattern_with_limit<R: Read>(reader: R, max_bytes: usize) -> io::Result<Vec<u8>> {
     let max_bytes = max_bytes.min(MAX_PATTERN_FILE_BYTES);
-    let file = File::open(path)?;
     let mut buf = Vec::new();
-    file.take((max_bytes as u64).saturating_add(1))
+    reader
+        .take((max_bytes as u64).saturating_add(1))
         .read_to_end(&mut buf)?;
     if buf.len() > max_bytes {
         return Err(io::Error::new(
@@ -95,6 +95,10 @@ pub fn read_pattern_file_with_limit(path: &Path, max_bytes: usize) -> io::Result
         ));
     }
     Ok(buf)
+}
+
+pub fn read_pattern_file_with_limit(path: &Path, max_bytes: usize) -> io::Result<Vec<u8>> {
+    read_pattern_with_limit(File::open(path)?, max_bytes)
 }
 
 #[must_use = "return the exit code from main"]

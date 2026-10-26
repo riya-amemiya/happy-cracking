@@ -1,10 +1,10 @@
 use std::collections::HashSet;
-use std::io::{self, Read};
+use std::io;
 use std::path::Path;
 
 use super::escape::escape;
 use super::flags::{LowArgs, Mode, PatternSource, Personality, os_bytes};
-use super::read_pattern_file_with_limit;
+use super::{read_pattern_file_with_limit, read_pattern_with_limit};
 
 #[derive(Clone, Debug)]
 pub(crate) enum GnuSource {
@@ -68,9 +68,7 @@ fn split_lines_rg(data: &[u8], origin: &str) -> Result<Vec<Vec<u8>>, PatternErro
 }
 
 fn read_stdin_all() -> io::Result<Vec<u8>> {
-    let mut buf = Vec::new();
-    io::stdin().lock().read_to_end(&mut buf)?;
-    Ok(buf)
+    read_pattern_with_limit(io::stdin().lock(), super::MAX_PATTERN_FILE_BYTES)
 }
 
 fn rg_patterns(low: &mut LowArgs, stdin: &mut StdinState) -> Result<Patterns, PatternError> {
