@@ -1,6 +1,8 @@
 use anyhow::Result;
 use clap::Subcommand;
 
+pub const MAX_HASHID_LEN: usize = 4096;
+
 #[derive(Subcommand)]
 pub enum HashIdAction {
     #[command(about = "Identify hash type")]
@@ -13,6 +15,9 @@ pub enum HashIdAction {
 pub fn run(action: HashIdAction) -> Result<()> {
     match action {
         HashIdAction::Identify { input } => {
+            if input.trim().len() > MAX_HASHID_LEN {
+                anyhow::bail!("Hash exceeds maximum length of {MAX_HASHID_LEN}");
+            }
             let results = identify(&input);
             if results.is_empty() {
                 println!("Unknown hash format");
@@ -30,11 +35,14 @@ pub fn run(action: HashIdAction) -> Result<()> {
 #[must_use]
 pub fn identify(input: &str) -> Vec<&'static str> {
     let input = input.trim();
+    if input.len() > MAX_HASHID_LEN {
+        return Vec::new();
+    }
     let len = input.len();
-    let is_hex = input.chars().all(|c| c.is_ascii_hexdigit());
+    let is_hex = input.bytes().all(|b| b.is_ascii_hexdigit());
     let is_base64 = input
-        .chars()
-        .all(|c| c.is_ascii_alphanumeric() || c == '+' || c == '/' || c == '=');
+        .bytes()
+        .all(|b| b.is_ascii_alphanumeric() || b == b'+' || b == b'/' || b == b'=');
 
     let mut results = Vec::new();
 
