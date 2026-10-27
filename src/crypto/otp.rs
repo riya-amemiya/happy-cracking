@@ -134,22 +134,50 @@ pub fn encrypt(input: &str, hex_key: &str) -> Result<String> {
 }
 
 pub fn decrypt(hex_input: &str, hex_key: &str) -> Result<String> {
-    let input_bytes = decode_otp_hex_with_limit(hex_input, MAX_OTP_BYTES)?;
-    let key_bytes = decode_otp_hex_with_limit(hex_key, MAX_OTP_BYTES)?;
-
-    if key_bytes.len() < input_bytes.len() {
-        anyhow::bail!(
-            "Key length ({} bytes) must be >= ciphertext length ({} bytes)",
-            key_bytes.len(),
-            input_bytes.len()
-        );
+    let hex_input = bounded_otp_hex(hex_input, MAX_OTP_BYTES)?;
+    let hex_key = bounded_otp_hex(hex_key, MAX_OTP_BYTES)?;
+    let ct_hex = hex_input.as_bytes();
+    let key_hex = hex_key.as_bytes();
+    if !ct_hex.len().is_multiple_of(2) {
+        return invalid_otp_hex(hex_input);
+    }
+    if !key_hex.len().is_multiple_of(2) {
+        return invalid_otp_hex(hex_key);
     }
 
-    let plain: Vec<u8> = input_bytes
-        .iter()
-        .zip(key_bytes.iter())
-        .map(|(&c, &k)| c ^ k)
-        .collect();
+    let ct_len = ct_hex.len() / 2;
+    let key_len = key_hex.len() / 2;
+    if key_len < ct_len {
+        if ct_hex.iter().any(|&b| otp_hex_nibble(b).is_none()) {
+            return invalid_otp_hex(hex_input);
+        }
+        if key_hex.iter().any(|&b| otp_hex_nibble(b).is_none()) {
+            return invalid_otp_hex(hex_key);
+        }
+        anyhow::bail!("Key length ({key_len} bytes) must be >= ciphertext length ({ct_len} bytes)");
+    }
 
+    let mut plain = vec![0u8; ct_len];
+    for i in 0..ct_len {
+        let Some(c_hi) = otp_hex_nibble(ct_hex[i * 2]) else {
+            return invalid_otp_hex(hex_input);
+        };
+        let Some(c_lo) = otp_hex_nibble(ct_hex[i * 2 + 1]) else {
+            return invalid_otp_hex(hex_input);
+        };
+        let Some(k_hi) = otp_hex_nibble(key_hex[i * 2]) else {
+            return invalid_otp_hex(hex_key);
+        };
+        let Some(k_lo) = otp_hex_nibble(key_hex[i * 2 + 1]) else {
+            return invalid_otp_hex(hex_key);
+        };
+        plain[i] = ((c_hi << 4) | c_lo) ^ ((k_hi << 4) | k_lo);
+    }
+    if key_hex[ct_len * 2..]
+        .iter()
+        .any(|&b| otp_hex_nibble(b).is_none())
+    {
+        return invalid_otp_hex(hex_key);
+    }
     String::from_utf8(plain).context("Decrypted data is not valid UTF-8")
 }

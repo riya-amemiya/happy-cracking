@@ -57,6 +57,11 @@ fn test_invalid_hex_in_unused_key_bytes() {
 }
 
 #[test]
+fn test_invalid_hex_in_unused_decrypt_key_bytes() {
+    assert!(otp::decrypt("be", "ffzz").is_err());
+}
+
+#[test]
 fn test_odd_length_hex_key() {
     assert!(otp::encrypt("A", "f").is_err());
 }
