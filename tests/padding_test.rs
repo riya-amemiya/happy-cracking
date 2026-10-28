@@ -155,3 +155,108 @@ fn decode_padding_hex_with_limit_rejects_invalid_hex() {
     let err = padding::decode_padding_hex_with_limit("zz", 16).unwrap_err();
     assert!(!err.to_string().contains("Denial of Service"));
 }
+
+fn to_hex(data: &[u8]) -> String {
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    let mut out = String::with_capacity(data.len() * 2);
+    for &b in data {
+        out.push(HEX[(b >> 4) as usize] as char);
+        out.push(HEX[(b & 0x0f) as usize] as char);
+    }
+    out
+}
+
+fn hex_cli_pkcs7_pad(input: &str, block_size: usize) -> String {
+    let data = padding::decode_padding_hex_with_limit(input, padding::MAX_PADDING_BYTES).unwrap();
+    to_hex(&padding::pkcs7_pad(&data, block_size).unwrap())
+}
+
+fn hex_cli_pkcs7_unpad(input: &str, block_size: usize) -> String {
+    let data = padding::decode_padding_hex_with_limit(input, padding::MAX_PADDING_BYTES).unwrap();
+    to_hex(&padding::pkcs7_unpad(&data, block_size).unwrap())
+}
+
+fn hex_cli_zero_pad(input: &str, block_size: usize) -> String {
+    let data = padding::decode_padding_hex_with_limit(input, padding::MAX_PADDING_BYTES).unwrap();
+    to_hex(&padding::zero_pad(&data, block_size).unwrap())
+}
+
+fn hex_cli_zero_unpad(input: &str) -> String {
+    let data = padding::decode_padding_hex_with_limit(input, padding::MAX_PADDING_BYTES).unwrap();
+    to_hex(&padding::zero_unpad(&data))
+}
+
+#[test]
+fn pkcs7_pad_hex_matches_decode_encode_cli() {
+    assert_eq!(
+        padding::pkcs7_pad_hex("deadbeef", 8).unwrap(),
+        hex_cli_pkcs7_pad("deadbeef", 8)
+    );
+    assert_eq!(
+        padding::pkcs7_pad_hex("DEADBEEF", 8).unwrap(),
+        hex_cli_pkcs7_pad("DEADBEEF", 8)
+    );
+    assert_eq!(
+        padding::pkcs7_pad_hex("01020304", 4).unwrap(),
+        hex_cli_pkcs7_pad("01020304", 4)
+    );
+    assert_eq!(
+        padding::pkcs7_pad_hex("", 4).unwrap(),
+        hex_cli_pkcs7_pad("", 4)
+    );
+}
+
+#[test]
+fn pkcs7_unpad_hex_matches_decode_encode_cli() {
+    let padded = padding::pkcs7_pad_hex("deadbeef", 8).unwrap();
+    assert_eq!(
+        padding::pkcs7_unpad_hex(&padded, 8).unwrap(),
+        hex_cli_pkcs7_unpad(&padded, 8)
+    );
+    let upper = padded.to_ascii_uppercase();
+    assert_eq!(
+        padding::pkcs7_unpad_hex(&upper, 8).unwrap(),
+        hex_cli_pkcs7_unpad(&upper, 8)
+    );
+}
+
+#[test]
+fn zero_pad_hex_matches_decode_encode_cli() {
+    assert_eq!(
+        padding::zero_pad_hex("deadbeef", 8).unwrap(),
+        hex_cli_zero_pad("deadbeef", 8)
+    );
+    assert_eq!(
+        padding::zero_pad_hex("DEADBEEF", 8).unwrap(),
+        "deadbeef00000000"
+    );
+    assert_eq!(
+        padding::zero_pad_hex("01020304", 4).unwrap(),
+        hex_cli_zero_pad("01020304", 4)
+    );
+    assert_eq!(padding::zero_pad_hex("", 16).unwrap(), "");
+}
+
+#[test]
+fn zero_unpad_hex_matches_decode_encode_cli() {
+    assert_eq!(
+        padding::zero_unpad_hex("cafe0000").unwrap(),
+        hex_cli_zero_unpad("cafe0000")
+    );
+    assert_eq!(padding::zero_unpad_hex("CAFE0000").unwrap(), "cafe");
+    assert_eq!(padding::zero_unpad_hex("000000").unwrap(), "");
+}
+
+#[test]
+fn pkcs7_pad_hex_rejects_invalid_hex_before_block_size() {
+    let err = padding::pkcs7_pad_hex("zz", 16).unwrap_err();
+    assert!(err.to_string().contains("Failed to decode input hex"));
+    let err = padding::pkcs7_pad_hex("abc", 16).unwrap_err();
+    assert!(err.to_string().contains("Failed to decode input hex"));
+}
+
+#[test]
+fn pkcs7_unpad_hex_empty_is_empty_data() {
+    let err = padding::pkcs7_unpad_hex("", 16).unwrap_err();
+    assert!(err.to_string().contains("Input data is empty"));
+}
