@@ -144,8 +144,10 @@ const MAX_NMAP_EXTRA_ARGS_LEN: usize = 4096;
 /// nmap flags that read/write files or load NSE scripts when passed via `--args`.
 const DANGEROUS_NMAP_FLAGS: &[&str] = &[
     "-iL",
+    "--input-filename",
     "--excludefile",
     "--resume",
+    "--resume-all",
     "--stylesheet",
     "--script",
     "--script-args-file",
