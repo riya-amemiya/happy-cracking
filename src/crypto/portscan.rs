@@ -144,6 +144,7 @@ const MAX_NMAP_EXTRA_ARGS_LEN: usize = 4096;
 /// nmap flags that read/write files or load NSE scripts when passed via `--args`.
 const DANGEROUS_NMAP_FLAGS: &[&str] = &[
     "-iL",
+    "--iL",
     "--input-filename",
     "--excludefile",
     "--resume",
@@ -151,10 +152,19 @@ const DANGEROUS_NMAP_FLAGS: &[&str] = &[
     "--stylesheet",
     "--script",
     "--script-args-file",
+    "--script-help",
+    "--script-updatedb",
     "--datadir",
     "--servicedb",
     "--versiondb",
     "--append-output",
+    "--oN",
+    "--oX",
+    "--oG",
+    "--oA",
+    "--oS",
+    "--oM",
+    "--oH",
 ];
 
 /// Reject option-like or otherwise unsafe nmap target strings.
@@ -193,7 +203,10 @@ pub fn validate_nmap_extra_args(extra: &str) -> Result<()> {
             anyhow::bail!("nmap extra args must not include output-file flags");
         }
         let flag = tok.split_once('=').map_or(tok, |(f, _)| f);
-        if flag.starts_with("-iL") || DANGEROUS_NMAP_FLAGS.contains(&flag) {
+        if flag.starts_with("-iL")
+            || flag.starts_with("--iL")
+            || DANGEROUS_NMAP_FLAGS.contains(&flag)
+        {
             anyhow::bail!("nmap extra args must not include {flag}");
         }
     }
