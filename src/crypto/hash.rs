@@ -34,6 +34,14 @@ pub enum HashAction {
 }
 
 pub fn run(action: HashAction) -> Result<()> {
+    let input = match &action {
+        HashAction::Md5 { input }
+        | HashAction::Sha1 { input }
+        | HashAction::Sha256 { input }
+        | HashAction::Sha512 { input }
+        | HashAction::All { input } => input.as_str(),
+    };
+    check_hash_input_len(input, MAX_HASH_BYTES)?;
     match action {
         HashAction::Md5 { input } => {
             println!("{}", md5_hash(&input));
@@ -53,6 +61,18 @@ pub fn run(action: HashAction) -> Result<()> {
             println!("SHA256: {}", sha256_hash(&input));
             println!("SHA512: {}", sha512_hash(&input));
         }
+    }
+    Ok(())
+}
+
+pub const MAX_HASH_BYTES: usize = 16 * 1024 * 1024;
+
+pub fn check_hash_input_len(input: &str, max_bytes: usize) -> Result<()> {
+    let max_bytes = max_bytes.min(MAX_HASH_BYTES);
+    if input.len() > max_bytes {
+        anyhow::bail!(
+            "Input exceeds maximum size of {max_bytes} bytes to prevent Denial of Service"
+        );
     }
     Ok(())
 }
