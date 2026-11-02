@@ -75,7 +75,18 @@ pub fn run(action: XorAction) -> Result<()> {
 
 pub const MAX_XOR_BYTES: usize = 16 * 1024 * 1024;
 
-pub fn decode_xor_hex_with_limit(hex_str: &str, max_bytes: usize) -> Result<Vec<u8>> {
+const HEX_OUT: &[u8; 16] = b"0123456789abcdef";
+
+fn xor_hex_nibble(b: u8) -> Option<u8> {
+    match b {
+        b'0'..=b'9' => Some(b - b'0'),
+        b'a'..=b'f' => Some(b - b'a' + 10),
+        b'A'..=b'F' => Some(b - b'A' + 10),
+        _ => None,
+    }
+}
+
+fn bounded_xor_hex(hex_str: &str, max_bytes: usize) -> Result<&str> {
     let hex_str = hex_str.trim();
     let max_bytes = max_bytes.min(MAX_XOR_BYTES);
     let max_chars = max_bytes.saturating_mul(2);
@@ -84,7 +95,79 @@ pub fn decode_xor_hex_with_limit(hex_str: &str, max_bytes: usize) -> Result<Vec<
             "Input exceeds maximum size of {max_bytes} bytes to prevent Denial of Service"
         );
     }
+    Ok(hex_str)
+}
+
+fn invalid_xor_hex<T>(hex_str: &str) -> Result<T> {
+    match hex::decode(hex_str) {
+        Err(err) => Err(anyhow::Error::new(err).context("Failed to decode input hex")),
+        Ok(_) => Err(anyhow::anyhow!("Failed to decode input hex")),
+    }
+}
+
+pub fn decode_xor_hex_with_limit(hex_str: &str, max_bytes: usize) -> Result<Vec<u8>> {
+    let hex_str = bounded_xor_hex(hex_str, max_bytes)?;
     hex::decode(hex_str).context("Failed to decode input hex")
+}
+
+pub fn xor_hex(input_hex: &str, key: &[u8]) -> Result<(String, Vec<u8>)> {
+    xor_hex_with_limit(input_hex, key, MAX_XOR_BYTES)
+}
+
+pub fn xor_hex_with_limit(
+    input_hex: &str,
+    key: &[u8],
+    max_bytes: usize,
+) -> Result<(String, Vec<u8>)> {
+    let hex_str = bounded_xor_hex(input_hex, max_bytes)?;
+    let hex_bytes = hex_str.as_bytes();
+    let (pairs, rest) = hex_bytes.as_chunks::<2>();
+    if !rest.is_empty() {
+        return invalid_xor_hex(hex_str);
+    }
+
+    let n = pairs.len();
+    let mut hex_out = vec![0u8; hex_bytes.len()];
+    let mut plain = vec![0u8; n];
+
+    if key.is_empty() {
+        for (i, pair) in pairs.iter().enumerate() {
+            let Some(hi) = xor_hex_nibble(pair[0]) else {
+                return invalid_xor_hex(hex_str);
+            };
+            let Some(lo) = xor_hex_nibble(pair[1]) else {
+                return invalid_xor_hex(hex_str);
+            };
+            let b = (hi << 4) | lo;
+            plain[i] = b;
+            hex_out[i * 2] = HEX_OUT[(b >> 4) as usize];
+            hex_out[i * 2 + 1] = HEX_OUT[(b & 0x0f) as usize];
+        }
+    } else {
+        let key_len = key.len();
+        let mut ki = 0usize;
+        for (i, pair) in pairs.iter().enumerate() {
+            let Some(hi) = xor_hex_nibble(pair[0]) else {
+                return invalid_xor_hex(hex_str);
+            };
+            let Some(lo) = xor_hex_nibble(pair[1]) else {
+                return invalid_xor_hex(hex_str);
+            };
+            let b = ((hi << 4) | lo) ^ key[ki];
+            plain[i] = b;
+            hex_out[i * 2] = HEX_OUT[(b >> 4) as usize];
+            hex_out[i * 2 + 1] = HEX_OUT[(b & 0x0f) as usize];
+            ki += 1;
+            if ki == key_len {
+                ki = 0;
+            }
+        }
+    }
+
+    Ok((
+        String::from_utf8(hex_out).expect("XOR hex output is ASCII"),
+        plain,
+    ))
 }
 
 pub fn ascii_key_bytes_with_limit(key: &str, max_bytes: usize) -> Result<Vec<u8>> {
@@ -98,7 +181,7 @@ pub fn ascii_key_bytes_with_limit(key: &str, max_bytes: usize) -> Result<Vec<u8>
 }
 
 fn run_cipher(input: &str, key: &str, ascii_key: bool) -> Result<()> {
-    let input_bytes = decode_xor_hex_with_limit(input, MAX_XOR_BYTES)?;
+    bounded_xor_hex(input, MAX_XOR_BYTES)?;
 
     let key_bytes = if ascii_key {
         ascii_key_bytes_with_limit(key, MAX_XOR_BYTES)?
@@ -106,10 +189,10 @@ fn run_cipher(input: &str, key: &str, ascii_key: bool) -> Result<()> {
         decode_xor_hex_with_limit(key, MAX_XOR_BYTES)?
     };
 
-    let result = xor_bytes(&input_bytes, &key_bytes);
-    println!("Hex: {}", hex::encode(&result));
+    let (hex_out, plain) = xor_hex(input, &key_bytes)?;
+    println!("Hex: {hex_out}");
 
-    if let Ok(s) = std::str::from_utf8(&result) {
+    if let Ok(s) = std::str::from_utf8(&plain) {
         println!("ASCII: {s}");
     }
 
