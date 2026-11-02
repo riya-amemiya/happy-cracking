@@ -19,6 +19,10 @@ pub enum Crc32Action {
 }
 
 pub fn run(action: Crc32Action) -> Result<()> {
+    let input = match &action {
+        Crc32Action::Compute { input } | Crc32Action::Verify { input, .. } => input.as_str(),
+    };
+    check_crc32_input_len(input, MAX_CRC32_BYTES)?;
     match action {
         Crc32Action::Compute { input } => {
             println!("{}", compute(&input));
@@ -32,6 +36,18 @@ pub fn run(action: Crc32Action) -> Result<()> {
                 println!("Mismatch (expected {checksum}, got {computed})");
             }
         }
+    }
+    Ok(())
+}
+
+pub const MAX_CRC32_BYTES: usize = 16 * 1024 * 1024;
+
+pub fn check_crc32_input_len(input: &str, max_bytes: usize) -> Result<()> {
+    let max_bytes = max_bytes.min(MAX_CRC32_BYTES);
+    if input.len() > max_bytes {
+        anyhow::bail!(
+            "Input exceeds maximum size of {max_bytes} bytes to prevent Denial of Service"
+        );
     }
     Ok(())
 }
