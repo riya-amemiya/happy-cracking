@@ -125,6 +125,40 @@ fn decode_crc32_hex_with_limit_rejects_invalid_hex() {
 }
 
 #[test]
+fn forge_crc32_hex_matches_byte_forge() {
+    let data = b"deadbeef";
+    let target = 0xCAFE_BABE_u32;
+    let from_bytes = crc32_forge::forge_crc32(data, target);
+    let from_hex = crc32_forge::forge_crc32_hex(&hex::encode(data), target).unwrap();
+    assert_eq!(from_hex, from_bytes);
+    let mut combined = data.to_vec();
+    combined.extend_from_slice(&from_hex);
+    assert_eq!(crc32_forge::crc32_compute(&combined), target);
+}
+
+#[test]
+fn forge_crc32_hex_accepts_empty() {
+    let suffix = crc32_forge::forge_crc32_hex("", 0x1234_5678).unwrap();
+    assert_eq!(suffix, crc32_forge::forge_crc32(b"", 0x1234_5678));
+}
+
+#[test]
+fn forge_crc32_hex_rejects_invalid() {
+    let err = crc32_forge::forge_crc32_hex("zz", 0xDEAD_BEEF)
+        .unwrap_err()
+        .to_string();
+    assert!(err.contains("Invalid hex input"), "unexpected error: {err}");
+}
+
+#[test]
+fn forge_crc32_hex_rejects_odd_length() {
+    let err = crc32_forge::forge_crc32_hex("abc", 0xDEAD_BEEF)
+        .unwrap_err()
+        .to_string();
+    assert!(err.contains("Invalid hex input"), "unexpected error: {err}");
+}
+
+#[test]
 fn forge_run_accepts_hex_under_limit() {
     crc32_forge::run(crc32_forge::Crc32ForgeAction::Forge {
         input: hex::encode(b"hello"),
