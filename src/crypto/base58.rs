@@ -3,8 +3,19 @@ use clap::Subcommand;
 use num_bigint::BigUint;
 use num_traits::Zero;
 
+pub const MAX_BASE58_BYTES: usize = 64 * 1024;
+
 const ALPHABET: &[u8; 58] = b"123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
 const BASE: u32 = 58;
+
+pub fn check_base58_input_len(input: &str) -> Result<()> {
+    if input.len() > MAX_BASE58_BYTES {
+        anyhow::bail!(
+            "Input exceeds maximum size of {MAX_BASE58_BYTES} bytes to prevent Denial of Service"
+        );
+    }
+    Ok(())
+}
 
 const DECODE_TABLE: [u8; 256] = {
     let mut table = [255u8; 256];
@@ -33,6 +44,7 @@ pub enum Base58Action {
 pub fn run(action: Base58Action) -> Result<()> {
     match action {
         Base58Action::Encode { input } => {
+            check_base58_input_len(&input)?;
             println!("{}", encode(&input));
         }
         Base58Action::Decode { input } => {
@@ -68,6 +80,7 @@ pub fn encode(input: &str) -> String {
 
 pub fn decode(input: &str) -> Result<String> {
     let input = input.trim();
+    check_base58_input_len(input)?;
     if input.is_empty() {
         return Ok(String::new());
     }

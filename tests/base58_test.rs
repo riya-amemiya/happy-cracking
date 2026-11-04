@@ -1,4 +1,4 @@
-use happy_cracking::crypto::base58;
+use happy_cracking::crypto::base58::{self, Base58Action, MAX_BASE58_BYTES};
 
 #[test]
 fn test_encode_basic() {
@@ -57,4 +57,67 @@ fn test_roundtrip_long() {
     let encoded = base58::encode(original);
     let decoded = base58::decode(&encoded).unwrap();
     assert_eq!(decoded, original);
+}
+
+#[test]
+fn decode_rejects_oversized_input() {
+    let start = std::time::Instant::now();
+    let too_long = "2".repeat(MAX_BASE58_BYTES + 1);
+    let err = base58::decode(&too_long).unwrap_err().to_string();
+    assert!(
+        err.contains(&MAX_BASE58_BYTES.to_string()),
+        "unexpected error: {err}"
+    );
+    assert!(
+        start.elapsed().as_millis() < 100,
+        "oversized base58 input must be rejected before BigUint conversion"
+    );
+}
+
+#[test]
+fn decode_accepts_input_at_length_cap() {
+    let input = "1".repeat(MAX_BASE58_BYTES);
+    let decoded = base58::decode(&input).unwrap();
+    assert_eq!(decoded.len(), MAX_BASE58_BYTES);
+    assert!(decoded.bytes().all(|b| b == 0));
+}
+
+#[test]
+fn decode_trims_before_length_check() {
+    let padded = format!("{}9Ajdvzr{}", " ".repeat(MAX_BASE58_BYTES), " ".repeat(8));
+    assert_eq!(base58::decode(&padded).unwrap(), "Hello");
+}
+
+#[test]
+fn run_rejects_oversized_encode_input() {
+    let start = std::time::Instant::now();
+    let err = base58::run(Base58Action::Encode {
+        input: "a".repeat(MAX_BASE58_BYTES + 1),
+    })
+    .unwrap_err()
+    .to_string();
+    assert!(
+        err.contains(&MAX_BASE58_BYTES.to_string()),
+        "unexpected error: {err}"
+    );
+    assert!(
+        start.elapsed().as_millis() < 100,
+        "oversized base58 encode must be rejected before BigUint conversion"
+    );
+}
+
+#[test]
+fn run_rejects_oversized_decode_input() {
+    let err = base58::run(Base58Action::Decode {
+        input: "2".repeat(MAX_BASE58_BYTES + 1),
+    })
+    .unwrap_err()
+    .to_string();
+    assert!(err.contains(&MAX_BASE58_BYTES.to_string()));
+}
+
+#[test]
+fn check_base58_input_len_accepts_limit() {
+    base58::check_base58_input_len(&"a".repeat(MAX_BASE58_BYTES)).unwrap();
+    base58::check_base58_input_len("").unwrap();
 }
