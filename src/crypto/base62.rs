@@ -4,6 +4,17 @@ use num_bigint::BigUint;
 use num_traits::Zero;
 use std::sync::LazyLock;
 
+pub const MAX_BASE62_BYTES: usize = 64 * 1024;
+
+pub fn check_base62_input_len(input: &str) -> Result<()> {
+    if input.len() > MAX_BASE62_BYTES {
+        anyhow::bail!(
+            "Input exceeds maximum size of {MAX_BASE62_BYTES} bytes to prevent Denial of Service"
+        );
+    }
+    Ok(())
+}
+
 #[derive(Subcommand)]
 pub enum Base62Action {
     #[command(about = "Encode to Base62")]
@@ -21,6 +32,7 @@ pub enum Base62Action {
 pub fn run(action: Base62Action) -> Result<()> {
     match action {
         Base62Action::Encode { input } => {
+            check_base62_input_len(&input)?;
             println!("{}", encode(&input));
         }
         Base62Action::Decode { input } => {
@@ -68,6 +80,7 @@ pub fn encode(input: &str) -> String {
 
 pub fn decode(input: &str) -> Result<String> {
     let input = input.trim();
+    check_base62_input_len(input)?;
     if input.is_empty() {
         return Ok(String::new());
     }
