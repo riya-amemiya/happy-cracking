@@ -173,9 +173,18 @@ fn validate_nmap_extra_args_rejects_file_and_script_flags() {
         "-iL/etc/hosts",
         "--input-filename /etc/hosts",
         "--input-filename=/etc/hosts",
+        "--iL /etc/hosts",
+        "--iL=/etc/hosts",
+        "--oN /tmp/out",
+        "--oX=scan.xml",
+        "--oG scan.gnmap",
+        "--oA scan",
         "--resume-all",
         "--script vuln",
         "--script=/tmp/evil.nse",
+        "--script-help /tmp/evil.nse",
+        "--script-help=default",
+        "--script-updatedb",
         "--script-args-file /tmp/args",
         "--datadir /tmp",
         "--excludefile /tmp/x",
@@ -209,6 +218,16 @@ fn run_nmap_rejects_input_filename_extra_args_without_spawning() {
     let msg = err.to_string();
     assert!(
         msg.contains("input-filename") || msg.contains("extra args"),
+        "validation error should mention extra args, got: {msg}"
+    );
+}
+
+#[test]
+fn run_nmap_rejects_il_long_option_without_spawning() {
+    let err = portscan::run_nmap("127.0.0.1", Some("--iL /etc/hosts")).unwrap_err();
+    let msg = err.to_string();
+    assert!(
+        msg.contains("--iL") || msg.contains("extra args"),
         "validation error should mention extra args, got: {msg}"
     );
 }
