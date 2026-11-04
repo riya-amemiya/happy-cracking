@@ -975,10 +975,7 @@ mod tests {
         ($name:ident, $map:expr, $caps:expr, $hay:expr, $expected:expr $(,)*) => {
             #[test]
             fn $name() {
-                assert_eq!(
-                    $expected,
-                    interpolate_string($map, &$caps, $hay)
-                );
+                assert_eq!($expected, interpolate_string($map, &$caps, $hay));
             }
         };
     }
