@@ -190,3 +190,77 @@ fn xor_bytes_empty_key() {
     let result = xor::xor_bytes(data, key);
     assert_eq!(result, data);
 }
+
+fn xor_hex_matches_decode_xor_encode(input_hex: &str, key: &[u8]) {
+    let (hex_out, plain) = xor::xor_hex(input_hex, key).unwrap();
+    let decoded = xor::decode_xor_hex_with_limit(input_hex, xor::MAX_XOR_BYTES).unwrap();
+    let expected = xor::xor_bytes(&decoded, key);
+    assert_eq!(plain, expected);
+    assert_eq!(hex_out, hex::encode(&expected));
+}
+
+#[test]
+fn xor_hex_hello_key_41() {
+    let (hex_out, plain) = xor::xor_hex("48656c6c6f", &[0x41]).unwrap();
+    assert_eq!(hex_out, "09242d2d2e");
+    assert_eq!(plain, [0x09, 0x24, 0x2d, 0x2d, 0x2e]);
+}
+
+#[test]
+fn xor_hex_uppercases_to_lowercase() {
+    let (hex_out, plain) = xor::xor_hex("48656C6C6F", &[0x41]).unwrap();
+    assert_eq!(hex_out, "09242d2d2e");
+    assert_eq!(plain, [0x09, 0x24, 0x2d, 0x2d, 0x2e]);
+}
+
+#[test]
+fn xor_hex_repeating_key() {
+    xor_hex_matches_decode_xor_encode("41414141", b"AB");
+}
+
+#[test]
+fn xor_hex_empty_input() {
+    let (hex_out, plain) = xor::xor_hex("", &[0x41]).unwrap();
+    assert!(hex_out.is_empty());
+    assert!(plain.is_empty());
+}
+
+#[test]
+fn xor_hex_empty_key_is_identity_lowercase() {
+    let (hex_out, plain) = xor::xor_hex("48656C6C6F", b"").unwrap();
+    assert_eq!(hex_out, "48656c6c6f");
+    assert_eq!(plain, b"Hello");
+}
+
+#[test]
+fn xor_hex_roundtrip() {
+    let (ct, _) = xor::xor_hex("48656c6c6f", b"KEY").unwrap();
+    let (pt_hex, pt) = xor::xor_hex(&ct, b"KEY").unwrap();
+    assert_eq!(pt, b"Hello");
+    assert_eq!(pt_hex, "48656c6c6f");
+}
+
+#[test]
+fn xor_hex_rejects_invalid() {
+    let err = xor::xor_hex("zz", &[0x00]).unwrap_err();
+    assert!(err.to_string().contains("Failed to decode input hex"));
+    assert!(!err.to_string().contains("Denial of Service"));
+}
+
+#[test]
+fn xor_hex_rejects_odd_length() {
+    let err = xor::xor_hex("abc", &[0x00]).unwrap_err();
+    assert!(err.to_string().contains("Failed to decode input hex"));
+}
+
+#[test]
+fn xor_hex_rejects_oversized() {
+    let err = xor::xor_hex_with_limit("41424344", &[0x00], 2).unwrap_err();
+    assert!(err.to_string().contains("Denial of Service"));
+}
+
+#[test]
+fn xor_hex_4k_matches_library_path() {
+    let data: Vec<u8> = (0u8..=255).cycle().take(4096).collect();
+    xor_hex_matches_decode_xor_encode(&hex::encode(&data), b"KEY");
+}
