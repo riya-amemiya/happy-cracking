@@ -136,3 +136,70 @@ fn cipher_ascii_with_limit_known_vector() {
     let data = rc4::cipher_ascii_with_limit("Plaintext", "Key", 16).unwrap();
     assert_eq!(hex::encode(&data), "bbf316e8d940af0ad3");
 }
+
+fn rc4_hex_matches_decode_rc4_encode(input_hex: &str, key: &[u8]) {
+    let (hex_out, plain) = rc4::rc4_hex(input_hex, key).unwrap();
+    let decoded = rc4::decode_rc4_hex_with_limit(input_hex, rc4::MAX_RC4_BYTES).unwrap();
+    let expected = rc4::rc4(&decoded, key).unwrap();
+    assert_eq!(plain, expected);
+    assert_eq!(hex_out, hex::encode(&expected));
+}
+
+#[test]
+fn rc4_hex_plaintext_key() {
+    let (hex_out, plain) = rc4::rc4_hex("506c61696e74657874", b"Key").unwrap();
+    assert_eq!(hex_out, "bbf316e8d940af0ad3");
+    assert_eq!(plain, hex::decode("bbf316e8d940af0ad3").unwrap());
+}
+
+#[test]
+fn rc4_hex_uppercases_to_lowercase() {
+    let (hex_out, _) = rc4::rc4_hex("506C61696E74657874", b"Key").unwrap();
+    assert_eq!(hex_out, "bbf316e8d940af0ad3");
+}
+
+#[test]
+fn rc4_hex_empty_input() {
+    let (hex_out, plain) = rc4::rc4_hex("", b"Key").unwrap();
+    assert!(hex_out.is_empty());
+    assert!(plain.is_empty());
+}
+
+#[test]
+fn rc4_hex_empty_key() {
+    let err = rc4::rc4_hex("506c61696e74657874", b"").unwrap_err();
+    assert!(err.to_string().contains("must not be empty"));
+}
+
+#[test]
+fn rc4_hex_roundtrip() {
+    let (ct, _) = rc4::rc4_hex("48656c6c6f", b"Key").unwrap();
+    let (pt_hex, pt) = rc4::rc4_hex(&ct, b"Key").unwrap();
+    assert_eq!(pt, b"Hello");
+    assert_eq!(pt_hex, "48656c6c6f");
+}
+
+#[test]
+fn rc4_hex_rejects_invalid() {
+    let err = rc4::rc4_hex("zz", b"Key").unwrap_err();
+    assert!(err.to_string().contains("Failed to decode hex input"));
+    assert!(!err.to_string().contains("Denial of Service"));
+}
+
+#[test]
+fn rc4_hex_rejects_odd_length() {
+    let err = rc4::rc4_hex("abc", b"Key").unwrap_err();
+    assert!(err.to_string().contains("Failed to decode hex input"));
+}
+
+#[test]
+fn rc4_hex_rejects_oversized() {
+    let err = rc4::rc4_hex_with_limit("41424344", b"Key", 2).unwrap_err();
+    assert!(err.to_string().contains("Denial of Service"));
+}
+
+#[test]
+fn rc4_hex_4k_matches_library_path() {
+    let data: Vec<u8> = (0u8..=255).cycle().take(4096).collect();
+    rc4_hex_matches_decode_rc4_encode(&hex::encode(&data), b"Key");
+}
