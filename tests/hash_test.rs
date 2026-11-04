@@ -33,3 +33,47 @@ fn test_sha512() {
 fn test_empty_string() {
     assert_eq!(hash::md5_hash(""), "d41d8cd98f00b204e9800998ecf8427e");
 }
+
+#[test]
+fn check_hash_input_len_rejects_oversized() {
+    let start = std::time::Instant::now();
+    let err = hash::check_hash_input_len("abcd", 2).unwrap_err();
+    assert!(err.to_string().contains("Denial of Service"));
+    assert!(
+        start.elapsed().as_millis() < 100,
+        "oversized hash input must be rejected before digest computation"
+    );
+}
+
+#[test]
+fn check_hash_input_len_accepts_len_at_limit() {
+    hash::check_hash_input_len("ab", 2).unwrap();
+}
+
+#[test]
+fn check_hash_input_len_accepts_empty() {
+    hash::check_hash_input_len("", 16).unwrap();
+}
+
+#[test]
+fn run_rejects_oversized_hash_input() {
+    let start = std::time::Instant::now();
+    let err = hash::run(hash::HashAction::Sha256 {
+        input: "a".repeat(hash::MAX_HASH_BYTES + 1),
+    })
+    .unwrap_err()
+    .to_string();
+    assert!(err.contains("Denial of Service"), "unexpected error: {err}");
+    assert!(
+        start.elapsed().as_millis() < 100,
+        "oversized hash CLI input must be rejected before digest computation"
+    );
+}
+
+#[test]
+fn run_hashes_under_limit() {
+    hash::run(hash::HashAction::Md5 {
+        input: "hello".into(),
+    })
+    .unwrap();
+}
