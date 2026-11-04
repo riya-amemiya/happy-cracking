@@ -197,3 +197,51 @@ fn test_verify_rejects_empty_tag_string() {
 fn test_verify_with_empty_inputs_rejects_wrong_tag() {
     assert!(!hmac::verify_sha256(b"", b"", &"00".repeat(32)));
 }
+
+#[test]
+fn check_hmac_input_len_rejects_oversized_message() {
+    let start = std::time::Instant::now();
+    let err = hmac::check_hmac_input_len(b"k", b"abcd", 2).unwrap_err();
+    assert!(err.to_string().contains("Denial of Service"));
+    assert!(
+        start.elapsed().as_millis() < 100,
+        "oversized HMAC message must be rejected before MAC computation"
+    );
+}
+
+#[test]
+fn check_hmac_input_len_rejects_oversized_key() {
+    let start = std::time::Instant::now();
+    let err = hmac::check_hmac_input_len(b"abcd", b"m", 2).unwrap_err();
+    assert!(err.to_string().contains("Denial of Service"));
+    assert!(
+        start.elapsed().as_millis() < 100,
+        "oversized HMAC key must be rejected before MAC computation"
+    );
+}
+
+#[test]
+fn check_hmac_input_len_accepts_len_at_limit() {
+    hmac::check_hmac_input_len(b"ab", b"cd", 2).unwrap();
+}
+
+#[test]
+fn check_hmac_input_len_accepts_empty() {
+    hmac::check_hmac_input_len(b"", b"", 16).unwrap();
+}
+
+#[test]
+fn run_rejects_oversized_hmac_message() {
+    let start = std::time::Instant::now();
+    let err = hmac::run(hmac::HmacAction::Sha256 {
+        input: "a".repeat(hmac::MAX_HMAC_BYTES + 1),
+        key: "k".into(),
+    })
+    .unwrap_err()
+    .to_string();
+    assert!(err.contains("Denial of Service"), "unexpected error: {err}");
+    assert!(
+        start.elapsed().as_millis() < 100,
+        "oversized HMAC CLI input must be rejected before MAC computation"
+    );
+}

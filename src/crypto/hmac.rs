@@ -73,6 +73,17 @@ pub enum HmacAction {
 }
 
 pub fn run(action: HmacAction) -> Result<()> {
+    let (key, input) = match &action {
+        HmacAction::Md5 { input, key }
+        | HmacAction::Sha1 { input, key }
+        | HmacAction::Sha256 { input, key }
+        | HmacAction::Sha512 { input, key }
+        | HmacAction::VerifyMd5 { input, key, .. }
+        | HmacAction::VerifySha1 { input, key, .. }
+        | HmacAction::VerifySha256 { input, key, .. }
+        | HmacAction::VerifySha512 { input, key, .. } => (key.as_bytes(), input.as_bytes()),
+    };
+    check_hmac_input_len(key, input, MAX_HMAC_BYTES)?;
     match action {
         HmacAction::Md5 { input, key } => {
             println!("{}", hmac_md5(key.as_bytes(), input.as_bytes()));
@@ -178,7 +189,19 @@ fn ct_eq(a: &[u8], b: &[u8]) -> bool {
     diff == 0
 }
 
+pub const MAX_HMAC_BYTES: usize = 16 * 1024 * 1024;
+
 pub const MAX_HMAC_TAG_HEX_LEN: usize = 128;
+
+pub fn check_hmac_input_len(key: &[u8], message: &[u8], max_bytes: usize) -> Result<()> {
+    let max_bytes = max_bytes.min(MAX_HMAC_BYTES);
+    if key.len() > max_bytes || message.len() > max_bytes {
+        anyhow::bail!(
+            "Input exceeds maximum size of {max_bytes} bytes to prevent Denial of Service"
+        );
+    }
+    Ok(())
+}
 
 fn verify_with<D: Digest>(
     key: &[u8],
