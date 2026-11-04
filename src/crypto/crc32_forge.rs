@@ -26,7 +26,7 @@ pub enum Crc32ForgeAction {
 pub const MAX_CRC32_FORGE_BYTES: usize = 16 * 1024 * 1024;
 pub const MAX_CRC32_TARGET_HEX_LEN: usize = 8;
 
-pub fn decode_crc32_hex_with_limit(hex_str: &str, max_bytes: usize) -> Result<Vec<u8>> {
+fn bounded_crc32_hex(hex_str: &str, max_bytes: usize) -> Result<&str> {
     let hex_str = hex_str.trim();
     let max_bytes = max_bytes.min(MAX_CRC32_FORGE_BYTES);
     let max_chars = max_bytes.saturating_mul(2);
@@ -35,6 +35,49 @@ pub fn decode_crc32_hex_with_limit(hex_str: &str, max_bytes: usize) -> Result<Ve
             "Input exceeds maximum size of {max_bytes} bytes to prevent Denial of Service"
         );
     }
+    Ok(hex_str)
+}
+
+fn crc32_hex_error(hex_str: &str) -> anyhow::Error {
+    match hex::decode(hex_str) {
+        Err(err) => anyhow::Error::new(err).context("Invalid hex input"),
+        Ok(_) => anyhow::anyhow!("Invalid hex input"),
+    }
+}
+
+fn crc32_nibble(b: u8) -> Option<u8> {
+    match b {
+        b'0'..=b'9' => Some(b - b'0'),
+        b'a'..=b'f' => Some(b - b'a' + 10),
+        b'A'..=b'F' => Some(b - b'A' + 10),
+        _ => None,
+    }
+}
+
+fn crc32_update(crc: u32, byte: u8, table: &[u32; 256]) -> u32 {
+    let index = ((crc ^ u32::from(byte)) & 0xFF) as usize;
+    (crc >> 8) ^ table[index]
+}
+
+fn crc32_internal_from_hex(hex_str: &str, max_bytes: usize) -> Result<u32> {
+    let hex_str = bounded_crc32_hex(hex_str, max_bytes)?;
+    let bytes = hex_str.as_bytes();
+    if !bytes.len().is_multiple_of(2) {
+        return Err(crc32_hex_error(hex_str));
+    }
+    let table = &*CRC32_TABLE;
+    let mut crc = 0xFFFF_FFFFu32;
+    for &[hi_ch, lo_ch] in bytes.as_chunks::<2>().0 {
+        let (Some(hi), Some(lo)) = (crc32_nibble(hi_ch), crc32_nibble(lo_ch)) else {
+            return Err(crc32_hex_error(hex_str));
+        };
+        crc = crc32_update(crc, (hi << 4) | lo, table);
+    }
+    Ok(crc)
+}
+
+pub fn decode_crc32_hex_with_limit(hex_str: &str, max_bytes: usize) -> Result<Vec<u8>> {
+    let hex_str = bounded_crc32_hex(hex_str, max_bytes)?;
     hex::decode(hex_str).context("Invalid hex input")
 }
 
@@ -48,9 +91,9 @@ pub fn parse_crc32_target(target: &str) -> Result<u32> {
 pub fn run(action: Crc32ForgeAction) -> Result<()> {
     match action {
         Crc32ForgeAction::Forge { input, target } => {
-            let data = decode_crc32_hex_with_limit(&input, MAX_CRC32_FORGE_BYTES)?;
+            let crc_after_data = crc32_internal_from_hex(&input, MAX_CRC32_FORGE_BYTES)?;
             let target_crc = parse_crc32_target(&target)?;
-            let forge_bytes = forge_crc32(&data, target_crc);
+            let forge_bytes = forge_from_internal_state(crc_after_data, target_crc);
             println!("{}", hex::encode(forge_bytes));
         }
         Crc32ForgeAction::Verify {
@@ -58,12 +101,14 @@ pub fn run(action: Crc32ForgeAction) -> Result<()> {
             suffix,
             target,
         } => {
-            let data = decode_crc32_hex_with_limit(&input, MAX_CRC32_FORGE_BYTES)?;
+            let mut crc = crc32_internal_from_hex(&input, MAX_CRC32_FORGE_BYTES)?;
             let suffix_bytes = decode_crc32_hex_with_limit(&suffix, MAX_CRC32_FORGE_BYTES)?;
             let target_crc = parse_crc32_target(&target)?;
-            let mut combined = data;
-            combined.extend_from_slice(&suffix_bytes);
-            let actual = crc32_compute(&combined);
+            let table = &*CRC32_TABLE;
+            for &byte in &suffix_bytes {
+                crc = crc32_update(crc, byte, table);
+            }
+            let actual = crc ^ 0xFFFF_FFFF;
             if actual == target_crc {
                 println!("Match");
             } else {
@@ -107,10 +152,14 @@ pub fn crc32_compute(data: &[u8]) -> u32 {
     let table = &*CRC32_TABLE;
     let mut crc = 0xFFFF_FFFFu32;
     for &byte in data {
-        let index = ((crc ^ u32::from(byte)) & 0xFF) as usize;
-        crc = (crc >> 8) ^ table[index];
+        crc = crc32_update(crc, byte, table);
     }
     crc ^ 0xFFFF_FFFF
+}
+
+pub fn forge_crc32_hex(hex_str: &str, target_crc: u32) -> Result<[u8; 4]> {
+    let crc_after_data = crc32_internal_from_hex(hex_str, MAX_CRC32_FORGE_BYTES)?;
+    Ok(forge_from_internal_state(crc_after_data, target_crc))
 }
 
 // Uses reverse CRC32 computation. The CRC32 update is:
@@ -121,19 +170,9 @@ pub fn crc32_compute(data: &[u8]) -> u32 {
 // The key observation is that the unknown low bytes at each reverse level
 // only affect lower bit positions, so they decouple byte-by-byte when
 // we set the reversed result equal to the known current state.
-#[must_use]
-pub fn forge_crc32(data: &[u8], target_crc: u32) -> [u8; 4] {
+fn forge_from_internal_state(crc_after_data: u32, target_crc: u32) -> [u8; 4] {
     let table = &*CRC32_TABLE;
-
-    // Compute CRC32 internal state after processing data (before final XOR).
-    let mut crc_after_data = 0xFFFF_FFFFu32;
-    for &byte in data {
-        let index = ((crc_after_data ^ u32::from(byte)) & 0xFF) as usize;
-        crc_after_data = (crc_after_data >> 8) ^ table[index];
-    }
-
     let target_state = target_crc ^ 0xFFFF_FFFF;
-
     let inv = &*INV_TABLE;
 
     // Reverse 4 CRC steps from target_state.
@@ -165,6 +204,16 @@ pub fn forge_crc32(data: &[u8], target_crc: u32) -> [u8; 4] {
 
     // Recover the actual bytes: byte_i = L_i ^ idx_i
     [l0 ^ i0, l1 ^ i1, l2 ^ i2, l3 ^ i3]
+}
+
+#[must_use]
+pub fn forge_crc32(data: &[u8], target_crc: u32) -> [u8; 4] {
+    let table = &*CRC32_TABLE;
+    let mut crc_after_data = 0xFFFF_FFFFu32;
+    for &byte in data {
+        crc_after_data = crc32_update(crc_after_data, byte, table);
+    }
+    forge_from_internal_state(crc_after_data, target_crc)
 }
 
 #[cfg(test)]
