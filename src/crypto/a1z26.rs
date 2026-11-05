@@ -15,6 +15,17 @@ pub enum A1z26Action {
     },
 }
 
+pub const MAX_A1Z26_DIGITS: usize = 2;
+
+pub fn check_a1z26_digits(digits: &str) -> Result<()> {
+    if digits.len() > MAX_A1Z26_DIGITS {
+        anyhow::bail!(
+            "A1Z26 number exceeds maximum of {MAX_A1Z26_DIGITS} digits to prevent Denial of Service"
+        );
+    }
+    Ok(())
+}
+
 pub fn run(action: A1z26Action) -> Result<()> {
     match action {
         A1z26Action::Encode { input } => {
@@ -59,6 +70,7 @@ pub fn encode(input: &str) -> String {
 }
 
 fn parse_a1z26_number(s: &str) -> Result<char> {
+    check_a1z26_digits(s)?;
     let n: u8 = s.parse().context("Failed to parse number in A1Z26 input")?;
     if !(1..=26).contains(&n) {
         anyhow::bail!("Number {n} is out of range (1-26)");
@@ -78,6 +90,7 @@ pub fn decode(input: &str) -> Result<String> {
     for c in input.chars() {
         if c.is_ascii_digit() {
             current_number.push(c);
+            check_a1z26_digits(&current_number)?;
         } else if c == '-' || c == ' ' || c == ',' {
             if !current_number.is_empty() {
                 result.push(parse_a1z26_number(&current_number)?);

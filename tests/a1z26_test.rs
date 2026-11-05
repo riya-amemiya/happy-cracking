@@ -1,4 +1,4 @@
-use happy_cracking::crypto::a1z26;
+use happy_cracking::crypto::a1z26::{self, A1z26Action, MAX_A1Z26_DIGITS};
 
 #[test]
 fn encode_empty_string() {
@@ -78,4 +78,56 @@ fn roundtrip_flag() {
     assert_eq!(encoded, "6-12-1-7");
     let decoded = a1z26::decode(&encoded).unwrap();
     assert_eq!(decoded, original);
+}
+
+#[test]
+fn decode_rejects_oversized_digit_run() {
+    let start = std::time::Instant::now();
+    let too_long = "9".repeat(MAX_A1Z26_DIGITS + 1);
+    let err = a1z26::decode(&too_long).unwrap_err().to_string();
+    assert!(
+        err.contains(&MAX_A1Z26_DIGITS.to_string()),
+        "unexpected error: {err}"
+    );
+    assert!(
+        start.elapsed().as_millis() < 100,
+        "oversized a1z26 digit run must be rejected before integer parse"
+    );
+}
+
+#[test]
+fn decode_rejects_leading_zero_padding_beyond_digit_cap() {
+    let start = std::time::Instant::now();
+    let padded = format!("{}26", "0".repeat(64 * 1024));
+    let err = a1z26::decode(&padded).unwrap_err().to_string();
+    assert!(
+        err.contains(&MAX_A1Z26_DIGITS.to_string()),
+        "unexpected error: {err}"
+    );
+    assert!(
+        start.elapsed().as_millis() < 100,
+        "padded a1z26 digit run must be rejected before integer parse"
+    );
+}
+
+#[test]
+fn decode_accepts_two_digit_values() {
+    assert_eq!(a1z26::decode("26").unwrap(), "Z");
+    assert_eq!(a1z26::decode("01").unwrap(), "A");
+}
+
+#[test]
+fn run_rejects_oversized_decode_input() {
+    let err = a1z26::run(A1z26Action::Decode {
+        input: "9".repeat(MAX_A1Z26_DIGITS + 1),
+    })
+    .unwrap_err()
+    .to_string();
+    assert!(err.contains(&MAX_A1Z26_DIGITS.to_string()));
+}
+
+#[test]
+fn check_a1z26_digits_accepts_limit() {
+    a1z26::check_a1z26_digits(&"9".repeat(MAX_A1Z26_DIGITS)).unwrap();
+    a1z26::check_a1z26_digits("").unwrap();
 }
