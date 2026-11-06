@@ -29,6 +29,15 @@ fn test_ecb_decrypt_known_vector() {
 }
 
 #[test]
+fn test_ecb_uppercase_hex_matches_lowercase() {
+    let key = "2B7E151628AED2A6ABF7158809CF4F3C";
+    let plaintext = "6BC1BEE22E409F96E93D7E117393172A";
+    let expected = "3ad77bb40d7a3660a89ecaf32466ef97";
+    let result = aes_cipher::ecb_encrypt(plaintext, key).unwrap();
+    assert_eq!(result, expected);
+}
+
+#[test]
 fn test_ecb_multi_block() {
     let key = "00112233445566778899aabbccddeeff";
     let plaintext = "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff";
