@@ -76,8 +76,20 @@ pub fn run(action: AesCipherAction) -> Result<()> {
 
 pub const MAX_AES_BYTES: usize = 16 * 1024 * 1024;
 const AES128_KEY_BYTES: usize = 16;
+const AES_BLOCK_BYTES: usize = 16;
+const AES_BLOCK_HEX_CHARS: usize = 32;
+const HEX_OUT: &[u8; 16] = b"0123456789abcdef";
 
-pub fn decode_aes_hex_with_limit(hex_str: &str, max_bytes: usize) -> Result<Vec<u8>> {
+fn aes_hex_nibble(b: u8) -> Option<u8> {
+    match b {
+        b'0'..=b'9' => Some(b - b'0'),
+        b'a'..=b'f' => Some(b - b'a' + 10),
+        b'A'..=b'F' => Some(b - b'A' + 10),
+        _ => None,
+    }
+}
+
+fn bounded_aes_hex(hex_str: &str, max_bytes: usize) -> Result<&str> {
     let hex_str = hex_str.trim();
     let max_bytes = max_bytes.min(MAX_AES_BYTES);
     let max_chars = max_bytes.saturating_mul(2);
@@ -86,7 +98,86 @@ pub fn decode_aes_hex_with_limit(hex_str: &str, max_bytes: usize) -> Result<Vec<
             "Input exceeds maximum size of {max_bytes} bytes to prevent Denial of Service"
         );
     }
+    Ok(hex_str)
+}
+
+fn invalid_aes_hex<T>(hex_str: &str) -> Result<T> {
+    match hex::decode(hex_str) {
+        Err(err) => Err(anyhow::Error::new(err).context("Failed to decode hex input")),
+        Ok(_) => Err(anyhow::anyhow!("Failed to decode hex input")),
+    }
+}
+
+pub fn decode_aes_hex_with_limit(hex_str: &str, max_bytes: usize) -> Result<Vec<u8>> {
+    let hex_str = bounded_aes_hex(hex_str, max_bytes)?;
     hex::decode(hex_str).context("Failed to decode hex input")
+}
+
+fn require_aes_block_hex(hex_input: &str) -> Result<&str> {
+    let hex_str = bounded_aes_hex(hex_input, MAX_AES_BYTES)?;
+    if hex_str.is_empty() {
+        anyhow::bail!("Input must not be empty");
+    }
+    let bytes = hex_str.as_bytes();
+    let (pairs, rest) = bytes.as_chunks::<2>();
+    if !rest.is_empty() {
+        return invalid_aes_hex(hex_str);
+    }
+    if !pairs.len().is_multiple_of(AES_BLOCK_BYTES) {
+        anyhow::bail!(
+            "Input length must be a multiple of 16 bytes, got {} bytes",
+            pairs.len()
+        );
+    }
+    Ok(hex_str)
+}
+
+fn read_aes_block(src: &[u8]) -> Option<[u8; AES_BLOCK_BYTES]> {
+    let mut block = [0u8; AES_BLOCK_BYTES];
+    for (i, slot) in block.iter_mut().enumerate() {
+        let hi = aes_hex_nibble(src[i * 2])?;
+        let lo = aes_hex_nibble(src[i * 2 + 1])?;
+        *slot = (hi << 4) | lo;
+    }
+    Some(block)
+}
+
+fn write_aes_hex(dst: &mut [u8], block: &[u8]) {
+    for (i, &b) in block.iter().enumerate() {
+        dst[i * 2] = HEX_OUT[(b >> 4) as usize];
+        dst[i * 2 + 1] = HEX_OUT[(b & 0x0f) as usize];
+    }
+}
+
+fn hex_ascii_string(bytes: Vec<u8>) -> String {
+    String::from_utf8(bytes).expect("AES hex output is ASCII")
+}
+
+fn array_bytes(block: &Array<u8, <Aes128 as KeySizeUser>::KeySize>) -> [u8; AES_BLOCK_BYTES] {
+    let mut out = [0u8; AES_BLOCK_BYTES];
+    out.copy_from_slice(block);
+    out
+}
+
+fn crypt_aes_blocks(
+    hex_input: &str,
+    mut transform: impl FnMut([u8; AES_BLOCK_BYTES]) -> [u8; AES_BLOCK_BYTES],
+) -> Result<String> {
+    let hex_str = require_aes_block_hex(hex_input)?;
+    let bytes = hex_str.as_bytes();
+    let mut out = vec![0u8; bytes.len()];
+    for (src, dst) in bytes
+        .as_chunks::<AES_BLOCK_HEX_CHARS>()
+        .0
+        .iter()
+        .zip(out.as_chunks_mut::<AES_BLOCK_HEX_CHARS>().0.iter_mut())
+    {
+        let Some(block) = read_aes_block(src) else {
+            return invalid_aes_hex(hex_str);
+        };
+        write_aes_hex(dst, &transform(block));
+    }
+    Ok(hex_ascii_string(out))
 }
 
 fn parse_key(hex_key: &str) -> Result<Array<u8, <Aes128 as KeySizeUser>::KeySize>> {
@@ -99,98 +190,68 @@ fn parse_key(hex_key: &str) -> Result<Array<u8, <Aes128 as KeySizeUser>::KeySize
     })
 }
 
-fn parse_blocks(hex_input: &str) -> Result<Vec<u8>> {
-    let bytes = decode_aes_hex_with_limit(hex_input, MAX_AES_BYTES)?;
-    if bytes.is_empty() {
-        anyhow::bail!("Input must not be empty");
-    }
-    if bytes.len() % 16 != 0 {
-        anyhow::bail!(
-            "Input length must be a multiple of 16 bytes, got {} bytes",
-            bytes.len()
-        );
-    }
-    Ok(bytes)
-}
-
-fn parse_iv(hex_iv: &str) -> Result<[u8; 16]> {
+fn parse_iv(hex_iv: &str) -> Result<[u8; AES_BLOCK_BYTES]> {
     let iv_bytes = decode_aes_hex_with_limit(hex_iv, AES128_KEY_BYTES)?;
-    if iv_bytes.len() != 16 {
+    if iv_bytes.len() != AES_BLOCK_BYTES {
         anyhow::bail!(
             "IV must be exactly 16 bytes (32 hex chars), got {} bytes",
             iv_bytes.len()
         );
     }
-    let mut iv = [0u8; 16];
+    let mut iv = [0u8; AES_BLOCK_BYTES];
     iv.copy_from_slice(&iv_bytes);
     Ok(iv)
 }
 
 pub fn ecb_encrypt(hex_input: &str, hex_key: &str) -> Result<String> {
     let key = parse_key(hex_key)?;
-    let plaintext = parse_blocks(hex_input)?;
     let cipher = Aes128::new(&key);
-
-    let mut output = Vec::with_capacity(plaintext.len());
-    for block in plaintext.chunks(16) {
-        let mut block_array = Array::try_from(block).context("AES block must be 16 bytes")?;
+    crypt_aes_blocks(hex_input, |block| {
+        let mut block_array = Array::from(block);
         cipher.encrypt_block(&mut block_array);
-        output.extend_from_slice(&block_array);
-    }
-    Ok(hex::encode(output))
+        array_bytes(&block_array)
+    })
 }
 
 pub fn ecb_decrypt(hex_input: &str, hex_key: &str) -> Result<String> {
     let key = parse_key(hex_key)?;
-    let ciphertext = parse_blocks(hex_input)?;
     let cipher = Aes128::new(&key);
-
-    let mut output = Vec::with_capacity(ciphertext.len());
-    for block in ciphertext.chunks(16) {
-        let mut block_array = Array::try_from(block).context("AES block must be 16 bytes")?;
+    crypt_aes_blocks(hex_input, |block| {
+        let mut block_array = Array::from(block);
         cipher.decrypt_block(&mut block_array);
-        output.extend_from_slice(&block_array);
-    }
-    Ok(hex::encode(output))
+        array_bytes(&block_array)
+    })
 }
 
 pub fn cbc_encrypt(hex_input: &str, hex_key: &str, hex_iv: &str) -> Result<String> {
     let key = parse_key(hex_key)?;
-    let plaintext = parse_blocks(hex_input)?;
     let mut prev = parse_iv(hex_iv)?;
     let cipher = Aes128::new(&key);
-
-    let mut output = Vec::with_capacity(plaintext.len());
-    for block in plaintext.chunks(16) {
-        let mut xored = [0u8; 16];
-        for i in 0..16 {
-            xored[i] = block[i] ^ prev[i];
+    crypt_aes_blocks(hex_input, |block| {
+        let mut xored = [0u8; AES_BLOCK_BYTES];
+        for (slot, (b, p)) in xored.iter_mut().zip(block.iter().zip(prev.iter())) {
+            *slot = b ^ p;
         }
         let mut block_array = Array::from(xored);
         cipher.encrypt_block(&mut block_array);
         prev.copy_from_slice(&block_array);
-        output.extend_from_slice(&block_array);
-    }
-    Ok(hex::encode(output))
+        array_bytes(&block_array)
+    })
 }
 
 pub fn cbc_decrypt(hex_input: &str, hex_key: &str, hex_iv: &str) -> Result<String> {
     let key = parse_key(hex_key)?;
-    let ciphertext = parse_blocks(hex_input)?;
     let mut prev = parse_iv(hex_iv)?;
     let cipher = Aes128::new(&key);
-
-    let mut output = Vec::with_capacity(ciphertext.len());
-    for block in ciphertext.chunks(16) {
-        let mut block_array = Array::try_from(block).context("AES block must be 16 bytes")?;
+    crypt_aes_blocks(hex_input, |block| {
+        let mut block_array = Array::from(block);
         cipher.decrypt_block(&mut block_array);
-        for i in 0..16 {
-            block_array[i] ^= prev[i];
+        for (slot, p) in block_array.iter_mut().zip(prev.iter()) {
+            *slot ^= *p;
         }
-        prev.copy_from_slice(block);
-        output.extend_from_slice(&block_array);
-    }
-    Ok(hex::encode(output))
+        prev = block;
+        array_bytes(&block_array)
+    })
 }
 
 pub fn ecb_detect(hex_input: &str) -> Result<(bool, usize)> {
