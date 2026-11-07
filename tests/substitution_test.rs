@@ -1,4 +1,4 @@
-use happy_cracking::crypto::substitution;
+use happy_cracking::crypto::substitution::{self, MAX_SOLVE_BYTES, SubstitutionAction};
 
 #[test]
 fn test_encode_atbash_alphabet() {
@@ -103,4 +103,58 @@ fn test_flag_format() {
     let encoded = substitution::encode("flag{substitution_cipher}", alphabet).unwrap();
     let decoded = substitution::decode(&encoded, alphabet).unwrap();
     assert_eq!(decoded, "flag{substitution_cipher}");
+}
+
+#[test]
+fn check_solve_input_len_rejects_oversized() {
+    let start = std::time::Instant::now();
+    let err = substitution::check_solve_input_len("abcd", 2).unwrap_err();
+    assert!(err.to_string().contains("Denial of Service"));
+    assert!(
+        start.elapsed().as_millis() < 100,
+        "oversized substitution solve input must be rejected before hill-climbing"
+    );
+}
+
+#[test]
+fn check_solve_input_len_accepts_len_at_limit() {
+    substitution::check_solve_input_len("ab", 2).unwrap();
+}
+
+#[test]
+fn check_solve_input_len_accepts_empty() {
+    substitution::check_solve_input_len("", 16).unwrap();
+}
+
+#[test]
+fn run_rejects_oversized_solve_input() {
+    let start = std::time::Instant::now();
+    let err = substitution::run(SubstitutionAction::Solve {
+        input: "A".repeat(MAX_SOLVE_BYTES + 1),
+        iterations: 1,
+    })
+    .unwrap_err()
+    .to_string();
+    assert!(err.contains("Denial of Service"), "unexpected error: {err}");
+    assert!(
+        start.elapsed().as_millis() < 100,
+        "oversized substitution solve CLI input must be rejected before hill-climbing"
+    );
+}
+
+#[test]
+fn run_solves_under_limit() {
+    substitution::run(SubstitutionAction::Solve {
+        input: "KHOOR".into(),
+        iterations: 10,
+    })
+    .unwrap();
+}
+
+#[test]
+fn library_solve_stays_unbounded() {
+    let input = "A".repeat(MAX_SOLVE_BYTES + 1);
+    let (key, text, _) = substitution::solve(&input, 1).unwrap();
+    assert_eq!(key.len(), 26);
+    assert_eq!(text.len(), MAX_SOLVE_BYTES + 1);
 }
