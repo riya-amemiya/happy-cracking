@@ -52,6 +52,18 @@ pub struct SolveCandidate {
     pub is_flag: bool,
 }
 
+pub const MAX_SOLVE_BYTES: usize = 64 * 1024;
+
+pub fn check_solve_input_len(input: &str, max_bytes: usize) -> Result<()> {
+    let max_bytes = max_bytes.min(MAX_SOLVE_BYTES);
+    if input.len() > max_bytes {
+        anyhow::bail!(
+            "Input exceeds maximum size of {max_bytes} bytes to prevent Denial of Service"
+        );
+    }
+    Ok(())
+}
+
 pub fn run(action: SolveAction) -> Result<()> {
     match action {
         SolveAction::Run {
@@ -62,6 +74,7 @@ pub fn run(action: SolveAction) -> Result<()> {
             aggressive,
             max_depth,
         } => {
+            check_solve_input_len(&input, MAX_SOLVE_BYTES)?;
             substitution::check_solve_iterations(substitution_iters)?;
             let results = solve(
                 &input,

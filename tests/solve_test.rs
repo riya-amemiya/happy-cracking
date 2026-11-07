@@ -101,3 +101,57 @@ fn solve_run_rejects_excessive_substitution_iters() {
         start.elapsed()
     );
 }
+
+#[test]
+fn check_solve_input_len_rejects_oversized() {
+    let start = std::time::Instant::now();
+    let err = solve::check_solve_input_len("abcd", 2).unwrap_err();
+    assert!(err.to_string().contains("Denial of Service"));
+    assert!(
+        start.elapsed().as_millis() < 100,
+        "oversized solve input must be rejected before cipher trials"
+    );
+}
+
+#[test]
+fn check_solve_input_len_accepts_len_at_limit() {
+    solve::check_solve_input_len("ab", 2).unwrap();
+}
+
+#[test]
+fn check_solve_input_len_accepts_empty() {
+    solve::check_solve_input_len("", 16).unwrap();
+}
+
+#[test]
+fn run_rejects_oversized_solve_input() {
+    let start = std::time::Instant::now();
+    let err = solve::run(SolveAction::Run {
+        input: "a".repeat(solve::MAX_SOLVE_BYTES + 1),
+        top: 5,
+        max_rails: 3,
+        substitution_iters: 0,
+        aggressive: false,
+        max_depth: 2,
+    })
+    .unwrap_err()
+    .to_string();
+    assert!(err.contains("Denial of Service"), "unexpected error: {err}");
+    assert!(
+        start.elapsed().as_millis() < 100,
+        "oversized solve CLI input must be rejected before cipher trials"
+    );
+}
+
+#[test]
+fn run_solves_under_limit() {
+    solve::run(SolveAction::Run {
+        input: "Khoor".into(),
+        top: 5,
+        max_rails: 3,
+        substitution_iters: 0,
+        aggressive: false,
+        max_depth: 2,
+    })
+    .unwrap();
+}
