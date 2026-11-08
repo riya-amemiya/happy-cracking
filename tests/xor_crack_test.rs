@@ -1,5 +1,6 @@
 use happy_cracking::crypto::xor::{
-    self, XorAction, best_single_byte_key, crack_repeating_key, crib_drag, english_score, xor_bytes,
+    self, XorAction, best_single_byte_key, crack_repeating_key, crib_drag, crib_drag_with_limit,
+    english_score, xor_bytes,
 };
 
 fn legacy_english_score(data: &[u8]) -> f64 {
@@ -160,4 +161,100 @@ fn crib_drag_finds_flag_offset() {
         "expected crib at offset 7, hits: {:?}",
         hits.iter().map(|h| h.offset).collect::<Vec<_>>()
     );
+}
+
+#[test]
+fn crib_drag_with_limit_stops_after_max_hits() {
+    let ct = vec![0x20u8; 16];
+    let hits = crib_drag_with_limit(&ct, b" ", 3);
+    assert_eq!(hits.len(), 3);
+    assert_eq!(
+        hits.iter().map(|h| h.offset).collect::<Vec<_>>(),
+        vec![0, 1, 2]
+    );
+}
+
+#[test]
+fn check_crib_len_rejects_oversized() {
+    let start = std::time::Instant::now();
+    let err = xor::check_crib_len(&"a".repeat(xor::MAX_CRIB_LEN + 1)).unwrap_err();
+    assert!(err.to_string().contains("Denial of Service"));
+    assert!(
+        start.elapsed().as_millis() < 100,
+        "oversized crib must be rejected before crib-drag"
+    );
+}
+
+#[test]
+fn check_crib_len_accepts_len_at_limit() {
+    xor::check_crib_len(&"a".repeat(xor::MAX_CRIB_LEN)).unwrap();
+}
+
+#[test]
+fn check_crib_len_accepts_empty() {
+    xor::check_crib_len("").unwrap();
+}
+
+#[test]
+fn check_crib_hit_limit_rejects_oversized() {
+    let err = xor::check_crib_hit_limit(xor::MAX_CRIB_HITS + 1).unwrap_err();
+    assert!(err.to_string().contains("Denial of Service"));
+}
+
+#[test]
+fn check_crib_hit_limit_accepts_at_limit() {
+    xor::check_crib_hit_limit(xor::MAX_CRIB_HITS).unwrap();
+    xor::check_crib_hit_limit(0).unwrap();
+}
+
+#[test]
+fn crib_run_rejects_oversized_crib() {
+    let start = std::time::Instant::now();
+    let err = xor::run(XorAction::Crib {
+        input: "00".into(),
+        crib: "a".repeat(xor::MAX_CRIB_LEN + 1),
+        limit: 20,
+    })
+    .unwrap_err();
+    assert!(err.to_string().contains("Denial of Service"));
+    assert!(
+        start.elapsed().as_millis() < 100,
+        "oversized crib must be rejected before crib-drag"
+    );
+}
+
+#[test]
+fn crib_run_rejects_oversized_limit() {
+    let err = xor::run(XorAction::Crib {
+        input: hex::encode(b"HELLO WORLD"),
+        crib: "HE".into(),
+        limit: xor::MAX_CRIB_HITS + 1,
+    })
+    .unwrap_err();
+    assert!(err.to_string().contains("Denial of Service"));
+}
+
+#[test]
+fn crib_run_accepts_crib_at_length_cap() {
+    let crib = "a".repeat(xor::MAX_CRIB_LEN);
+    let ct = xor_bytes(crib.as_bytes(), b"K");
+    xor::run(XorAction::Crib {
+        input: hex::encode(&ct),
+        crib,
+        limit: 5,
+    })
+    .unwrap();
+}
+
+#[test]
+fn crib_run_recovers_flag_offset() {
+    let plain = b"prefix_flag{secret}_suffix";
+    let key = b"AB";
+    let ct = xor_bytes(plain, key);
+    xor::run(XorAction::Crib {
+        input: hex::encode(&ct),
+        crib: "flag{".into(),
+        limit: 20,
+    })
+    .unwrap();
 }
