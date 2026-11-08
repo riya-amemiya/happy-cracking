@@ -75,6 +75,28 @@ pub fn run(action: XorAction) -> Result<()> {
 
 pub const MAX_XOR_BYTES: usize = 16 * 1024 * 1024;
 
+pub const MAX_CRIB_LEN: usize = 256;
+
+pub const MAX_CRIB_HITS: usize = 10_000;
+
+pub fn check_crib_len(crib: &str) -> Result<()> {
+    if crib.len() > MAX_CRIB_LEN {
+        anyhow::bail!(
+            "Crib exceeds maximum length of {MAX_CRIB_LEN} bytes to prevent Denial of Service"
+        );
+    }
+    Ok(())
+}
+
+pub fn check_crib_hit_limit(limit: usize) -> Result<()> {
+    if limit > MAX_CRIB_HITS {
+        anyhow::bail!(
+            "Crib hit limit {limit} exceeds the maximum allowed of {MAX_CRIB_HITS} to prevent Denial of Service"
+        );
+    }
+    Ok(())
+}
+
 const HEX_OUT: &[u8; 16] = b"0123456789abcdef";
 
 fn xor_hex_nibble(b: u8) -> Option<u8> {
@@ -382,6 +404,8 @@ fn run_crack(input: &str, max_len: usize, top: usize, key_length: Option<usize>)
 }
 
 fn run_crib(input: &str, crib: &str, limit: usize) -> Result<()> {
+    check_crib_len(crib)?;
+    check_crib_hit_limit(limit)?;
     let input_bytes = decode_xor_hex_with_limit(input, MAX_XOR_BYTES)?;
     let crib_bytes = crib.as_bytes();
     if crib_bytes.is_empty() {
@@ -391,7 +415,7 @@ fn run_crib(input: &str, crib: &str, limit: usize) -> Result<()> {
         anyhow::bail!("Crib longer than ciphertext");
     }
 
-    let hits = crib_drag(&input_bytes, crib_bytes);
+    let hits = crib_drag_with_limit(&input_bytes, crib_bytes, limit.saturating_add(1));
     if hits.is_empty() {
         println!("No crib positions produced printable key fragments");
         return Ok(());
@@ -407,7 +431,7 @@ fn run_crib(input: &str, crib: &str, limit: usize) -> Result<()> {
         );
     }
     if hits.len() > limit {
-        println!("... {} more (raise --limit)", hits.len() - limit);
+        println!("... additional hits omitted (raise --limit)");
     }
     Ok(())
 }
@@ -585,7 +609,12 @@ pub fn crack_repeating_key(
 /// re-apply it (repeating if possible) to a local window for inspection.
 #[must_use]
 pub fn crib_drag(ciphertext: &[u8], crib: &[u8]) -> Vec<CribHit> {
-    if crib.is_empty() || crib.len() > ciphertext.len() {
+    crib_drag_with_limit(ciphertext, crib, usize::MAX)
+}
+
+#[must_use]
+pub fn crib_drag_with_limit(ciphertext: &[u8], crib: &[u8], max_hits: usize) -> Vec<CribHit> {
+    if crib.is_empty() || crib.len() > ciphertext.len() || max_hits == 0 {
         return Vec::new();
     }
 
@@ -631,6 +660,9 @@ pub fn crib_drag(ciphertext: &[u8], crib: &[u8]) -> Vec<CribHit> {
             key_fragment,
             plaintext_window: String::from_utf8_lossy(&plain_window).into_owned(),
         });
+        if hits.len() >= max_hits {
+            break;
+        }
     }
     hits
 }
