@@ -44,6 +44,7 @@ pub fn run(action: SubstitutionAction) -> Result<()> {
             println!("{}", decode(&input, &alphabet)?);
         }
         SubstitutionAction::Solve { input, iterations } => {
+            check_solve_input_len(&input, MAX_SOLVE_BYTES)?;
             let (key, plaintext, score) = solve(&input, iterations)?;
             println!("Best key: {key}");
             println!("Score: {score:.2}");
@@ -252,10 +253,18 @@ impl SimpleRng {
     }
 }
 
-/// Maximum hill-climbing iterations for substitution auto-solve.
-///
-/// SECURITY: `--iterations` / `--substitution-iters` are user-controlled loop
-/// bounds. Unbounded values let a caller hang the process (CPU exhaustion `DoS`).
+pub const MAX_SOLVE_BYTES: usize = 64 * 1024;
+
+pub fn check_solve_input_len(input: &str, max_bytes: usize) -> Result<()> {
+    let max_bytes = max_bytes.min(MAX_SOLVE_BYTES);
+    if input.len() > max_bytes {
+        anyhow::bail!(
+            "Input exceeds maximum size of {max_bytes} bytes to prevent Denial of Service"
+        );
+    }
+    Ok(())
+}
+
 pub const MAX_SOLVE_ITERATIONS: usize = 1_000_000;
 
 pub fn check_solve_iterations(iterations: usize) -> Result<()> {
