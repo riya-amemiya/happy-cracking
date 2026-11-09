@@ -11,6 +11,18 @@ fn test_compute_bytes() {
 }
 
 #[test]
+fn compute_bytes_matches_bytewise_across_remainders() {
+    for len in 0..=24 {
+        let data: Vec<u8> = (0..len).map(|i| (i * 31) as u8).collect();
+        assert_eq!(
+            crc32::compute_bytes(&data),
+            happy_cracking::crypto::crc32_forge::crc32_compute(&data),
+            "len={len}"
+        );
+    }
+}
+
+#[test]
 fn test_empty_string() {
     assert_eq!(crc32::compute(""), "00000000");
 }
