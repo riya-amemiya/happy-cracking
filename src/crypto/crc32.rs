@@ -61,10 +61,10 @@ pub fn normalize_crc32_checksum(checksum: &str) -> Result<String> {
     Ok(checksum.to_ascii_lowercase())
 }
 
-static CRC32_TABLE: LazyLock<[u32; 256]> = LazyLock::new(|| {
-    let mut table = [0u32; 256];
-    for i in 0..256u32 {
-        let mut crc = i;
+static CRC32_SLICE8: LazyLock<[[u32; 256]; 8]> = LazyLock::new(|| {
+    let mut tables = [[0u32; 256]; 8];
+    for (i, slot) in tables[0].iter_mut().enumerate() {
+        let mut crc = i as u32;
         for _ in 0..8 {
             if crc & 1 != 0 {
                 crc = (crc >> 1) ^ 0xEDB8_8320;
@@ -72,18 +72,47 @@ static CRC32_TABLE: LazyLock<[u32; 256]> = LazyLock::new(|| {
                 crc >>= 1;
             }
         }
-        table[i as usize] = crc;
+        *slot = crc;
     }
-    table
+    let t0 = tables[0];
+    for i in 0..256 {
+        let mut crc = t0[i];
+        for table in tables.iter_mut().skip(1) {
+            crc = (crc >> 8) ^ t0[(crc & 0xFF) as usize];
+            table[i] = crc;
+        }
+    }
+    tables
 });
 
 #[must_use]
 pub fn compute_bytes(data: &[u8]) -> u32 {
-    let table = &*CRC32_TABLE;
+    let tables = &*CRC32_SLICE8;
     let mut crc = 0xFFFF_FFFFu32;
-    for &byte in data {
-        let index = ((crc ^ u32::from(byte)) & 0xFF) as usize;
-        crc = (crc >> 8) ^ table[index];
+    let (chunks, rest) = data.as_chunks::<8>();
+    for chunk in chunks {
+        let [b0, b1, b2, b3, b4, b5, b6, b7] = *chunk;
+        let lo = crc ^ u32::from_le_bytes([b0, b1, b2, b3]);
+        let hi = u32::from_le_bytes([b4, b5, b6, b7]);
+        crc = tables[7][(lo & 0xFF) as usize]
+            ^ tables[6][((lo >> 8) & 0xFF) as usize]
+            ^ tables[5][((lo >> 16) & 0xFF) as usize]
+            ^ tables[4][(lo >> 24) as usize]
+            ^ tables[3][(hi & 0xFF) as usize]
+            ^ tables[2][((hi >> 8) & 0xFF) as usize]
+            ^ tables[1][((hi >> 16) & 0xFF) as usize]
+            ^ tables[0][(hi >> 24) as usize];
+    }
+    let (words, tail) = rest.as_chunks::<4>();
+    for word in words {
+        let v = crc ^ u32::from_le_bytes(*word);
+        crc = tables[3][(v & 0xFF) as usize]
+            ^ tables[2][((v >> 8) & 0xFF) as usize]
+            ^ tables[1][((v >> 16) & 0xFF) as usize]
+            ^ tables[0][(v >> 24) as usize];
+    }
+    for &byte in tail {
+        crc = (crc >> 8) ^ tables[0][((crc ^ u32::from(byte)) & 0xFF) as usize];
     }
     crc ^ 0xFFFF_FFFF
 }
