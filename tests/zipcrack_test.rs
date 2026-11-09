@@ -217,6 +217,35 @@ fn list_entries_reports_encrypted() {
     assert!(entries[0].encrypted);
 }
 
+fn make_encrypted_zip_files(raw: &str, files: &[(&str, &str)]) -> Vec<u8> {
+    let secret = String::new() + raw;
+    let mut buf = Cursor::new(Vec::new());
+    {
+        let mut writer = ZipWriter::new(&mut buf);
+        for (name, content) in files {
+            let options: FileOptions<'_, '_, ()> = FileOptions::default()
+                .compression_method(zip::CompressionMethod::Deflated)
+                .with_aes_encryption(AesMode::Aes256, &secret);
+            writer.start_file(*name, options).unwrap();
+            writer.write_all(content.as_bytes()).unwrap();
+        }
+        writer.finish().unwrap();
+    }
+    buf.into_inner()
+}
+
+#[test]
+fn list_entries_with_limit_rejects_too_many_members() {
+    let bytes = make_encrypted_zip_files("pw", &[("a.txt", "aa"), ("b.txt", "bb")]);
+    assert_eq!(
+        zipcrack::list_entries_with_limit(&bytes, 2).unwrap().len(),
+        2
+    );
+    let err = zipcrack::list_entries_with_limit(&bytes, 1).err().unwrap();
+    assert!(err.to_string().contains(&1.to_string()));
+    assert!(zipcrack::list_entries(&bytes).is_ok());
+}
+
 #[test]
 fn verify_password_streams_larger_member_without_failing() {
     // ~64 KiB is well under the 16 MiB cap; this exercises the sink path

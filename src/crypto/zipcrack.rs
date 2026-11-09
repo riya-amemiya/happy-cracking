@@ -15,6 +15,8 @@ pub const MAX_WORDLIST_BYTES: usize = 256 * 1024 * 1024;
 
 const MAX_VERIFY_UNCOMPRESSED: u64 = 16 * 1024 * 1024;
 
+pub const MAX_ZIP_ENTRIES: usize = 10_000;
+
 #[derive(Subcommand)]
 pub enum ZipcrackAction {
     #[command(about = "Dictionary attack against a password-protected zip")]
@@ -167,15 +169,30 @@ pub struct EntryInfo {
 
 #[must_use]
 pub fn verify_password(zip_bytes: &[u8], password: &str) -> bool {
-    verify_password_with_limit(zip_bytes, password, MAX_VERIFY_UNCOMPRESSED)
+    verify_password_with_limit(
+        zip_bytes,
+        password,
+        MAX_VERIFY_UNCOMPRESSED,
+        MAX_ZIP_ENTRIES,
+    )
 }
 
-fn verify_password_with_limit(zip_bytes: &[u8], password: &str, max_uncompressed: u64) -> bool {
+fn verify_password_with_limit(
+    zip_bytes: &[u8],
+    password: &str,
+    max_uncompressed: u64,
+    max_entries: usize,
+) -> bool {
     let Ok(mut archive) = zip::ZipArchive::new(Cursor::new(zip_bytes)) else {
         return false;
     };
 
+    if archive.len() > max_entries {
+        return false;
+    }
+
     let mut saw_encrypted = false;
+    let mut total_uncompressed = 0u64;
     for i in 0..archive.len() {
         let encrypted = match archive.by_index_raw(i) {
             Ok(entry) => entry.encrypted(),
@@ -192,7 +209,12 @@ fn verify_password_with_limit(zip_bytes: &[u8], password: &str, max_uncompressed
 
         let mut limited = entry.take(max_uncompressed.saturating_add(1));
         match io::copy(&mut limited, &mut io::sink()) {
-            Ok(n) if n <= max_uncompressed => {}
+            Ok(n) if n <= max_uncompressed => {
+                total_uncompressed = total_uncompressed.saturating_add(n);
+                if total_uncompressed > max_uncompressed {
+                    return false;
+                }
+            }
             _ => return false,
         }
     }
@@ -312,8 +334,16 @@ fn search_indexed(
 }
 
 pub fn list_entries(zip_bytes: &[u8]) -> Result<Vec<EntryInfo>> {
+    list_entries_with_limit(zip_bytes, MAX_ZIP_ENTRIES)
+}
+
+pub fn list_entries_with_limit(zip_bytes: &[u8], max_entries: usize) -> Result<Vec<EntryInfo>> {
     let mut archive =
         zip::ZipArchive::new(Cursor::new(zip_bytes)).context("Failed to open zip archive")?;
+
+    if archive.len() > max_entries {
+        anyhow::bail!("Zip exceeds maximum of {max_entries} entries to prevent Denial of Service");
+    }
 
     let mut entries = Vec::with_capacity(archive.len());
     for i in 0..archive.len() {
@@ -354,14 +384,20 @@ mod tests {
     use zip::write::{FileOptions, ZipWriter};
 
     fn make_encrypted_zip(password: &str, content: &[u8]) -> Vec<u8> {
+        make_encrypted_zip_files(password, &[("flag.txt", content)])
+    }
+
+    fn make_encrypted_zip_files(password: &str, files: &[(&str, &[u8])]) -> Vec<u8> {
         let mut buf = Cursor::new(Vec::new());
         {
             let mut writer = ZipWriter::new(&mut buf);
-            let options: FileOptions<'_, '_, ()> = FileOptions::default()
-                .compression_method(zip::CompressionMethod::Deflated)
-                .with_aes_encryption(AesMode::Aes256, password);
-            writer.start_file("flag.txt", options).unwrap();
-            writer.write_all(content).unwrap();
+            for (name, content) in files {
+                let options: FileOptions<'_, '_, ()> = FileOptions::default()
+                    .compression_method(zip::CompressionMethod::Deflated)
+                    .with_aes_encryption(AesMode::Aes256, password);
+                writer.start_file(*name, options).unwrap();
+                writer.write_all(content).unwrap();
+            }
             writer.finish().unwrap();
         }
         buf.into_inner()
@@ -379,12 +415,37 @@ mod tests {
         let content = b"flag{zip_cracked}";
         let bytes = make_encrypted_zip("hunter2", content);
         assert!(
-            verify_password_with_limit(&bytes, "hunter2", content.len() as u64),
+            verify_password_with_limit(&bytes, "hunter2", content.len() as u64, MAX_ZIP_ENTRIES),
             "cap equal to uncompressed size must still accept"
         );
         assert!(
-            !verify_password_with_limit(&bytes, "hunter2", 4),
+            !verify_password_with_limit(&bytes, "hunter2", 4, MAX_ZIP_ENTRIES),
             "cap below uncompressed size must reject to bound zip-bomb expansion"
         );
+    }
+
+    #[test]
+    fn verify_rejects_when_entry_count_exceeds_cap() {
+        let bytes = make_encrypted_zip_files(
+            "hunter2",
+            &[("a.txt", b"aa"), ("b.txt", b"bb"), ("c.txt", b"cc")],
+        );
+        assert!(verify_password_with_limit(&bytes, "hunter2", 16, 3));
+        assert!(!verify_password_with_limit(&bytes, "hunter2", 16, 2));
+    }
+
+    #[test]
+    fn verify_rejects_when_total_uncompressed_exceeds_cap() {
+        let bytes = make_encrypted_zip_files("hunter2", &[("a.txt", b"aaaa"), ("b.txt", b"bbbb")]);
+        assert!(verify_password_with_limit(&bytes, "hunter2", 8, 8));
+        assert!(!verify_password_with_limit(&bytes, "hunter2", 4, 8));
+    }
+
+    #[test]
+    fn list_entries_rejects_when_entry_count_exceeds_cap() {
+        let bytes = make_encrypted_zip_files("hunter2", &[("a.txt", b"aa"), ("b.txt", b"bb")]);
+        assert_eq!(list_entries_with_limit(&bytes, 2).unwrap().len(), 2);
+        let err = list_entries_with_limit(&bytes, 1).err().unwrap();
+        assert!(err.to_string().contains("entries"));
     }
 }
