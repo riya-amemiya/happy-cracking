@@ -47,7 +47,12 @@ pub fn run(action: StringsAction) -> Result<()> {
                         println!("{s}");
                     }
                 }
-                StringEncoding::Utf16le | StringEncoding::Both => {
+                StringEncoding::Utf16le => {
+                    for s in extract_utf16le_from_hex(&hex_str, min_len)? {
+                        println!("{s}");
+                    }
+                }
+                StringEncoding::Both => {
                     let data = decode_strings_hex_with_limit(&hex_str, MAX_STRINGS_BYTES)?;
                     print_extracted(&data, min_len, encoding)?;
                 }
@@ -168,6 +173,59 @@ pub fn extract_ascii_from_hex_with_limit(
                 results.push(std::mem::take(&mut current));
             } else {
                 current.clear();
+            }
+        }
+    }
+    if current.len() >= min_len {
+        results.push(current);
+    }
+    Ok(results)
+}
+
+pub fn extract_utf16le_from_hex(hex_str: &str, min_len: usize) -> Result<Vec<String>> {
+    extract_utf16le_from_hex_with_limit(hex_str, min_len, MAX_STRINGS_BYTES)
+}
+
+pub fn extract_utf16le_from_hex_with_limit(
+    hex_str: &str,
+    min_len: usize,
+    max_bytes: usize,
+) -> Result<Vec<String>> {
+    if min_len == 0 {
+        decode_strings_hex_with_limit(hex_str, max_bytes)?;
+        return extract_utf16le(&[], min_len);
+    }
+    let hex_str = bounded_strings_hex(hex_str, max_bytes)?;
+    let bytes = hex_str.as_bytes();
+    let (pairs, rest) = bytes.as_chunks::<2>();
+    if !rest.is_empty() {
+        return invalid_strings_hex(hex_str);
+    }
+
+    let mut results = Vec::new();
+    let mut current = String::new();
+    let mut prev: Option<u8> = None;
+    for &[hi_ch, lo_ch] in pairs {
+        let (Some(hi), Some(lo)) = (strings_hex_nibble(hi_ch), strings_hex_nibble(lo_ch)) else {
+            return invalid_strings_hex(hex_str);
+        };
+        let b = (hi << 4) | lo;
+        match prev {
+            None => prev = Some(b),
+            Some(lo_b) => {
+                if (0x20..=0x7E).contains(&lo_b) && b == 0x00 {
+                    current.push(char::from(lo_b));
+                    prev = None;
+                } else {
+                    if !current.is_empty() {
+                        if current.len() >= min_len {
+                            results.push(std::mem::take(&mut current));
+                        } else {
+                            current.clear();
+                        }
+                    }
+                    prev = Some(b);
+                }
             }
         }
     }

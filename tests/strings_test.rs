@@ -169,6 +169,66 @@ fn extract_run_reads_hex_under_limit() {
     strings::run(action).unwrap();
 }
 
+#[test]
+fn extract_utf16le_from_hex_matches_decode_then_extract() {
+    let mut data = vec![0xFF, 0xFE];
+    for &b in b"flag{utf16}" {
+        data.push(b);
+        data.push(0x00);
+    }
+    data.extend_from_slice(&[0x00, 0x80, 0x90]);
+    let hx = hex::encode(&data);
+    let from_hex = strings::extract_utf16le_from_hex(&hx, 4).unwrap();
+    let decoded = strings::decode_strings_hex_with_limit(&hx, strings::MAX_STRINGS_BYTES).unwrap();
+    let from_bytes = strings::extract_utf16le(&decoded, 4).unwrap();
+    assert_eq!(from_hex, from_bytes);
+    assert!(from_hex.iter().any(|s| s == "flag{utf16}"));
+}
+
+#[test]
+fn extract_utf16le_from_hex_finds_odd_offset_and_uppercase() {
+    let data = [
+        0x00, b'H', 0x00, b'e', 0x00, b'l', 0x00, b'l', 0x00, b'o', 0x00,
+    ];
+    let hx = hex::encode(data).to_ascii_uppercase();
+    let found = strings::extract_utf16le_from_hex(&hx, 4).unwrap();
+    assert_eq!(found, vec!["Hello".to_string()]);
+    assert!(strings::extract_utf16le_from_hex("", 4).unwrap().is_empty());
+}
+
+#[test]
+fn extract_utf16le_from_hex_rejects_invalid_and_odd_length() {
+    let err = strings::extract_utf16le_from_hex("zz", 4).unwrap_err();
+    assert!(err.to_string().contains("Failed to decode input as hex"));
+    let err = strings::extract_utf16le_from_hex("414", 4).unwrap_err();
+    assert!(err.to_string().contains("Failed to decode input as hex"));
+}
+
+#[test]
+fn extract_utf16le_from_hex_min_len_zero_validates_hex_first() {
+    let err = strings::extract_utf16le_from_hex("zz", 0).unwrap_err();
+    assert!(err.to_string().contains("Failed to decode input as hex"));
+    let err = strings::extract_utf16le_from_hex("48006500", 0).unwrap_err();
+    assert!(err.to_string().contains("min_len must be at least 1"));
+}
+
+#[test]
+fn extract_utf16le_from_hex_with_limit_rejects_oversized_dump() {
+    let err = strings::extract_utf16le_from_hex_with_limit("41004200", 4, 2).unwrap_err();
+    assert!(err.to_string().contains("Denial of Service"));
+}
+
+#[test]
+fn extract_run_reads_utf16le_hex_under_limit() {
+    let action = StringsAction::Extract {
+        input: Some("66006c00610067007b00750074006600310036007d00".to_string()),
+        file: None,
+        min_len: 4,
+        encoding: StringEncoding::Utf16le,
+    };
+    strings::run(action).unwrap();
+}
+
 #[cfg(unix)]
 #[test]
 fn read_strings_bytes_with_limit_bounds_device_without_eof() {
