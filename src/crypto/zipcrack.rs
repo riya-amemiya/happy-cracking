@@ -383,6 +383,14 @@ mod tests {
     use zip::AesMode;
     use zip::write::{FileOptions, ZipWriter};
 
+    fn random_password() -> String {
+        let charset: Vec<char> = ('a'..='z').chain('0'..='9').collect();
+        let mut rng = rand::rng();
+        let mut password = String::with_capacity(12);
+        wordgen::append_random(&mut password, &charset, 12, &mut rng);
+        password
+    }
+
     fn make_encrypted_zip(password: &str, content: &[u8]) -> Vec<u8> {
         make_encrypted_zip_files(password, &[("flag.txt", content)])
     }
@@ -405,45 +413,50 @@ mod tests {
 
     #[test]
     fn verify_accepts_correct_password_via_streaming_sink() {
-        let bytes = make_encrypted_zip("hunter2", b"flag{zip_cracked}");
-        assert!(verify_password(&bytes, "hunter2"));
-        assert!(!verify_password(&bytes, "wrongpass"));
+        let password = random_password();
+        let bytes = make_encrypted_zip(&password, b"flag{zip_cracked}");
+        assert!(verify_password(&bytes, &password));
+        assert!(!verify_password(&bytes, &format!("{password}x")));
     }
 
     #[test]
     fn verify_rejects_when_decompressed_member_exceeds_byte_cap() {
+        let password = random_password();
         let content = b"flag{zip_cracked}";
-        let bytes = make_encrypted_zip("hunter2", content);
+        let bytes = make_encrypted_zip(&password, content);
         assert!(
-            verify_password_with_limit(&bytes, "hunter2", content.len() as u64, MAX_ZIP_ENTRIES),
+            verify_password_with_limit(&bytes, &password, content.len() as u64, MAX_ZIP_ENTRIES),
             "cap equal to uncompressed size must still accept"
         );
         assert!(
-            !verify_password_with_limit(&bytes, "hunter2", 4, MAX_ZIP_ENTRIES),
+            !verify_password_with_limit(&bytes, &password, 4, MAX_ZIP_ENTRIES),
             "cap below uncompressed size must reject to bound zip-bomb expansion"
         );
     }
 
     #[test]
     fn verify_rejects_when_entry_count_exceeds_cap() {
+        let password = random_password();
         let bytes = make_encrypted_zip_files(
-            "hunter2",
+            &password,
             &[("a.txt", b"aa"), ("b.txt", b"bb"), ("c.txt", b"cc")],
         );
-        assert!(verify_password_with_limit(&bytes, "hunter2", 16, 3));
-        assert!(!verify_password_with_limit(&bytes, "hunter2", 16, 2));
+        assert!(verify_password_with_limit(&bytes, &password, 16, 3));
+        assert!(!verify_password_with_limit(&bytes, &password, 16, 2));
     }
 
     #[test]
     fn verify_rejects_when_total_uncompressed_exceeds_cap() {
-        let bytes = make_encrypted_zip_files("hunter2", &[("a.txt", b"aaaa"), ("b.txt", b"bbbb")]);
-        assert!(verify_password_with_limit(&bytes, "hunter2", 8, 8));
-        assert!(!verify_password_with_limit(&bytes, "hunter2", 4, 8));
+        let password = random_password();
+        let bytes = make_encrypted_zip_files(&password, &[("a.txt", b"aaaa"), ("b.txt", b"bbbb")]);
+        assert!(verify_password_with_limit(&bytes, &password, 8, 8));
+        assert!(!verify_password_with_limit(&bytes, &password, 4, 8));
     }
 
     #[test]
     fn list_entries_rejects_when_entry_count_exceeds_cap() {
-        let bytes = make_encrypted_zip_files("hunter2", &[("a.txt", b"aa"), ("b.txt", b"bb")]);
+        let password = random_password();
+        let bytes = make_encrypted_zip_files(&password, &[("a.txt", b"aa"), ("b.txt", b"bb")]);
         assert_eq!(list_entries_with_limit(&bytes, 2).unwrap().len(), 2);
         let err = list_entries_with_limit(&bytes, 1).err().unwrap();
         assert!(err.to_string().contains("entries"));
