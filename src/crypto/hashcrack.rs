@@ -25,6 +25,19 @@ pub const MAX_RULE_CANDIDATE_LEN: usize = 256;
 
 pub const MAX_WORDLIST_BYTES: usize = 256 * 1024 * 1024;
 
+pub const MAX_RULE_FILE_BYTES: usize = 16 * 1024 * 1024;
+
+pub const MAX_RULES: usize = 250_000;
+
+pub fn check_rules_len(count: usize) -> Result<()> {
+    if count > MAX_RULES {
+        anyhow::bail!(
+            "Rules file exceeds maximum of {MAX_RULES} rules to prevent Denial of Service"
+        );
+    }
+    Ok(())
+}
+
 #[derive(Clone, Copy, ValueEnum)]
 pub enum HashAlgo {
     Md5,
@@ -411,23 +424,27 @@ fn preset_charset(preset: CharsetPreset) -> &'static str {
     }
 }
 
-pub fn read_wordlist_buf_with_limit(path: &Path, max_bytes: usize) -> Result<String> {
+fn read_capped_text_file(path: &Path, max_bytes: usize, label: &str) -> Result<String> {
     let max_bytes = max_bytes.min(MAX_WORDLIST_BYTES);
     let file = std::fs::File::open(path)
-        .with_context(|| format!("Failed to read wordlist: {}", path.display()))?;
+        .with_context(|| format!("Failed to read {label}: {}", path.display()))?;
     let mut buf = Vec::new();
     file.take((max_bytes as u64).saturating_add(1))
         .read_to_end(&mut buf)
-        .with_context(|| format!("Failed to read wordlist: {}", path.display()))?;
+        .with_context(|| format!("Failed to read {label}: {}", path.display()))?;
     if buf.len() > max_bytes {
         anyhow::bail!(
-            "Wordlist exceeds maximum size of {max_bytes} bytes to prevent Denial of Service"
+            "{label} exceeds maximum size of {max_bytes} bytes to prevent Denial of Service"
         );
     }
     Ok(match String::from_utf8(buf) {
         Ok(s) => s,
         Err(e) => String::from_utf8_lossy(e.as_bytes()).into_owned(),
     })
+}
+
+pub fn read_wordlist_buf_with_limit(path: &Path, max_bytes: usize) -> Result<String> {
+    read_capped_text_file(path, max_bytes, "Wordlist")
 }
 
 fn read_wordlist_buf(path: &Path) -> Result<String> {
@@ -661,16 +678,21 @@ fn run_rule(
     algo: Option<HashAlgo>,
 ) -> Result<()> {
     let target = normalize_hash(hash);
-    let words_buf = read_wordlist_buf(wordlist)?;
-    let words = wordlist_lines(&words_buf);
     let rules_buf = match rules_path {
-        Some(path) => Some(read_wordlist_buf(path)?),
+        Some(path) => Some(read_capped_text_file(
+            path,
+            MAX_RULE_FILE_BYTES,
+            "Rules file",
+        )?),
         None => None,
     };
     let rules: Vec<&str> = match &rules_buf {
         Some(buf) => wordlist_lines(buf),
         None => BUILTIN_RULES.to_vec(),
     };
+    check_rules_len(rules.len())?;
+    let words_buf = read_wordlist_buf(wordlist)?;
+    let words = wordlist_lines(&words_buf);
     let algos = match algo {
         Some(a) => vec![a],
         None => algos_for_hex_len(target.len()),

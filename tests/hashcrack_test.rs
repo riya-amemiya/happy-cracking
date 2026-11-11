@@ -1,7 +1,8 @@
 use happy_cracking::crypto::hashcrack::{
-    HashAlgo, HashcrackAction, MAX_BRUTE_LEN, MAX_SALT_LEN, MAX_TARGET_HASH_HEX_LEN, SaltPosition,
-    brute_force, compute_hash, find_in_candidates, lookup_in_pairs, lookup_in_table_file,
-    lookup_in_table_file_with_limit, parse_table_line, read_wordlist_buf_with_limit, run,
+    HashAlgo, HashcrackAction, MAX_BRUTE_LEN, MAX_RULES, MAX_SALT_LEN, MAX_TARGET_HASH_HEX_LEN,
+    SaltPosition, brute_force, compute_hash, find_in_candidates, lookup_in_pairs,
+    lookup_in_table_file, lookup_in_table_file_with_limit, parse_table_line,
+    read_wordlist_buf_with_limit, run,
 };
 use std::fs;
 use std::path::PathBuf;
@@ -637,5 +638,72 @@ fn run_rejects_oversized_target_hash_hex() {
     assert!(
         start.elapsed().as_millis() < 100,
         "oversized target hash must be rejected before brute-force setup"
+    );
+}
+
+#[test]
+fn run_rule_recovers_with_identity_rule() {
+    let words = scratch_wordlist("rule_words");
+    let rules = scratch_wordlist("rule_ok");
+    fs::write(&words, "hello\n").unwrap();
+    fs::write(&rules, ":\n").unwrap();
+    run(HashcrackAction::Rule {
+        hash: "5d41402abc4b2a76b9719d911017c592".into(),
+        wordlist: words.clone(),
+        rules: Some(rules.clone()),
+        algo: Some(HashAlgo::Md5),
+    })
+    .unwrap();
+    let _ = fs::remove_file(&words);
+    let _ = fs::remove_file(&rules);
+}
+
+#[test]
+fn run_rule_rejects_too_many_rules_before_wordlist() {
+    let path = scratch_wordlist("too_many_rules");
+    let mut data = String::with_capacity((MAX_RULES + 1) * 2);
+    for _ in 0..=MAX_RULES {
+        data.push_str(":\n");
+    }
+    fs::write(&path, data).unwrap();
+    let start = std::time::Instant::now();
+    let err = run(HashcrackAction::Rule {
+        hash: "5d41402abc4b2a76b9719d911017c592".into(),
+        wordlist: PathBuf::from("/no/such/wordlist"),
+        rules: Some(path.clone()),
+        algo: Some(HashAlgo::Md5),
+    })
+    .unwrap_err()
+    .to_string();
+    let _ = fs::remove_file(&path);
+    assert!(
+        err.contains(&MAX_RULES.to_string()),
+        "unexpected error: {err}"
+    );
+    assert!(
+        start.elapsed().as_millis() < 2_000,
+        "oversized rules count must be rejected before the wordlist is opened"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn run_rule_rejects_oversized_rules_file_before_wordlist() {
+    let start = std::time::Instant::now();
+    let err = run(HashcrackAction::Rule {
+        hash: "5d41402abc4b2a76b9719d911017c592".into(),
+        wordlist: PathBuf::from("/no/such/wordlist"),
+        rules: Some(PathBuf::from("/dev/zero")),
+        algo: Some(HashAlgo::Md5),
+    })
+    .unwrap_err()
+    .to_string();
+    assert!(
+        err.contains("Rules file") && err.contains("Denial of Service"),
+        "unexpected error: {err}"
+    );
+    assert!(
+        start.elapsed().as_millis() < 2_000,
+        "oversized rules file must be rejected before the wordlist is opened"
     );
 }

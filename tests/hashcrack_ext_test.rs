@@ -1,6 +1,6 @@
 use happy_cracking::crypto::hashcrack::{
-    HashAlgo, MAX_BRUTE_LEN, MAX_RULE_CANDIDATE_LEN, apply_rule, builtin_rules, compute_hash,
-    expand_mask, hybrid_attack, mask_attack, rule_attack,
+    HashAlgo, MAX_BRUTE_LEN, MAX_RULE_CANDIDATE_LEN, MAX_RULES, apply_rule, builtin_rules,
+    check_rules_len, compute_hash, expand_mask, hybrid_attack, mask_attack, rule_attack,
 };
 
 #[test]
@@ -59,6 +59,27 @@ fn rule_attack_finds_capitalized_word() {
 #[test]
 fn builtin_rules_include_identity() {
     assert!(builtin_rules().contains(&":"));
+}
+
+#[test]
+fn check_rules_len_rejects_above_cap() {
+    let err = check_rules_len(MAX_RULES + 1).unwrap_err().to_string();
+    assert!(err.contains("Denial of Service"), "unexpected error: {err}");
+}
+
+#[test]
+fn check_rules_len_accepts_at_cap() {
+    check_rules_len(MAX_RULES).unwrap();
+    check_rules_len(0).unwrap();
+}
+
+#[test]
+fn library_rule_attack_stays_unbounded() {
+    let target = compute_hash(HashAlgo::Md5, "hello");
+    let words = ["hello"];
+    let rules = vec![":"; MAX_RULES + 1];
+    let found = rule_attack(&target, HashAlgo::Md5, &words, &rules);
+    assert_eq!(found.as_deref(), Some("hello"));
 }
 
 #[test]
