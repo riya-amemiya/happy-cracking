@@ -3,6 +3,8 @@ use std::sync::LazyLock;
 use anyhow::{Context, Result};
 use clap::Subcommand;
 
+use super::crc32;
+
 #[derive(Subcommand)]
 pub enum Crc32ForgeAction {
     #[command(about = "Compute 4 bytes to append to data so the result has a target CRC32")]
@@ -45,14 +47,21 @@ fn crc32_hex_error(hex_str: &str) -> anyhow::Error {
     }
 }
 
-fn crc32_nibble(b: u8) -> Option<u8> {
-    match b {
-        b'0'..=b'9' => Some(b - b'0'),
-        b'a'..=b'f' => Some(b - b'a' + 10),
-        b'A'..=b'F' => Some(b - b'A' + 10),
-        _ => None,
+const HEX_NIBBLE: [u8; 256] = {
+    let mut table = [0xFFu8; 256];
+    let mut i = 0u8;
+    while i < 10 {
+        table[(b'0' + i) as usize] = i;
+        i += 1;
     }
-}
+    i = 0;
+    while i < 6 {
+        table[(b'a' + i) as usize] = 10 + i;
+        table[(b'A' + i) as usize] = 10 + i;
+        i += 1;
+    }
+    table
+};
 
 fn crc32_update(crc: u32, byte: u8, table: &[u32; 256]) -> u32 {
     let index = ((crc ^ u32::from(byte)) & 0xFF) as usize;
@@ -65,13 +74,27 @@ fn crc32_internal_from_hex(hex_str: &str, max_bytes: usize) -> Result<u32> {
     if !bytes.len().is_multiple_of(2) {
         return Err(crc32_hex_error(hex_str));
     }
-    let table = &*CRC32_TABLE;
     let mut crc = 0xFFFF_FFFFu32;
-    for &[hi_ch, lo_ch] in bytes.as_chunks::<2>().0 {
-        let (Some(hi), Some(lo)) = (crc32_nibble(hi_ch), crc32_nibble(lo_ch)) else {
+    let (octets, rest) = bytes.as_chunks::<16>();
+    for hex_chunk in octets {
+        let mut decoded = [0u8; 8];
+        for (slot, &[hi_ch, lo_ch]) in decoded.iter_mut().zip(hex_chunk.as_chunks::<2>().0) {
+            let hi = HEX_NIBBLE[hi_ch as usize];
+            let lo = HEX_NIBBLE[lo_ch as usize];
+            if hi == 0xFF || lo == 0xFF {
+                return Err(crc32_hex_error(hex_str));
+            }
+            *slot = (hi << 4) | lo;
+        }
+        crc = crc32::fold_chunk8(crc, decoded);
+    }
+    for &[hi_ch, lo_ch] in rest.as_chunks::<2>().0 {
+        let hi = HEX_NIBBLE[hi_ch as usize];
+        let lo = HEX_NIBBLE[lo_ch as usize];
+        if hi == 0xFF || lo == 0xFF {
             return Err(crc32_hex_error(hex_str));
-        };
-        crc = crc32_update(crc, (hi << 4) | lo, table);
+        }
+        crc = crc32::fold_byte(crc, (hi << 4) | lo);
     }
     Ok(crc)
 }
@@ -149,12 +172,7 @@ static INV_TABLE: LazyLock<[u8; 256]> = LazyLock::new(|| {
 
 #[must_use]
 pub fn crc32_compute(data: &[u8]) -> u32 {
-    let table = &*CRC32_TABLE;
-    let mut crc = 0xFFFF_FFFFu32;
-    for &byte in data {
-        crc = crc32_update(crc, byte, table);
-    }
-    crc ^ 0xFFFF_FFFF
+    crc32::compute_bytes(data)
 }
 
 pub fn forge_crc32_hex(hex_str: &str, target_crc: u32) -> Result<[u8; 4]> {
@@ -208,11 +226,7 @@ fn forge_from_internal_state(crc_after_data: u32, target_crc: u32) -> [u8; 4] {
 
 #[must_use]
 pub fn forge_crc32(data: &[u8], target_crc: u32) -> [u8; 4] {
-    let table = &*CRC32_TABLE;
-    let mut crc_after_data = 0xFFFF_FFFFu32;
-    for &byte in data {
-        crc_after_data = crc32_update(crc_after_data, byte, table);
-    }
+    let crc_after_data = crc32::compute_bytes(data) ^ 0xFFFF_FFFF;
     forge_from_internal_state(crc_after_data, target_crc)
 }
 
