@@ -137,6 +137,29 @@ fn forge_crc32_hex_matches_byte_forge() {
 }
 
 #[test]
+fn forge_crc32_hex_matches_byte_forge_across_remainders() {
+    let target = 0xCAFE_BABE_u32;
+    for len in 0..=24 {
+        let data: Vec<u8> = (0..len).map(|i| (i * 31) as u8).collect();
+        let from_bytes = crc32_forge::forge_crc32(&data, target);
+        let from_hex = crc32_forge::forge_crc32_hex(&hex::encode(&data), target).unwrap();
+        assert_eq!(from_hex, from_bytes, "len={len}");
+        let mut combined = data.clone();
+        combined.extend_from_slice(&from_hex);
+        assert_eq!(crc32_forge::crc32_compute(&combined), target, "len={len}");
+    }
+}
+
+#[test]
+fn forge_crc32_hex_accepts_uppercase() {
+    let target = 0xCAFE_BABE_u32;
+    let lower = crc32_forge::forge_crc32_hex("deadbeef", target).unwrap();
+    let upper = crc32_forge::forge_crc32_hex("DEADBEEF", target).unwrap();
+    assert_eq!(lower, upper);
+    assert_eq!(lower, [0x7f, 0xd9, 0xa5, 0xc6]);
+}
+
+#[test]
 fn forge_crc32_hex_accepts_empty() {
     let suffix = crc32_forge::forge_crc32_hex("", 0x1234_5678).unwrap();
     assert_eq!(suffix, crc32_forge::forge_crc32(b"", 0x1234_5678));
