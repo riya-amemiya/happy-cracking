@@ -117,6 +117,13 @@ fn decode_accepts_two_digit_values() {
 }
 
 #[test]
+fn decode_passthrough_punctuation_and_unicode() {
+    assert_eq!(a1z26::decode("8!5").unwrap(), "H!E");
+    assert_eq!(a1z26::decode("8-あ-5").unwrap(), "HあE");
+    assert_eq!(a1z26::decode("6-12-1-7{20-5-19-20}").unwrap(), "FLAG{TEST}");
+}
+
+#[test]
 fn run_rejects_oversized_decode_input() {
     let err = a1z26::run(A1z26Action::Decode {
         input: "9".repeat(MAX_A1Z26_DIGITS + 1),
