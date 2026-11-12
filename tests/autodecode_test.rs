@@ -100,3 +100,46 @@ fn test_recursive_run_accepts_capped_depth() {
     })
     .unwrap();
 }
+
+#[test]
+fn recursive_node_cap_stops_at_one() {
+    let nodes = autodecode::decode_recursive_with_limit("SGVsbG8=", 5, 1);
+    assert_eq!(nodes, 1);
+}
+
+#[test]
+fn recursive_node_cap_clamps_to_max_tree_nodes() {
+    use std::time::Instant;
+
+    let start = Instant::now();
+    let nodes = autodecode::decode_recursive_with_limit(
+        "SGVsbG8=",
+        autodecode::MAX_DECODE_DEPTH,
+        usize::MAX,
+    );
+    assert!(nodes >= 1);
+    assert!(nodes <= autodecode::MAX_TREE_NODES);
+    assert!(
+        start.elapsed().as_millis() < 1000,
+        "recursive decode must honor the node cap instead of expanding without bound"
+    );
+}
+
+#[test]
+fn recursive_run_completes_with_node_cap() {
+    use std::time::Instant;
+
+    let start = Instant::now();
+    autodecode::run(autodecode::AutoDecodeAction::Decode {
+        input: "SGVsbG8=".to_string(),
+        recursive: true,
+        max_depth: autodecode::MAX_DECODE_DEPTH,
+        aggressive: false,
+        max_nodes: 32,
+    })
+    .unwrap();
+    assert!(
+        start.elapsed().as_millis() < 1000,
+        "recursive CLI path must finish under the node cap"
+    );
+}

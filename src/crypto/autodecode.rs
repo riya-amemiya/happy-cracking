@@ -4,15 +4,9 @@ use std::collections::{HashSet, VecDeque};
 
 use super::{base32, base58, base64, binary, hex, morse, url};
 
-const MAX_TREE_NODES: usize = 256;
+pub const MAX_TREE_NODES: usize = 256;
 const MAX_OUTPUT_CHARS: usize = 1_000_000;
 
-/// Hard cap on recursive auto-decode depth (`--max-depth`).
-///
-/// SECURITY: `decode_recursive` is stack recursion with no cycle detection.
-/// An unbounded `--max-depth` can exhaust the stack or CPU, especially when
-/// several encodings match the same layer (branching). Aggressive mode already
-/// clamps to this value; recursive mode must as well.
 pub const MAX_DECODE_DEPTH: usize = 12;
 
 pub fn check_decode_depth(max_depth: usize) -> Result<()> {
@@ -73,7 +67,7 @@ pub fn run(action: AutoDecodeAction) -> Result<()> {
                 }
             } else if recursive {
                 check_decode_depth(max_depth)?;
-                decode_recursive(&input, 0, max_depth);
+                let _ = decode_recursive_with_limit(&input, max_depth, MAX_TREE_NODES);
             } else {
                 let results = detect_and_decode(&input);
                 if results.is_empty() {
@@ -145,13 +139,38 @@ pub fn detect_and_decode(input: &str) -> Vec<(&'static str, String)> {
     results
 }
 
-fn decode_recursive(input: &str, depth: usize, max_depth: usize) {
+#[must_use]
+pub fn decode_recursive_with_limit(input: &str, max_depth: usize, max_nodes: usize) -> usize {
+    let max_depth = max_depth.min(MAX_DECODE_DEPTH);
+    let max_nodes = max_nodes.clamp(1, MAX_TREE_NODES);
+    let mut expanded = 0usize;
+    let mut seen = HashSet::new();
+    decode_recursive(input, 0, max_depth, max_nodes, &mut expanded, &mut seen);
+    expanded
+}
+
+fn decode_recursive(
+    input: &str,
+    depth: usize,
+    max_depth: usize,
+    max_nodes: usize,
+    expanded: &mut usize,
+    seen: &mut HashSet<String>,
+) {
     let indent = "  ".repeat(depth);
 
     if depth >= max_depth {
         println!("{indent}[Max depth reached]");
         return;
     }
+    if *expanded >= max_nodes {
+        println!("{indent}[Max nodes reached]");
+        return;
+    }
+    if !seen.insert(input.to_string()) {
+        return;
+    }
+    *expanded += 1;
 
     let results = detect_and_decode(input);
 
@@ -166,7 +185,7 @@ fn decode_recursive(input: &str, depth: usize, max_depth: usize) {
         println!("{indent}[{encoding}] {decoded}");
 
         if decoded != input && !decoded.is_empty() {
-            decode_recursive(&decoded, depth + 1, max_depth);
+            decode_recursive(&decoded, depth + 1, max_depth, max_nodes, expanded, seen);
         }
     }
 }
