@@ -1,4 +1,4 @@
-use anyhow::{Context, Result};
+use anyhow::Result;
 use clap::Subcommand;
 
 #[derive(Subcommand)]
@@ -69,9 +69,7 @@ pub fn encode(input: &str) -> String {
     out
 }
 
-fn parse_a1z26_number(s: &str) -> Result<char> {
-    check_a1z26_digits(s)?;
-    let n: u8 = s.parse().context("Failed to parse number in A1Z26 input")?;
+fn letter_from_a1z26(n: u8) -> Result<char> {
     if !(1..=26).contains(&n) {
         anyhow::bail!("Number {n} is out of range (1-26)");
     }
@@ -84,29 +82,50 @@ pub fn decode(input: &str) -> Result<String> {
         return Ok(String::new());
     }
 
-    let mut result = String::new();
-    let mut current_number = String::new();
+    let bytes = input.as_bytes();
+    let mut result = String::with_capacity(bytes.len());
+    let mut n = 0u8;
+    let mut digits = 0u8;
+    let mut i = 0usize;
 
-    for c in input.chars() {
-        if c.is_ascii_digit() {
-            current_number.push(c);
-            check_a1z26_digits(&current_number)?;
-        } else if c == '-' || c == ' ' || c == ',' {
-            if !current_number.is_empty() {
-                result.push(parse_a1z26_number(&current_number)?);
-                current_number.clear();
+    while i < bytes.len() {
+        let b = bytes[i];
+        if b.is_ascii() {
+            if b.is_ascii_digit() {
+                digits += 1;
+                if usize::from(digits) > MAX_A1Z26_DIGITS {
+                    anyhow::bail!(
+                        "A1Z26 number exceeds maximum of {MAX_A1Z26_DIGITS} digits to prevent Denial of Service"
+                    );
+                }
+                n = n * 10 + (b - b'0');
+            } else {
+                if digits != 0 {
+                    result.push(letter_from_a1z26(n)?);
+                    n = 0;
+                    digits = 0;
+                }
+                if b != b'-' && b != b' ' && b != b',' {
+                    result.push(b as char);
+                }
             }
+            i += 1;
         } else {
-            if !current_number.is_empty() {
-                result.push(parse_a1z26_number(&current_number)?);
-                current_number.clear();
+            if digits != 0 {
+                result.push(letter_from_a1z26(n)?);
+                n = 0;
+                digits = 0;
             }
-            result.push(c);
+            let Some(ch) = input[i..].chars().next() else {
+                break;
+            };
+            result.push(ch);
+            i += ch.len_utf8();
         }
     }
 
-    if !current_number.is_empty() {
-        result.push(parse_a1z26_number(&current_number)?);
+    if digits != 0 {
+        result.push(letter_from_a1z26(n)?);
     }
 
     Ok(result)
