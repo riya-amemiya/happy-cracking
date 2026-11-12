@@ -184,6 +184,41 @@ fn test_hastad_rejects_oversized_ciphertext() {
 }
 
 #[test]
+fn test_hastad_rejects_excessive_e() {
+    let err = rsa::hastad_broadcast(&[], &[], rsa::MAX_HASTAD_E + 1).unwrap_err();
+    assert!(err.to_string().contains("exceeds the maximum allowed"));
+}
+
+#[test]
+fn test_hastad_e_at_limit_is_allowed() {
+    rsa::check_hastad_e(1).unwrap();
+    rsa::check_hastad_e(rsa::MAX_HASTAD_E).unwrap();
+}
+
+#[test]
+fn test_hastad_cli_rejects_excessive_e() {
+    let err = rsa::run(rsa::RsaAction::Hastad {
+        e: (rsa::MAX_HASTAD_E + 1).to_string(),
+        ciphertexts: "1,2,3".to_string(),
+        moduli: "5,7,11".to_string(),
+    })
+    .unwrap_err();
+    assert!(err.to_string().contains("exceeds the maximum allowed"));
+}
+
+#[test]
+fn test_hastad_cli_rejects_excessive_pair_list() {
+    let values = vec!["1"; rsa::MAX_HASTAD_E as usize + 1].join(",");
+    let err = rsa::run(rsa::RsaAction::Hastad {
+        e: "3".to_string(),
+        ciphertexts: values.clone(),
+        moduli: values,
+    })
+    .unwrap_err();
+    assert!(err.to_string().contains("exceeds maximum"));
+}
+
+#[test]
 fn test_small_e_rejects_oversized_ciphertext() {
     let action = rsa::RsaAction::SmallE {
         c: (BigUint::from(1u32) << rsa::MAX_RSA_BITS).to_string(),

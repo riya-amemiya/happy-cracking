@@ -173,14 +173,9 @@ pub fn run(action: RsaAction) -> Result<()> {
             moduli,
         } => {
             let e: u32 = e.parse().context("Invalid number for e")?;
-            let cs: Vec<BigUint> = ciphertexts
-                .split(',')
-                .map(|s| s.trim().parse::<BigUint>().context("Invalid ciphertext"))
-                .collect::<Result<_>>()?;
-            let ns: Vec<BigUint> = moduli
-                .split(',')
-                .map(|s| s.trim().parse::<BigUint>().context("Invalid modulus"))
-                .collect::<Result<_>>()?;
+            check_hastad_e(e)?;
+            let cs = parse_hastad_integers(&ciphertexts, "ciphertext")?;
+            let ns = parse_hastad_integers(&moduli, "modulus")?;
             let m = hastad_broadcast(&cs, &ns, e)?;
             println!("Decimal: {m}");
             let ascii = bigint_to_ascii(&m);
@@ -355,6 +350,37 @@ fn finish_with_factors(
 }
 
 pub const MAX_RSA_BITS: u64 = 16_384;
+
+pub const MAX_HASTAD_E: u32 = 64;
+
+pub fn check_hastad_e(e: u32) -> Result<()> {
+    if e == 0 {
+        anyhow::bail!("Exponent e must be non-zero");
+    }
+    if e > MAX_HASTAD_E {
+        anyhow::bail!(
+            "Exponent e {e} exceeds the maximum allowed of {MAX_HASTAD_E} to prevent Denial of Service"
+        );
+    }
+    Ok(())
+}
+
+fn parse_hastad_integers(s: &str, label: &str) -> Result<Vec<BigUint>> {
+    let mut values = Vec::new();
+    for part in s.split(',') {
+        if values.len() >= MAX_HASTAD_E as usize {
+            anyhow::bail!(
+                "Hastad {label} list exceeds maximum of {MAX_HASTAD_E} values to prevent Denial of Service"
+            );
+        }
+        values.push(
+            part.trim()
+                .parse::<BigUint>()
+                .with_context(|| format!("Invalid {label}"))?,
+        );
+    }
+    Ok(values)
+}
 
 fn check_max_bits(n: &BigUint, name: &str) -> Result<()> {
     if n.bits() > MAX_RSA_BITS {
@@ -576,12 +602,10 @@ fn continued_fraction_convergents(a: &BigUint, b: &BigUint) -> Vec<(BigUint, Big
 // When the same message m is encrypted with the same small exponent e
 // under e different moduli n_i, use CRT to recover m^e, then take the e-th root.
 pub fn hastad_broadcast(ciphertexts: &[BigUint], moduli: &[BigUint], e: u32) -> Result<BigUint> {
+    check_hastad_e(e)?;
     let e_usize = e as usize;
     if ciphertexts.len() < e_usize || moduli.len() < e_usize {
         anyhow::bail!("Hastad's attack requires at least e={e} pairs of (ciphertext, modulus)");
-    }
-    if e == 0 {
-        anyhow::bail!("Exponent e must be non-zero");
     }
 
     let cs = &ciphertexts[..e_usize];
