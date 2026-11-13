@@ -80,32 +80,45 @@ pub fn encrypt(input: &str, a: i32, b: i32) -> Result<String> {
         .map_err(|_| anyhow::anyhow!("Internal error: produced invalid UTF-8 during encryption"))
 }
 
-pub fn decrypt(input: &str, a: i32, b: i32) -> Result<String> {
-    let (a, b) = reduce_key(a, b)?;
-    let a_inv = mod_inverse(a, 26)
-        .ok_or_else(|| anyhow::anyhow!("'a' must be coprime with 26. Valid values: {VALID_A:?}"))?;
-
-    let mut bytes = input.as_bytes().to_vec();
-    for byte in &mut bytes {
+fn decrypt_from(src: &[u8], dst: &mut [u8], a_inv: i32, b: i32) {
+    for (slot, &byte) in dst.iter_mut().zip(src) {
         if byte.is_ascii_alphabetic() {
             let base = if byte.is_ascii_uppercase() {
                 b'A'
             } else {
                 b'a'
             };
-            let y = i32::from(*byte - base);
+            let y = i32::from(byte - base);
             let decrypted = (a_inv * (y - b + 26)) % 26;
-            *byte = decrypted as u8 + base;
+            *slot = decrypted as u8 + base;
+        } else {
+            *slot = byte;
         }
     }
+}
+
+pub fn decrypt(input: &str, a: i32, b: i32) -> Result<String> {
+    let (a, b) = reduce_key(a, b)?;
+    let a_inv = mod_inverse(a, 26)
+        .ok_or_else(|| anyhow::anyhow!("'a' must be coprime with 26. Valid values: {VALID_A:?}"))?;
+
+    let src = input.as_bytes();
+    let mut bytes = vec![0u8; src.len()];
+    decrypt_from(src, &mut bytes, a_inv, b);
     String::from_utf8(bytes)
         .map_err(|_| anyhow::anyhow!("Internal error: produced invalid UTF-8 during decryption"))
 }
 
 pub fn bruteforce(input: &str) {
+    let src = input.as_bytes();
+    let mut buf = vec![0u8; src.len()];
     for &a in &VALID_A {
+        let Some(a_inv) = mod_inverse(a, 26) else {
+            continue;
+        };
         for b in 0..26 {
-            if let Ok(result) = decrypt(input, a, b) {
+            decrypt_from(src, &mut buf, a_inv, b);
+            if let Ok(result) = std::str::from_utf8(&buf) {
                 println!("a={a:2}, b={b:2}: {result}");
             }
         }

@@ -59,3 +59,24 @@ fn test_roundtrip_extreme_coefficients() {
     let decrypted = affine::decrypt(&encrypted, i32::MAX, i32::MAX).unwrap();
     assert_eq!(decrypted, original);
 }
+
+#[test]
+fn test_bruteforce_keys_match_decrypt() {
+    let ciphertext = "RCLLA, OAPLX!";
+    for a in [1, 3, 5, 7, 9, 11, 15, 17, 19, 21, 23, 25] {
+        for b in 0..26 {
+            let got = affine::decrypt(ciphertext, a, b).unwrap();
+            if a == 5 && b == 8 {
+                assert_eq!(got, "HELLO, WORLD!");
+            }
+            assert_eq!(got.len(), ciphertext.len());
+        }
+    }
+}
+
+#[test]
+fn test_decrypt_preserves_non_ascii() {
+    let encrypted = affine::encrypt("hello ß world", 5, 8).unwrap();
+    assert_eq!(encrypted, "rclla ß oaplx");
+    assert_eq!(affine::decrypt(&encrypted, 5, 8).unwrap(), "hello ß world");
+}
