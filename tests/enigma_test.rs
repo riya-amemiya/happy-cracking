@@ -1,4 +1,6 @@
-use happy_cracking::crypto::enigma::{crack, decrypt, encrypt, transform};
+use happy_cracking::crypto::enigma::{
+    self, EnigmaAction, MAX_CRACK_HITS, MAX_CRACK_LETTERS, crack, decrypt, encrypt, transform,
+};
 
 fn crypt(input: &str) -> String {
     transform(input, "I II III", "B", "AAA", "AAA", "").unwrap()
@@ -226,6 +228,124 @@ fn crack_rejects_wrong_crib() {
     )
     .unwrap();
     assert!(hits.is_empty());
+}
+
+#[test]
+fn check_crack_letters_rejects_oversized() {
+    let start = std::time::Instant::now();
+    let err = enigma::check_crack_letters(MAX_CRACK_LETTERS + 1).unwrap_err();
+    assert!(err.to_string().contains("Denial of Service"));
+    assert!(
+        start.elapsed().as_millis() < 100,
+        "oversized ciphertext must be rejected before the search"
+    );
+}
+
+#[test]
+fn check_crack_letters_accepts_at_limit() {
+    enigma::check_crack_letters(MAX_CRACK_LETTERS).unwrap();
+    enigma::check_crack_letters(0).unwrap();
+}
+
+#[test]
+fn check_crack_hits_rejects_oversized() {
+    let err = enigma::check_crack_hits(MAX_CRACK_HITS + 1).unwrap_err();
+    assert!(err.to_string().contains("Denial of Service"));
+}
+
+#[test]
+fn check_crack_hits_accepts_at_limit() {
+    enigma::check_crack_hits(MAX_CRACK_HITS).unwrap();
+    enigma::check_crack_hits(0).unwrap();
+}
+
+#[test]
+fn crack_rejects_oversized_ciphertext() {
+    let start = std::time::Instant::now();
+    let cipher = "A".repeat(MAX_CRACK_LETTERS + 1);
+    let err = crack(
+        &cipher, "A", "I II III", "B", "AAA", "", "", false, false, false, None, 5,
+    )
+    .unwrap_err();
+    assert!(err.to_string().contains("Denial of Service"));
+    assert!(
+        start.elapsed().as_millis() < 100,
+        "oversized ciphertext must be rejected before the search"
+    );
+}
+
+#[test]
+fn crack_rejects_oversized_hit_limit() {
+    let err = crack(
+        "BDZGO",
+        "AAAAA",
+        "I II III",
+        "B",
+        "AAA",
+        "",
+        "",
+        false,
+        false,
+        false,
+        None,
+        MAX_CRACK_HITS + 1,
+    )
+    .unwrap_err();
+    assert!(err.to_string().contains("Denial of Service"));
+}
+
+#[test]
+fn crack_run_rejects_oversized_ciphertext() {
+    let start = std::time::Instant::now();
+    let err = enigma::run(EnigmaAction::Crack {
+        input: "A".repeat(MAX_CRACK_LETTERS + 1),
+        crib: "A".into(),
+        rotors: "I II III".into(),
+        reflector: "B".into(),
+        rings: "AAA".into(),
+        position: String::new(),
+        plugboard: String::new(),
+        navy: false,
+        m4: false,
+        search_rings: false,
+        offset: None,
+        max_hits: 5,
+    })
+    .unwrap_err();
+    assert!(err.to_string().contains("Denial of Service"));
+    assert!(
+        start.elapsed().as_millis() < 100,
+        "oversized ciphertext must be rejected before the search"
+    );
+}
+
+#[test]
+fn crack_run_rejects_oversized_hit_limit() {
+    let err = enigma::run(EnigmaAction::Crack {
+        input: "BDZGO".into(),
+        crib: "AAAAA".into(),
+        rotors: "I II III".into(),
+        reflector: "B".into(),
+        rings: "AAA".into(),
+        position: String::new(),
+        plugboard: String::new(),
+        navy: false,
+        m4: false,
+        search_rings: false,
+        offset: None,
+        max_hits: MAX_CRACK_HITS + 1,
+    })
+    .unwrap_err();
+    assert!(err.to_string().contains("Denial of Service"));
+}
+
+#[test]
+fn crack_accepts_ciphertext_at_letter_cap() {
+    let cipher = "A".repeat(MAX_CRACK_LETTERS);
+    crack(
+        &cipher, "A", "I II III", "B", "AAA", "AAA", "", false, false, false, None, 1,
+    )
+    .unwrap();
 }
 
 #[test]

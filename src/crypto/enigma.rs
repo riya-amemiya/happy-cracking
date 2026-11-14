@@ -5,6 +5,26 @@ use rayon::prelude::*;
 const ARMY: [&str; 5] = ["I", "II", "III", "IV", "V"];
 const NAVY: [&str; 8] = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII"];
 const MAX_SCANS: u64 = 20_000_000;
+pub const MAX_CRACK_LETTERS: usize = 4_096;
+pub const MAX_CRACK_HITS: usize = 256;
+
+pub fn check_crack_letters(len: usize) -> Result<()> {
+    if len > MAX_CRACK_LETTERS {
+        anyhow::bail!(
+            "Enigma crack input exceeds maximum of {MAX_CRACK_LETTERS} letters to prevent Denial of Service"
+        );
+    }
+    Ok(())
+}
+
+pub fn check_crack_hits(max_hits: usize) -> Result<()> {
+    if max_hits > MAX_CRACK_HITS {
+        anyhow::bail!(
+            "Enigma crack hit limit {max_hits} exceeds the maximum allowed of {MAX_CRACK_HITS} to prevent Denial of Service"
+        );
+    }
+    Ok(())
+}
 
 #[derive(Subcommand)]
 pub enum EnigmaAction {
@@ -677,6 +697,7 @@ fn scan_job(
     crib: &[u8],
     plug: [u8; 26],
     offset: Option<usize>,
+    max_hits: usize,
 ) -> Vec<Hit> {
     let m4 = job.greek_name.is_some();
     let greek = job.greek_name.map(|n| named_greek(n).expect("greek"));
@@ -728,6 +749,9 @@ fn scan_job(
             offset: at,
             plaintext: out,
         });
+        if hits.len() >= max_hits {
+            break;
+        }
     }
     hits
 }
@@ -755,6 +779,8 @@ pub fn crack(
     if cipher.len() < needle.len() {
         anyhow::bail!("ciphertext is shorter than the crib");
     }
+    check_crack_letters(cipher.len())?;
+    check_crack_hits(max_hits)?;
     if max_hits == 0 {
         return Ok(Vec::new());
     }
@@ -878,7 +904,7 @@ pub fn crack(
 
     let found: Vec<Hit> = jobs
         .par_iter()
-        .flat_map(|job| scan_job(job, &cipher, &needle, plug, offset))
+        .flat_map(|job| scan_job(job, &cipher, &needle, plug, offset, max_hits))
         .collect();
     let mut found = found;
     found.sort_by(|a, b| {
