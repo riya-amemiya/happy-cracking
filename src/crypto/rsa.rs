@@ -113,16 +113,16 @@ pub enum RsaAction {
 pub fn run(action: RsaAction) -> Result<()> {
     match action {
         RsaAction::ComputeD { p, q, e } => {
-            let p = p.parse::<BigUint>().context("Invalid number for p")?;
-            let q = q.parse::<BigUint>().context("Invalid number for q")?;
-            let e = e.parse::<BigUint>().context("Invalid number for e")?;
+            let p = parse_rsa_int(&p, "p")?;
+            let q = parse_rsa_int(&q, "q")?;
+            let e = parse_rsa_int(&e, "e")?;
             let d = compute_d(&p, &q, &e)?;
             println!("{d}");
         }
         RsaAction::Decrypt { c, d, n } => {
-            let c = c.parse::<BigUint>().context("Invalid number for c")?;
-            let d = d.parse::<BigUint>().context("Invalid number for d")?;
-            let n = n.parse::<BigUint>().context("Invalid number for n")?;
+            let c = parse_rsa_int(&c, "c")?;
+            let d = parse_rsa_int(&d, "d")?;
+            let n = parse_rsa_int(&n, "n")?;
             let m = big_modpow(&c, &d, &n)?;
             println!("Decimal: {m}");
             let ascii = bigint_to_ascii(&m);
@@ -132,26 +132,26 @@ pub fn run(action: RsaAction) -> Result<()> {
             println!("Hex: {}", hex::encode(m.to_bytes_be()));
         }
         RsaAction::Encrypt { m, e, n } => {
-            let m = m.parse::<BigUint>().context("Invalid number for m")?;
-            let e = e.parse::<BigUint>().context("Invalid number for e")?;
-            let n = n.parse::<BigUint>().context("Invalid number for n")?;
+            let m = parse_rsa_int(&m, "m")?;
+            let e = parse_rsa_int(&e, "e")?;
+            let n = parse_rsa_int(&n, "n")?;
             let c = big_modpow(&m, &e, &n)?;
             println!("{c}");
         }
         RsaAction::FactorizeN { n } => {
-            let n = n.parse::<BigUint>().context("Invalid number for n")?;
+            let n = parse_rsa_int(&n, "n")?;
             let (p, q) = fermat_factor(&n, 1_000_000)?;
             println!("p = {p}");
             println!("q = {q}");
         }
         RsaAction::Wiener { n, e } => {
-            let n = n.parse::<BigUint>().context("Invalid number for n")?;
-            let e = e.parse::<BigUint>().context("Invalid number for e")?;
+            let n = parse_rsa_int(&n, "n")?;
+            let e = parse_rsa_int(&e, "e")?;
             let d = wiener_attack(&e, &n)?;
             println!("{d}");
         }
         RsaAction::SmallE { c, e } => {
-            let c = c.parse::<BigUint>().context("Invalid number for c")?;
+            let c = parse_rsa_int(&c, "c")?;
             let e: u32 = e.parse().context("Invalid number for e")?;
 
             if e == 0 {
@@ -185,11 +185,11 @@ pub fn run(action: RsaAction) -> Result<()> {
             println!("Hex: {}", hex::encode(m.to_bytes_be()));
         }
         RsaAction::CommonModulus { n, e1, e2, c1, c2 } => {
-            let n = n.parse::<BigUint>().context("Invalid number for n")?;
-            let e1 = e1.parse::<BigUint>().context("Invalid number for e1")?;
-            let e2 = e2.parse::<BigUint>().context("Invalid number for e2")?;
-            let c1 = c1.parse::<BigUint>().context("Invalid number for c1")?;
-            let c2 = c2.parse::<BigUint>().context("Invalid number for c2")?;
+            let n = parse_rsa_int(&n, "n")?;
+            let e1 = parse_rsa_int(&e1, "e1")?;
+            let e2 = parse_rsa_int(&e2, "e2")?;
+            let c1 = parse_rsa_int(&c1, "c1")?;
+            let c2 = parse_rsa_int(&c2, "c2")?;
             let m = common_modulus_attack(&n, &e1, &e2, &c1, &c2)?;
             println!("Decimal: {m}");
             let ascii = bigint_to_ascii(&m);
@@ -199,14 +199,14 @@ pub fn run(action: RsaAction) -> Result<()> {
             println!("Hex: {}", hex::encode(m.to_bytes_be()));
         }
         RsaAction::PollardP1 { n, b } => {
-            let n = n.parse::<BigUint>().context("Invalid number for n")?;
+            let n = parse_rsa_int(&n, "n")?;
             let b: u64 = b.parse().context("Invalid number for b")?;
             let (p, q) = pollard_p1(&n, b)?;
             println!("p = {p}");
             println!("q = {q}");
         }
         RsaAction::PollardRho { n } => {
-            let n = n.parse::<BigUint>().context("Invalid number for n")?;
+            let n = parse_rsa_int(&n, "n")?;
             check_max_bits(&n, "Modulus n")?;
             let (p, q) = crate::crypto::primes::pollard_rho_biguint(&n)?;
             println!("p = {p}");
@@ -219,11 +219,9 @@ pub fn run(action: RsaAction) -> Result<()> {
             b,
             fermat_iters,
         } => {
-            let n = n.parse::<BigUint>().context("Invalid number for n")?;
-            let e = e.parse::<BigUint>().context("Invalid number for e")?;
-            let c = c
-                .map(|s| s.parse::<BigUint>().context("Invalid number for c"))
-                .transpose()?;
+            let n = parse_rsa_int(&n, "n")?;
+            let e = parse_rsa_int(&e, "e")?;
+            let c = c.map(|s| parse_rsa_int(&s, "c")).transpose()?;
             let b: u64 = b.parse().context("Invalid number for b")?;
             let result = auto_attack(&n, &e, c.as_ref(), b, fermat_iters)?;
             print_auto_result(&result);
@@ -351,6 +349,8 @@ fn finish_with_factors(
 
 pub const MAX_RSA_BITS: u64 = 16_384;
 
+pub const MAX_RSA_DEC_LEN: usize = 4_933;
+
 pub const MAX_HASTAD_E: u32 = 64;
 
 pub fn check_hastad_e(e: u32) -> Result<()> {
@@ -373,11 +373,7 @@ fn parse_hastad_integers(s: &str, label: &str) -> Result<Vec<BigUint>> {
                 "Hastad {label} list exceeds maximum of {MAX_HASTAD_E} values to prevent Denial of Service"
             );
         }
-        values.push(
-            part.trim()
-                .parse::<BigUint>()
-                .with_context(|| format!("Invalid {label}"))?,
-        );
+        values.push(parse_rsa_int(part, label)?);
     }
     Ok(values)
 }
@@ -389,6 +385,17 @@ fn check_max_bits(n: &BigUint, name: &str) -> Result<()> {
         );
     }
     Ok(())
+}
+
+pub fn parse_rsa_int(s: &str, name: &str) -> Result<BigUint> {
+    let s = s.trim();
+    if s.len() > MAX_RSA_DEC_LEN {
+        anyhow::bail!(
+            "{name} exceeds the maximum allowed size of {MAX_RSA_BITS} bits to prevent Denial of Service"
+        );
+    }
+    s.parse::<BigUint>()
+        .with_context(|| format!("Invalid number for {name}"))
 }
 
 // Rejects p == 0 or q == 0 because BigUint subtraction would panic on the
