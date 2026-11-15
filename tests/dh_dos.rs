@@ -60,3 +60,35 @@ fn test_bsgs_rejects_oversized_modulus() {
     let err = dh::baby_step_giant_step(&g, &target, &p, &order).unwrap_err();
     assert!(err.to_string().contains("exceeds the maximum allowed"));
 }
+
+#[test]
+fn test_parse_dh_int_rejects_oversized_decimal() {
+    let huge = "1".repeat(dh::MAX_DH_DEC_LEN + 1);
+    let start = std::time::Instant::now();
+    let err = dh::parse_dh_int(&huge, "p").unwrap_err();
+    let duration = start.elapsed();
+    assert!(err.to_string().contains("Denial of Service"));
+    assert!(
+        duration.as_millis() < 100,
+        "decimal length rejection took too long: {duration:?}"
+    );
+}
+
+#[test]
+fn test_parse_dh_int_accepts_digit_limit() {
+    let value = format!("{:0>width$}", 23, width = dh::MAX_DH_DEC_LEN);
+    assert_eq!(value.len(), dh::MAX_DH_DEC_LEN);
+    assert_eq!(dh::parse_dh_int(&value, "p").unwrap(), BigUint::from(23u32));
+}
+
+#[test]
+fn test_pubkey_cli_rejects_oversized_decimal_p() {
+    let huge = "1".repeat(dh::MAX_DH_DEC_LEN + 1);
+    let err = dh::run(dh::DhAction::Pubkey {
+        g: "2".to_string(),
+        p: huge,
+        a: "6".to_string(),
+    })
+    .unwrap_err();
+    assert!(err.to_string().contains("Denial of Service"));
+}

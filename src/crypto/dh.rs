@@ -40,18 +40,16 @@ pub enum DhAction {
 pub fn run(action: DhAction) -> Result<()> {
     match action {
         DhAction::Pubkey { g, p, a } => {
-            let g = g.parse::<BigUint>().context("Invalid number for g")?;
-            let p = p.parse::<BigUint>().context("Invalid number for p")?;
-            let a = a.parse::<BigUint>().context("Invalid number for a")?;
+            let g = parse_dh_int(&g, "g")?;
+            let p = parse_dh_int(&p, "p")?;
+            let a = parse_dh_int(&a, "a")?;
             let pubkey = compute_pubkey(&g, &a, &p)?;
             println!("{pubkey}");
         }
         DhAction::SharedSecret { public_key, p, a } => {
-            let pk = public_key
-                .parse::<BigUint>()
-                .context("Invalid number for public-key")?;
-            let p = p.parse::<BigUint>().context("Invalid number for p")?;
-            let a = a.parse::<BigUint>().context("Invalid number for a")?;
+            let pk = parse_dh_int(&public_key, "public-key")?;
+            let p = parse_dh_int(&p, "p")?;
+            let a = parse_dh_int(&a, "a")?;
             let secret = compute_shared_secret(&pk, &a, &p)?;
             println!("{secret}");
         }
@@ -61,14 +59,10 @@ pub fn run(action: DhAction) -> Result<()> {
             target,
             order,
         } => {
-            let g = g.parse::<BigUint>().context("Invalid number for g")?;
-            let p = p.parse::<BigUint>().context("Invalid number for p")?;
-            let target = target
-                .parse::<BigUint>()
-                .context("Invalid number for target")?;
-            let order = order
-                .parse::<BigUint>()
-                .context("Invalid number for order")?;
+            let g = parse_dh_int(&g, "g")?;
+            let p = parse_dh_int(&p, "p")?;
+            let target = parse_dh_int(&target, "target")?;
+            let order = parse_dh_int(&order, "order")?;
             let x = baby_step_giant_step(&g, &target, &p, &order)?;
             println!("{x}");
         }
@@ -78,6 +72,8 @@ pub fn run(action: DhAction) -> Result<()> {
 
 pub const MAX_DH_BITS: u64 = 16_384;
 
+pub const MAX_DH_DEC_LEN: usize = 4_933;
+
 fn check_max_bits(n: &BigUint, name: &str) -> Result<()> {
     if n.bits() > MAX_DH_BITS {
         anyhow::bail!(
@@ -85,6 +81,17 @@ fn check_max_bits(n: &BigUint, name: &str) -> Result<()> {
         );
     }
     Ok(())
+}
+
+pub fn parse_dh_int(s: &str, name: &str) -> Result<BigUint> {
+    let s = s.trim();
+    if s.len() > MAX_DH_DEC_LEN {
+        anyhow::bail!(
+            "{name} exceeds the maximum allowed size of {MAX_DH_BITS} bits to prevent Denial of Service"
+        );
+    }
+    s.parse::<BigUint>()
+        .with_context(|| format!("Invalid number for {name}"))
 }
 
 pub fn compute_pubkey(g: &BigUint, a: &BigUint, p: &BigUint) -> Result<BigUint> {

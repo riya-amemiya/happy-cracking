@@ -82,9 +82,9 @@ pub fn run(action: EcAction) -> Result<()> {
         } => {
             let p1 = parse_point(&point1)?;
             let p2 = parse_point(&point2)?;
-            let a = a.parse::<BigInt>().context("Invalid number for a")?;
-            let b = b.parse::<BigInt>().context("Invalid number for b")?;
-            let p = p.parse::<BigInt>().context("Invalid number for p")?;
+            let a = parse_ec_int(&a, "a")?;
+            let b = parse_ec_int(&b, "b")?;
+            let p = parse_ec_int(&p, "p")?;
             if p.is_zero() {
                 anyhow::bail!("Modulus p must be non-zero");
             }
@@ -95,10 +95,10 @@ pub fn run(action: EcAction) -> Result<()> {
         }
         EcAction::Multiply { point, n, a, b, p } => {
             let pt = parse_point(&point)?;
-            let n = n.parse::<BigUint>().context("Invalid number for n")?;
-            let a = a.parse::<BigInt>().context("Invalid number for a")?;
-            let b = b.parse::<BigInt>().context("Invalid number for b")?;
-            let p = p.parse::<BigInt>().context("Invalid number for p")?;
+            let n = parse_ec_uint(&n, "n")?;
+            let a = parse_ec_int(&a, "a")?;
+            let b = parse_ec_int(&b, "b")?;
+            let p = parse_ec_int(&p, "p")?;
             if p.is_zero() {
                 anyhow::bail!("Modulus p must be non-zero");
             }
@@ -108,9 +108,9 @@ pub fn run(action: EcAction) -> Result<()> {
         }
         EcAction::Order { point, a, b, p } => {
             let pt = parse_point(&point)?;
-            let a = a.parse::<BigInt>().context("Invalid number for a")?;
-            let b = b.parse::<BigInt>().context("Invalid number for b")?;
-            let p = p.parse::<BigInt>().context("Invalid number for p")?;
+            let a = parse_ec_int(&a, "a")?;
+            let b = parse_ec_int(&b, "b")?;
+            let p = parse_ec_int(&p, "p")?;
             if p.is_zero() {
                 anyhow::bail!("Modulus p must be non-zero");
             }
@@ -128,15 +128,13 @@ pub fn run(action: EcAction) -> Result<()> {
         } => {
             let generator_pt = parse_point(&generator)?;
             let tgt = parse_point(&target)?;
-            let a = a.parse::<BigInt>().context("Invalid number for a")?;
-            let b = b.parse::<BigInt>().context("Invalid number for b")?;
-            let p = p.parse::<BigInt>().context("Invalid number for p")?;
+            let a = parse_ec_int(&a, "a")?;
+            let b = parse_ec_int(&b, "b")?;
+            let p = parse_ec_int(&p, "p")?;
             if p.is_zero() {
                 anyhow::bail!("Modulus p must be non-zero");
             }
-            let order = order
-                .parse::<BigUint>()
-                .context("Invalid number for order")?;
+            let order = parse_ec_uint(&order, "order")?;
             validate_point_on_curve(&generator_pt, &a, &b, &p)?;
             validate_point_on_curve(&tgt, &a, &b, &p)?;
             let n = pohlig_hellman(&generator_pt, &tgt, &a, &p, &order)?;
@@ -153,6 +151,8 @@ pub enum ECPoint {
 }
 
 pub const MAX_EC_BITS: u64 = 16_384;
+
+pub const MAX_EC_DEC_LEN: usize = 4_933;
 
 fn check_max_bits(bits: u64, name: &str) -> Result<()> {
     if bits > MAX_EC_BITS {
@@ -171,6 +171,32 @@ fn check_point_bits(point: &ECPoint) -> Result<()> {
     Ok(())
 }
 
+pub fn parse_ec_int(s: &str, name: &str) -> Result<BigInt> {
+    let s = s.trim();
+    let digits = match s.as_bytes().first() {
+        Some(b'+' | b'-') => &s[1..],
+        _ => s,
+    };
+    if digits.len() > MAX_EC_DEC_LEN {
+        anyhow::bail!(
+            "{name} exceeds the maximum allowed size of {MAX_EC_BITS} bits to prevent Denial of Service"
+        );
+    }
+    s.parse::<BigInt>()
+        .with_context(|| format!("Invalid number for {name}"))
+}
+
+pub fn parse_ec_uint(s: &str, name: &str) -> Result<BigUint> {
+    let s = s.trim();
+    if s.len() > MAX_EC_DEC_LEN {
+        anyhow::bail!(
+            "{name} exceeds the maximum allowed size of {MAX_EC_BITS} bits to prevent Denial of Service"
+        );
+    }
+    s.parse::<BigUint>()
+        .with_context(|| format!("Invalid number for {name}"))
+}
+
 pub fn parse_point(s: &str) -> Result<ECPoint> {
     let s = s.trim();
     if s.eq_ignore_ascii_case("inf") || s.eq_ignore_ascii_case("infinity") || s == "O" {
@@ -180,14 +206,8 @@ pub fn parse_point(s: &str) -> Result<ECPoint> {
     if parts.len() != 2 {
         anyhow::bail!("Point must be 'x,y' or 'inf', got '{s}'");
     }
-    let x = parts[0]
-        .trim()
-        .parse::<BigInt>()
-        .context("Invalid x coordinate")?;
-    let y = parts[1]
-        .trim()
-        .parse::<BigInt>()
-        .context("Invalid y coordinate")?;
+    let x = parse_ec_int(parts[0], "Point x coordinate")?;
+    let y = parse_ec_int(parts[1], "Point y coordinate")?;
     check_max_bits(x.bits(), "Point x coordinate")?;
     check_max_bits(y.bits(), "Point y coordinate")?;
     Ok(ECPoint::Affine { x, y })

@@ -140,3 +140,64 @@ fn test_cli_add_rejects_oversized_curve_param() {
     let err = ec::run(action).unwrap_err();
     assert!(err.to_string().contains("exceeds the maximum allowed"));
 }
+
+#[test]
+fn test_parse_ec_int_rejects_oversized_decimal() {
+    let huge = "1".repeat(ec::MAX_EC_DEC_LEN + 1);
+    let start = std::time::Instant::now();
+    let err = ec::parse_ec_int(&huge, "p").unwrap_err();
+    let duration = start.elapsed();
+    assert!(err.to_string().contains("Denial of Service"));
+    assert!(
+        duration.as_millis() < 100,
+        "decimal length rejection took too long: {duration:?}"
+    );
+}
+
+#[test]
+fn test_parse_ec_int_accepts_digit_limit() {
+    let value = format!("{:0>width$}", 11, width = ec::MAX_EC_DEC_LEN);
+    assert_eq!(value.len(), ec::MAX_EC_DEC_LEN);
+    assert_eq!(ec::parse_ec_int(&value, "p").unwrap(), BigInt::from(11));
+}
+
+#[test]
+fn test_parse_ec_int_accepts_signed_digit_limit() {
+    let value = format!("-{:0>width$}", 11, width = ec::MAX_EC_DEC_LEN);
+    assert_eq!(value.len(), ec::MAX_EC_DEC_LEN + 1);
+    assert_eq!(ec::parse_ec_int(&value, "a").unwrap(), BigInt::from(-11));
+}
+
+#[test]
+fn test_parse_ec_uint_rejects_oversized_decimal() {
+    let huge = "1".repeat(ec::MAX_EC_DEC_LEN + 1);
+    let err = ec::parse_ec_uint(&huge, "n").unwrap_err();
+    assert!(err.to_string().contains("Denial of Service"));
+}
+
+#[test]
+fn test_parse_point_rejects_oversized_decimal() {
+    let huge = "1".repeat(ec::MAX_EC_DEC_LEN + 1);
+    let start = std::time::Instant::now();
+    let err = ec::parse_point(&format!("{huge},1")).unwrap_err();
+    let duration = start.elapsed();
+    assert!(err.to_string().contains("Denial of Service"));
+    assert!(
+        duration.as_millis() < 100,
+        "decimal length rejection took too long: {duration:?}"
+    );
+}
+
+#[test]
+fn test_cli_add_rejects_oversized_decimal_p() {
+    let huge = "1".repeat(ec::MAX_EC_DEC_LEN + 1);
+    let err = ec::run(EcAction::Add {
+        point1: "2,4".to_string(),
+        point2: "2,4".to_string(),
+        a: "1".to_string(),
+        b: "6".to_string(),
+        p: huge,
+    })
+    .unwrap_err();
+    assert!(err.to_string().contains("Denial of Service"));
+}
