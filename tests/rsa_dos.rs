@@ -227,3 +227,38 @@ fn test_small_e_rejects_oversized_ciphertext() {
     let err = rsa::run(action).unwrap_err();
     assert!(err.to_string().contains("exceeds the maximum allowed"));
 }
+
+#[test]
+fn test_parse_rsa_int_rejects_oversized_decimal() {
+    let huge = "1".repeat(rsa::MAX_RSA_DEC_LEN + 1);
+    let start = std::time::Instant::now();
+    let err = rsa::parse_rsa_int(&huge, "n").unwrap_err();
+    let duration = start.elapsed();
+    assert!(err.to_string().contains("Denial of Service"));
+    assert!(
+        duration.as_millis() < 100,
+        "decimal length rejection took too long: {duration:?}"
+    );
+}
+
+#[test]
+fn test_parse_rsa_int_accepts_digit_limit() {
+    let value = format!("{:0>width$}", 3233, width = rsa::MAX_RSA_DEC_LEN);
+    assert_eq!(value.len(), rsa::MAX_RSA_DEC_LEN);
+    assert_eq!(
+        rsa::parse_rsa_int(&value, "n").unwrap(),
+        BigUint::from(3233u32)
+    );
+}
+
+#[test]
+fn test_encrypt_cli_rejects_oversized_decimal_n() {
+    let huge = "1".repeat(rsa::MAX_RSA_DEC_LEN + 1);
+    let err = rsa::run(rsa::RsaAction::Encrypt {
+        m: "65".to_string(),
+        e: "17".to_string(),
+        n: huge,
+    })
+    .unwrap_err();
+    assert!(err.to_string().contains("Denial of Service"));
+}
