@@ -29,10 +29,21 @@ pub const MAX_RULE_FILE_BYTES: usize = 16 * 1024 * 1024;
 
 pub const MAX_RULES: usize = 250_000;
 
+pub const MAX_RULE_LEN: usize = 1_024;
+
 pub fn check_rules_len(count: usize) -> Result<()> {
     if count > MAX_RULES {
         anyhow::bail!(
             "Rules file exceeds maximum of {MAX_RULES} rules to prevent Denial of Service"
+        );
+    }
+    Ok(())
+}
+
+pub fn check_rule_len(rule: &str) -> Result<()> {
+    if rule.len() > MAX_RULE_LEN {
+        anyhow::bail!(
+            "Rule exceeds maximum length of {MAX_RULE_LEN} bytes to prevent Denial of Service"
         );
     }
     Ok(())
@@ -691,6 +702,9 @@ fn run_rule(
         None => BUILTIN_RULES.to_vec(),
     };
     check_rules_len(rules.len())?;
+    for rule in &rules {
+        check_rule_len(rule)?;
+    }
     let words_buf = read_wordlist_buf(wordlist)?;
     let words = wordlist_lines(&words_buf);
     let algos = match algo {
