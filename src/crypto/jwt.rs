@@ -1,6 +1,7 @@
 use anyhow::{Context, Result};
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use clap::Subcommand;
+use rayon::prelude::*;
 use sha2::{Digest, Sha256, Sha384, Sha512};
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -307,20 +308,22 @@ pub fn read_jwt_bytes_with_limit(path: &Path, max_bytes: usize) -> Result<Vec<u8
     Ok(buf)
 }
 
+fn crack_one_secret(alg: &str, msg: &[u8], expected: &[u8], secret: &[u8]) -> Option<String> {
+    let secret = secret.strip_suffix(b"\r").unwrap_or(secret);
+    if secret.is_empty() {
+        return None;
+    }
+    let mac = hs_mac(alg, secret, msg).ok()?;
+    constant_time_eq(expected, &mac).then(|| String::from_utf8_lossy(secret).into_owned())
+}
+
 pub fn crack_hmac_secret(token: &str, wordlist: &Path) -> Result<Option<String>> {
     let (alg, msg, expected) = prepare_hs_crack(token)?;
 
     let bytes = read_jwt_bytes_with_limit(wordlist, MAX_JWT_WORDLIST_BYTES)?;
-    for line in bytes.split(|&b| b == b'\n') {
-        let line = line.strip_suffix(b"\r").unwrap_or(line);
-        if line.is_empty() {
-            continue;
-        }
-        if constant_time_eq(&expected, &hs_mac(&alg, line, msg.as_bytes())?) {
-            return Ok(Some(String::from_utf8_lossy(line).into_owned()));
-        }
-    }
-    Ok(None)
+    Ok(bytes
+        .par_split(|&b| b == b'\n')
+        .find_map_any(|line| crack_one_secret(&alg, msg.as_bytes(), &expected, line)))
 }
 
 /// Forge alg=none token (header with none + given payload + empty signature).
@@ -364,10 +367,7 @@ pub fn forge_alg_confusion(token: &str, key: &[u8], alg: &str) -> Result<String>
 /// Crack against an in-memory list of secrets (for tests).
 pub fn crack_hmac_secret_list(token: &str, secrets: &[&str]) -> Result<Option<String>> {
     let (alg, msg, expected) = prepare_hs_crack(token)?;
-    for s in secrets {
-        if constant_time_eq(&expected, &hs_mac(&alg, s.as_bytes(), msg.as_bytes())?) {
-            return Ok(Some((*s).to_string()));
-        }
-    }
-    Ok(None)
+    Ok(secrets
+        .par_iter()
+        .find_map_any(|s| crack_one_secret(&alg, msg.as_bytes(), &expected, s.as_bytes())))
 }
