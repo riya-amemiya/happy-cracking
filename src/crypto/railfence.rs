@@ -36,6 +36,7 @@ pub fn run(action: RailFenceAction) -> Result<()> {
         }
         RailFenceAction::Bruteforce { input, max_rails } => {
             check_max_rails(max_rails)?;
+            check_bruteforce_input_len(&input, MAX_BRUTEFORCE_BYTES)?;
             for r in 2..=max_rails {
                 if let Ok(result) = decrypt(&input, r) {
                     println!("Rails {r}: {result}");
@@ -48,10 +49,22 @@ pub fn run(action: RailFenceAction) -> Result<()> {
 
 pub const MAX_RAILS: usize = 10_000;
 
+pub const MAX_BRUTEFORCE_BYTES: usize = 64 * 1024;
+
 pub fn check_max_rails(max_rails: usize) -> Result<()> {
     if max_rails > MAX_RAILS {
         anyhow::bail!(
             "Maximum rails {max_rails} exceeds the maximum allowed of {MAX_RAILS} to prevent Denial of Service"
+        );
+    }
+    Ok(())
+}
+
+pub fn check_bruteforce_input_len(input: &str, max_bytes: usize) -> Result<()> {
+    let max_bytes = max_bytes.min(MAX_BRUTEFORCE_BYTES);
+    if input.len() > max_bytes {
+        anyhow::bail!(
+            "Input exceeds maximum size of {max_bytes} bytes to prevent Denial of Service"
         );
     }
     Ok(())

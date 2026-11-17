@@ -68,4 +68,28 @@ mod tests {
             duration
         );
     }
+
+    #[test]
+    fn test_railfence_bruteforce_rejects_excessive_input() {
+        let start = std::time::Instant::now();
+        let result = railfence::run(railfence::RailFenceAction::Bruteforce {
+            input: "A".repeat(railfence::MAX_BRUTEFORCE_BYTES + 1),
+            max_rails: 10,
+        });
+        let duration = start.elapsed();
+
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Denial of Service"),
+            "expected DoS rejection"
+        );
+        assert!(
+            duration.as_millis() < 100,
+            "Bruteforce input rejection took too long: {:?}",
+            duration
+        );
+    }
 }
