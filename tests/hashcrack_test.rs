@@ -1,7 +1,7 @@
 use happy_cracking::crypto::hashcrack::{
-    HashAlgo, HashcrackAction, MAX_BRUTE_LEN, MAX_RULES, MAX_SALT_LEN, MAX_TARGET_HASH_HEX_LEN,
-    SaltPosition, brute_force, compute_hash, find_in_candidates, lookup_in_pairs,
-    lookup_in_table_file, lookup_in_table_file_with_limit, parse_table_line,
+    HashAlgo, HashcrackAction, MAX_BRUTE_LEN, MAX_RULE_LEN, MAX_RULES, MAX_SALT_LEN,
+    MAX_TARGET_HASH_HEX_LEN, SaltPosition, brute_force, compute_hash, find_in_candidates,
+    lookup_in_pairs, lookup_in_table_file, lookup_in_table_file_with_limit, parse_table_line,
     read_wordlist_buf_with_limit, run,
 };
 use std::fs;
@@ -684,6 +684,48 @@ fn run_rule_rejects_too_many_rules_before_wordlist() {
         start.elapsed().as_millis() < 2_000,
         "oversized rules count must be rejected before the wordlist is opened"
     );
+}
+
+#[test]
+fn run_rule_rejects_oversized_rule_before_wordlist() {
+    let path = scratch_wordlist("long_rule");
+    let rule = "d".repeat(MAX_RULE_LEN + 1);
+    fs::write(&path, format!("{rule}\n")).unwrap();
+    let start = std::time::Instant::now();
+    let err = run(HashcrackAction::Rule {
+        hash: "5d41402abc4b2a76b9719d911017c592".into(),
+        wordlist: PathBuf::from("/no/such/wordlist"),
+        rules: Some(path.clone()),
+        algo: Some(HashAlgo::Md5),
+    })
+    .unwrap_err()
+    .to_string();
+    let _ = fs::remove_file(&path);
+    assert!(
+        err.contains(&MAX_RULE_LEN.to_string()) && err.contains("Denial of Service"),
+        "unexpected error: {err}"
+    );
+    assert!(
+        start.elapsed().as_millis() < 2_000,
+        "oversized rule must be rejected before the wordlist is opened"
+    );
+}
+
+#[test]
+fn run_rule_accepts_rule_at_len_cap() {
+    let words = scratch_wordlist("rule_len_ok_words");
+    let rules = scratch_wordlist("rule_len_ok");
+    fs::write(&words, "hello\n").unwrap();
+    fs::write(&rules, format!("{}\n", ":".repeat(MAX_RULE_LEN))).unwrap();
+    run(HashcrackAction::Rule {
+        hash: "5d41402abc4b2a76b9719d911017c592".into(),
+        wordlist: words.clone(),
+        rules: Some(rules.clone()),
+        algo: Some(HashAlgo::Md5),
+    })
+    .unwrap();
+    let _ = fs::remove_file(&words);
+    let _ = fs::remove_file(&rules);
 }
 
 #[cfg(unix)]

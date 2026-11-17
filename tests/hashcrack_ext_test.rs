@@ -1,6 +1,7 @@
 use happy_cracking::crypto::hashcrack::{
-    HashAlgo, MAX_BRUTE_LEN, MAX_RULE_CANDIDATE_LEN, MAX_RULES, apply_rule, builtin_rules,
-    check_rules_len, compute_hash, expand_mask, hybrid_attack, mask_attack, rule_attack,
+    HashAlgo, MAX_BRUTE_LEN, MAX_RULE_CANDIDATE_LEN, MAX_RULE_LEN, MAX_RULES, apply_rule,
+    builtin_rules, check_rule_len, check_rules_len, compute_hash, expand_mask, hybrid_attack,
+    mask_attack, rule_attack,
 };
 
 #[test]
@@ -78,6 +79,29 @@ fn library_rule_attack_stays_unbounded() {
     let target = compute_hash(HashAlgo::Md5, "hello");
     let words = ["hello"];
     let rules = vec![":"; MAX_RULES + 1];
+    let found = rule_attack(&target, HashAlgo::Md5, &words, &rules);
+    assert_eq!(found.as_deref(), Some("hello"));
+}
+
+#[test]
+fn check_rule_len_rejects_above_cap() {
+    let err = check_rule_len(&"d".repeat(MAX_RULE_LEN + 1))
+        .unwrap_err()
+        .to_string();
+    assert!(err.contains("Denial of Service"), "unexpected error: {err}");
+}
+
+#[test]
+fn check_rule_len_accepts_at_cap() {
+    check_rule_len(&":".repeat(MAX_RULE_LEN)).unwrap();
+    check_rule_len("").unwrap();
+}
+
+#[test]
+fn library_rule_attack_stays_unbounded_for_long_rule() {
+    let target = compute_hash(HashAlgo::Md5, "hello");
+    let words = ["hello"];
+    let rules = [":".repeat(MAX_RULE_LEN + 1)];
     let found = rule_attack(&target, HashAlgo::Md5, &words, &rules);
     assert_eq!(found.as_deref(), Some("hello"));
 }
