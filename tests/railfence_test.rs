@@ -100,3 +100,34 @@ fn bruteforce_run_accepts_default_max_rails() {
     })
     .unwrap();
 }
+
+#[test]
+fn test_check_bruteforce_input_len_rejects_excessive() {
+    let input = "A".repeat(railfence::MAX_BRUTEFORCE_BYTES + 1);
+    let err =
+        railfence::check_bruteforce_input_len(&input, railfence::MAX_BRUTEFORCE_BYTES).unwrap_err();
+    assert!(err.to_string().contains("Denial of Service"));
+}
+
+#[test]
+fn test_check_bruteforce_input_len_accepts_limit() {
+    let input = "A".repeat(railfence::MAX_BRUTEFORCE_BYTES);
+    railfence::check_bruteforce_input_len(&input, railfence::MAX_BRUTEFORCE_BYTES).unwrap();
+}
+
+#[test]
+fn bruteforce_run_rejects_excessive_input() {
+    let err = railfence::run(railfence::RailFenceAction::Bruteforce {
+        input: "A".repeat(railfence::MAX_BRUTEFORCE_BYTES + 1),
+        max_rails: 10,
+    })
+    .unwrap_err();
+    assert!(err.to_string().contains("Denial of Service"));
+}
+
+#[test]
+fn encrypt_decrypt_accept_input_beyond_bruteforce_cap() {
+    let original = "A".repeat(railfence::MAX_BRUTEFORCE_BYTES + 8);
+    let encrypted = railfence::encrypt(&original, 3).unwrap();
+    assert_eq!(railfence::decrypt(&encrypted, 3).unwrap(), original);
+}
