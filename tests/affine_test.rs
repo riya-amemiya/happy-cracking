@@ -80,3 +80,40 @@ fn test_decrypt_preserves_non_ascii() {
     assert_eq!(encrypted, "rclla ß oaplx");
     assert_eq!(affine::decrypt(&encrypted, 5, 8).unwrap(), "hello ß world");
 }
+
+#[test]
+fn test_check_bruteforce_input_len_rejects_excessive() {
+    let input = "A".repeat(affine::MAX_BRUTEFORCE_BYTES + 1);
+    let err = affine::check_bruteforce_input_len(&input, affine::MAX_BRUTEFORCE_BYTES).unwrap_err();
+    assert!(err.to_string().contains("Denial of Service"));
+}
+
+#[test]
+fn test_check_bruteforce_input_len_accepts_limit() {
+    let input = "A".repeat(affine::MAX_BRUTEFORCE_BYTES);
+    affine::check_bruteforce_input_len(&input, affine::MAX_BRUTEFORCE_BYTES).unwrap();
+}
+
+#[test]
+fn bruteforce_run_rejects_excessive_input() {
+    let err = affine::run(affine::AffineAction::Bruteforce {
+        input: "A".repeat(affine::MAX_BRUTEFORCE_BYTES + 1),
+    })
+    .unwrap_err();
+    assert!(err.to_string().contains("Denial of Service"));
+}
+
+#[test]
+fn bruteforce_run_accepts_default_ciphertext() {
+    affine::run(affine::AffineAction::Bruteforce {
+        input: "RCLLA".to_string(),
+    })
+    .unwrap();
+}
+
+#[test]
+fn encrypt_decrypt_accept_input_beyond_bruteforce_cap() {
+    let original = "A".repeat(affine::MAX_BRUTEFORCE_BYTES + 8);
+    let encrypted = affine::encrypt(&original, 5, 8).unwrap();
+    assert_eq!(affine::decrypt(&encrypted, 5, 8).unwrap(), original);
+}

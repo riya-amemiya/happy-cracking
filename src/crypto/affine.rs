@@ -37,8 +37,21 @@ pub fn run(action: AffineAction) -> Result<()> {
             println!("{}", decrypt(&input, a, b)?);
         }
         AffineAction::Bruteforce { input } => {
+            check_bruteforce_input_len(&input, MAX_BRUTEFORCE_BYTES)?;
             bruteforce(&input);
         }
+    }
+    Ok(())
+}
+
+pub const MAX_BRUTEFORCE_BYTES: usize = 64 * 1024;
+
+pub fn check_bruteforce_input_len(input: &str, max_bytes: usize) -> Result<()> {
+    let max_bytes = max_bytes.min(MAX_BRUTEFORCE_BYTES);
+    if input.len() > max_bytes {
+        anyhow::bail!(
+            "Input exceeds maximum size of {max_bytes} bytes to prevent Denial of Service"
+        );
     }
     Ok(())
 }
