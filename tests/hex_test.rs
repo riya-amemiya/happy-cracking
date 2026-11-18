@@ -44,6 +44,21 @@ fn roundtrip() {
 }
 
 #[test]
+fn encode_matches_hex_crate_across_simd_chunk_tails() {
+    let alphabet: String = (0u8..=127).map(char::from).collect();
+    for len in 0..=40 {
+        let s = &alphabet[..len];
+        assert_eq!(
+            hex::encode(s),
+            ::hex::encode(s.as_bytes()),
+            "encode mismatch at len={len}"
+        );
+    }
+    let long = alphabet.repeat(20);
+    assert_eq!(hex::encode(&long), ::hex::encode(long.as_bytes()));
+}
+
+#[test]
 fn decode_invalid_hex() {
     assert!(hex::decode("GG").is_err());
 }
