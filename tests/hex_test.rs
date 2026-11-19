@@ -91,3 +91,36 @@ fn decode_hex_with_limit_rejects_invalid_hex() {
     let err = hex::decode_hex_with_limit("zz", 16).unwrap_err();
     assert!(!err.to_string().contains("Denial of Service"));
 }
+
+#[test]
+fn decode_matches_hex_crate_across_simd_chunk_tails() {
+    let raw: Vec<u8> = (0u8..=255).cycle().take(256).collect();
+    for len in 0..=40 {
+        let encoded = ::hex::encode(&raw[..len]);
+        assert_eq!(
+            hex::decode_hex_with_limit(&encoded, hex::MAX_HEX_BYTES).unwrap(),
+            ::hex::decode(&encoded).unwrap(),
+            "decode mismatch at len={len}"
+        );
+        let upper = encoded.to_ascii_uppercase();
+        assert_eq!(
+            hex::decode_hex_with_limit(&upper, hex::MAX_HEX_BYTES).unwrap(),
+            ::hex::decode(&upper).unwrap(),
+            "uppercase decode mismatch at len={len}"
+        );
+    }
+    let long = ::hex::encode(&raw.repeat(20));
+    assert_eq!(
+        hex::decode_hex_with_limit(&long, hex::MAX_HEX_BYTES).unwrap(),
+        ::hex::decode(&long).unwrap()
+    );
+}
+
+#[test]
+fn decode_rejects_invalid_in_simd_chunk() {
+    let mut encoded = ::hex::encode([0xABu8; 64]);
+    encoded.replace_range(40..42, "zz");
+    assert!(hex::decode(&encoded).is_err());
+    encoded.replace_range(0..2, "GG");
+    assert!(hex::decode(&encoded).is_err());
+}
