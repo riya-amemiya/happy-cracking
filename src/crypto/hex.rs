@@ -31,6 +31,22 @@ pub const MAX_HEX_BYTES: usize = 16 * 1024 * 1024;
 
 const HEX_LUT: [u8; 16] = *b"0123456789abcdef";
 
+const DECODE_LUT: [u8; 256] = {
+    let mut t = [0xFFu8; 256];
+    let mut i = 0;
+    while i < 10 {
+        t[(b'0' + i) as usize] = i;
+        i += 1;
+    }
+    i = 0;
+    while i < 6 {
+        t[(b'A' + i) as usize] = 10 + i;
+        t[(b'a' + i) as usize] = 10 + i;
+        i += 1;
+    }
+    t
+};
+
 pub fn decode_hex_with_limit(hex_str: &str, max_bytes: usize) -> Result<Vec<u8>> {
     let hex_str = hex_str.trim();
     let max_bytes = max_bytes.min(MAX_HEX_BYTES);
@@ -40,7 +56,124 @@ pub fn decode_hex_with_limit(hex_str: &str, max_bytes: usize) -> Result<Vec<u8>>
             "Input exceeds maximum size of {max_bytes} bytes to prevent Denial of Service"
         );
     }
-    hex::decode(hex_str).context("Failed to decode hex")
+    decode_bytes(hex_str.as_bytes()).context("Failed to decode hex")
+}
+
+fn decode_bytes(src: &[u8]) -> Option<Vec<u8>> {
+    if !src.len().is_multiple_of(2) {
+        return None;
+    }
+    let mut out = vec![0u8; src.len() / 2];
+    if decode_into(src, &mut out) {
+        Some(out)
+    } else {
+        None
+    }
+}
+
+fn decode_into(src: &[u8], dst: &mut [u8]) -> bool {
+    debug_assert!(src.len().is_multiple_of(2));
+    debug_assert!(dst.len() >= src.len() / 2);
+    #[cfg(target_arch = "x86_64")]
+    {
+        if is_x86_feature_detected!("ssse3") {
+            unsafe {
+                return decode_ssse3(src, dst);
+            }
+        }
+    }
+    decode_scalar(src, dst)
+}
+
+fn decode_scalar(src: &[u8], dst: &mut [u8]) -> bool {
+    let mut i = 0;
+    while i < src.len() {
+        let h = DECODE_LUT[src[i] as usize];
+        let l = DECODE_LUT[src[i + 1] as usize];
+        if (h | l) == 0xFF {
+            return false;
+        }
+        dst[i / 2] = (h << 4) | l;
+        i += 2;
+    }
+    true
+}
+
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "ssse3")]
+fn decode_ssse3(src: &[u8], dst: &mut [u8]) -> bool {
+    use std::arch::x86_64::__m128i;
+    unsafe {
+        let mut i = 0;
+        while i + 32 <= src.len() {
+            let mut c0 = [0u8; 16];
+            let mut c1 = [0u8; 16];
+            c0.copy_from_slice(&src[i..i + 16]);
+            c1.copy_from_slice(&src[i + 16..i + 32]);
+            let Some(n0) = ascii_nibbles(std::mem::transmute::<[u8; 16], __m128i>(c0)) else {
+                return false;
+            };
+            let Some(n1) = ascii_nibbles(std::mem::transmute::<[u8; 16], __m128i>(c1)) else {
+                return false;
+            };
+            let p0 = pack_nibbles(n0);
+            let p1 = pack_nibbles(n1);
+            let o = i / 2;
+            dst[o..o + 8].copy_from_slice(&p0);
+            dst[o + 8..o + 16].copy_from_slice(&p1);
+            i += 32;
+        }
+        while i + 16 <= src.len() {
+            let mut c0 = [0u8; 16];
+            c0.copy_from_slice(&src[i..i + 16]);
+            let Some(n0) = ascii_nibbles(std::mem::transmute::<[u8; 16], __m128i>(c0)) else {
+                return false;
+            };
+            let p0 = pack_nibbles(n0);
+            dst[i / 2..i / 2 + 8].copy_from_slice(&p0);
+            i += 16;
+        }
+        decode_scalar(&src[i..], &mut dst[i / 2..])
+    }
+}
+
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "ssse3")]
+fn ascii_nibbles(v: std::arch::x86_64::__m128i) -> Option<std::arch::x86_64::__m128i> {
+    use std::arch::x86_64::{
+        _mm_add_epi8, _mm_and_si128, _mm_cmpgt_epi8, _mm_movemask_epi8, _mm_or_si128, _mm_set1_epi8,
+    };
+    let lower = _mm_or_si128(v, _mm_set1_epi8(0x20));
+    let is_digit = _mm_and_si128(
+        _mm_cmpgt_epi8(v, _mm_set1_epi8(b'0' as i8 - 1)),
+        _mm_cmpgt_epi8(_mm_set1_epi8(b'9' as i8 + 1), v),
+    );
+    let is_letter = _mm_and_si128(
+        _mm_cmpgt_epi8(lower, _mm_set1_epi8(b'a' as i8 - 1)),
+        _mm_cmpgt_epi8(_mm_set1_epi8(b'f' as i8 + 1), lower),
+    );
+    let valid = _mm_or_si128(is_digit, is_letter);
+    if _mm_movemask_epi8(valid) != 0xFFFF {
+        return None;
+    }
+    Some(_mm_add_epi8(
+        _mm_and_si128(v, _mm_set1_epi8(0x0f)),
+        _mm_and_si128(is_letter, _mm_set1_epi8(9)),
+    ))
+}
+
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "ssse3")]
+fn pack_nibbles(nibbles: std::arch::x86_64::__m128i) -> [u8; 8] {
+    use std::arch::x86_64::{__m128i, _mm_maddubs_epi16, _mm_packus_epi16, _mm_set1_epi16};
+    unsafe {
+        let packed16 = _mm_maddubs_epi16(nibbles, _mm_set1_epi16(0x0110));
+        let packed8 = _mm_packus_epi16(packed16, packed16);
+        let bytes = std::mem::transmute::<__m128i, [u8; 16]>(packed8);
+        let mut out = [0u8; 8];
+        out.copy_from_slice(&bytes[..8]);
+        out
+    }
 }
 
 #[must_use]
