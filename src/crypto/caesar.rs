@@ -34,10 +34,23 @@ pub fn run(action: CaesarAction) -> Result<()> {
             println!("{}", rot::rotate(&input, (26 - (shift % 26)) % 26));
         }
         CaesarAction::Bruteforce { input } => {
+            check_bruteforce_input_len(&input, MAX_BRUTEFORCE_BYTES)?;
             for shift in 0..26 {
                 println!("Shift {:2}: {}", shift, rot::rotate(&input, shift));
             }
         }
+    }
+    Ok(())
+}
+
+pub const MAX_BRUTEFORCE_BYTES: usize = 64 * 1024;
+
+pub fn check_bruteforce_input_len(input: &str, max_bytes: usize) -> Result<()> {
+    let max_bytes = max_bytes.min(MAX_BRUTEFORCE_BYTES);
+    if input.len() > max_bytes {
+        anyhow::bail!(
+            "Input exceeds maximum size of {max_bytes} bytes to prevent Denial of Service"
+        );
     }
     Ok(())
 }
