@@ -1,7 +1,24 @@
+shared:
+  ci_checks: &ci_checks
+    - check-success = build
+    - check-success = test
+    - check-success = lint
+
 merge_protections_settings:
-  auto_merge_conditions: true
+  auto_merge_conditions:
+    - -draft
+
 merge_protections:
   - name: Main
     if:
       - base = main
-    success_conditions: []
+    success_conditions:
+      - and: *ci_checks
+
+queue_rules:
+  - name: default
+    merge_method: squash
+    queue_conditions:
+      - and: *ci_checks
+    merge_conditions:
+      - and: *ci_checks
