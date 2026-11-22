@@ -81,6 +81,8 @@ pub const MAX_CRIB_LEN: usize = 256;
 
 pub const MAX_CRIB_HITS: usize = 10_000;
 
+pub const MAX_CRACK_TOP: usize = 32;
+
 pub fn check_crib_len(crib: &str) -> Result<()> {
     if crib.len() > MAX_CRIB_LEN {
         anyhow::bail!(
@@ -94,6 +96,15 @@ pub fn check_crib_hit_limit(limit: usize) -> Result<()> {
     if limit > MAX_CRIB_HITS {
         anyhow::bail!(
             "Crib hit limit {limit} exceeds the maximum allowed of {MAX_CRIB_HITS} to prevent Denial of Service"
+        );
+    }
+    Ok(())
+}
+
+pub fn check_crack_top(top: usize) -> Result<()> {
+    if top > MAX_CRACK_TOP {
+        anyhow::bail!(
+            "Crack candidate limit {top} exceeds the maximum allowed of {MAX_CRACK_TOP} to prevent Denial of Service"
         );
     }
     Ok(())
@@ -365,6 +376,7 @@ pub fn detect_key_length(data: &[u8], max_len: usize) -> Vec<(usize, f64)> {
 }
 
 fn run_crack(input: &str, max_len: usize, top: usize, key_length: Option<usize>) -> Result<()> {
+    check_crack_top(top)?;
     if max_len > MAX_KEY_LENGTH {
         check_key_length(max_len)?;
     }
