@@ -102,6 +102,44 @@ fn bruteforce_run_reads_hex_under_limit() {
 }
 
 #[test]
+fn bruteforce_run_rejects_excessive_input() {
+    let start = std::time::Instant::now();
+    let err = xor::run(xor::XorAction::Bruteforce {
+        input: "00".repeat(xor::MAX_BRUTEFORCE_BYTES + 1),
+        printable: false,
+    })
+    .unwrap_err();
+    assert!(err.to_string().contains("Denial of Service"));
+    assert!(
+        start.elapsed().as_millis() < 100,
+        "oversized bruteforce hex must be rejected before decoding"
+    );
+}
+
+#[test]
+fn decode_xor_hex_accepts_bruteforce_limit() {
+    let hex = "00".repeat(xor::MAX_BRUTEFORCE_BYTES);
+    let data = xor::decode_xor_hex_with_limit(&hex, xor::MAX_BRUTEFORCE_BYTES).unwrap();
+    assert_eq!(data.len(), xor::MAX_BRUTEFORCE_BYTES);
+}
+
+#[test]
+fn cipher_run_accepts_input_beyond_bruteforce_cap() {
+    xor::run(xor::XorAction::Cipher {
+        input: "00".repeat(xor::MAX_BRUTEFORCE_BYTES + 1),
+        key: "00".into(),
+        ascii: false,
+    })
+    .unwrap();
+}
+
+#[test]
+fn library_bruteforce_accepts_input_beyond_cli_cap() {
+    let data = vec![0u8; xor::MAX_BRUTEFORCE_BYTES + 1];
+    assert_eq!(xor::single_byte_xor_bruteforce(&data).count(), 256);
+}
+
+#[test]
 fn cipher_run_reads_key_hex_under_limit() {
     xor::run(xor::XorAction::Cipher {
         input: hex::encode(b"Hello"),
