@@ -141,6 +141,53 @@ fn crack_run_rejects_excessive_key_length() {
 }
 
 #[test]
+fn check_crack_top_rejects_oversized() {
+    let start = std::time::Instant::now();
+    let err = xor::check_crack_top(xor::MAX_CRACK_TOP + 1).unwrap_err();
+    assert!(err.to_string().contains("Denial of Service"));
+    assert!(
+        start.elapsed().as_millis() < 100,
+        "oversized --top must be rejected before key recovery"
+    );
+}
+
+#[test]
+fn check_crack_top_accepts_at_limit() {
+    xor::check_crack_top(xor::MAX_CRACK_TOP).unwrap();
+    xor::check_crack_top(0).unwrap();
+}
+
+#[test]
+fn crack_run_rejects_excessive_top() {
+    let start = std::time::Instant::now();
+    let err = xor::run(XorAction::Crack {
+        input: hex::encode(b"HELLO WORLD HELLO WORLD HELLO WORLD HELLO WORLD"),
+        max_len: 40,
+        top: xor::MAX_CRACK_TOP + 1,
+        key_length: None,
+    })
+    .unwrap_err();
+    assert!(err.to_string().contains("Denial of Service"));
+    assert!(
+        start.elapsed().as_millis() < 100,
+        "oversized --top must be rejected before key recovery"
+    );
+}
+
+#[test]
+fn crack_run_recovers_ice() {
+    let plain = b"Burning 'em, if you ain't quick and nimble\nI go crazy when I hear a cymbal";
+    let ct = xor_bytes(plain, b"ICE");
+    xor::run(XorAction::Crack {
+        input: hex::encode(&ct),
+        max_len: 10,
+        top: 3,
+        key_length: Some(3),
+    })
+    .unwrap();
+}
+
+#[test]
 fn crack_repeating_key_caps_excessive_max_len() {
     let plain = b"Burning 'em, if you ain't quick and nimble\nI go crazy when I hear a cymbal";
     let key = b"ICE";
