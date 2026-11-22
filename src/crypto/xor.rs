@@ -75,6 +75,8 @@ pub fn run(action: XorAction) -> Result<()> {
 
 pub const MAX_XOR_BYTES: usize = 16 * 1024 * 1024;
 
+pub const MAX_BRUTEFORCE_BYTES: usize = 32 * 1024;
+
 pub const MAX_CRIB_LEN: usize = 256;
 
 pub const MAX_CRIB_HITS: usize = 10_000;
@@ -222,7 +224,7 @@ fn run_cipher(input: &str, key: &str, ascii_key: bool) -> Result<()> {
 }
 
 fn run_bruteforce(input: &str, printable_only: bool) -> Result<()> {
-    let input_bytes = decode_xor_hex_with_limit(input, MAX_XOR_BYTES)?;
+    let input_bytes = decode_xor_hex_with_limit(input, MAX_BRUTEFORCE_BYTES)?;
 
     if printable_only {
         for key in 0u8..=255 {
