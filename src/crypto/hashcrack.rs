@@ -31,6 +31,8 @@ pub const MAX_RULES: usize = 250_000;
 
 pub const MAX_RULE_LEN: usize = 1_024;
 
+pub const MAX_WORD_LEN: usize = 64 * 1024;
+
 pub fn check_rules_len(count: usize) -> Result<()> {
     if count > MAX_RULES {
         anyhow::bail!(
@@ -45,6 +47,26 @@ pub fn check_rule_len(rule: &str) -> Result<()> {
         anyhow::bail!(
             "Rule exceeds maximum length of {MAX_RULE_LEN} bytes to prevent Denial of Service"
         );
+    }
+    Ok(())
+}
+
+pub fn check_word_len(word: &str) -> Result<()> {
+    if word.len() > MAX_WORD_LEN {
+        anyhow::bail!(
+            "Wordlist entry exceeds maximum length of {MAX_WORD_LEN} bytes to prevent Denial of Service"
+        );
+    }
+    Ok(())
+}
+
+pub fn check_wordlist_entry_lens(buf: &str) -> Result<()> {
+    for line in buf.split('\n') {
+        let word = line.strip_suffix('\r').unwrap_or(line);
+        if word.is_empty() {
+            continue;
+        }
+        check_word_len(word)?;
     }
     Ok(())
 }
@@ -289,6 +311,7 @@ fn run_dict(
     require_salt_len(salt)?;
     let target = normalize_hash(hash);
     let buf = read_wordlist_buf(wordlist)?;
+    check_wordlist_entry_lens(&buf)?;
     let candidates = wordlist_lines(&buf);
 
     let algos = match algo {
@@ -706,6 +729,7 @@ fn run_rule(
         check_rule_len(rule)?;
     }
     let words_buf = read_wordlist_buf(wordlist)?;
+    check_wordlist_entry_lens(&words_buf)?;
     let words = wordlist_lines(&words_buf);
     let algos = match algo {
         Some(a) => vec![a],
@@ -747,6 +771,7 @@ fn run_hybrid(
 ) -> Result<()> {
     let target = normalize_hash(hash);
     let words_buf = read_wordlist_buf(wordlist)?;
+    check_wordlist_entry_lens(&words_buf)?;
     let words = wordlist_lines(&words_buf);
     let algos = match algo {
         Some(a) => vec![a],
