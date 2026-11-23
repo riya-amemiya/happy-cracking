@@ -1,3 +1,4 @@
+use crate::crypto::hex as hc_hex;
 use anyhow::{Context, Result};
 use clap::Subcommand;
 
@@ -34,23 +35,31 @@ pub fn decode_bitrot_hex_with_limit(hex_str: &str, max_bytes: usize) -> Result<V
             "Input exceeds maximum size of {max_bytes} bytes to prevent Denial of Service"
         );
     }
-    hex::decode(hex_str).context("Failed to decode hex input")
+    hc_hex::decode_hex_with_limit(hex_str, max_bytes).context("Failed to decode hex input")
 }
 
 pub fn run(action: BitrotAction) -> Result<()> {
     match action {
         BitrotAction::Rotl { input, bits, width } => {
-            let data = decode_bitrot_hex_with_limit(&input, MAX_BITROT_BYTES)?;
-            let result = rotate_left(&data, bits, width)?;
-            println!("{}", hex::encode(&result));
+            println!("{}", rotate_left_hex(&input, bits, width)?);
         }
         BitrotAction::Rotr { input, bits, width } => {
-            let data = decode_bitrot_hex_with_limit(&input, MAX_BITROT_BYTES)?;
-            let result = rotate_right(&data, bits, width)?;
-            println!("{}", hex::encode(&result));
+            println!("{}", rotate_right_hex(&input, bits, width)?);
         }
     }
     Ok(())
+}
+
+pub fn rotate_left_hex(hex_str: &str, bits: u32, width: u32) -> Result<String> {
+    let data = decode_bitrot_hex_with_limit(hex_str, MAX_BITROT_BYTES)?;
+    let result = rotate_left(&data, bits, width)?;
+    Ok(hc_hex::encode_bytes(&result))
+}
+
+pub fn rotate_right_hex(hex_str: &str, bits: u32, width: u32) -> Result<String> {
+    let data = decode_bitrot_hex_with_limit(hex_str, MAX_BITROT_BYTES)?;
+    let result = rotate_right(&data, bits, width)?;
+    Ok(hc_hex::encode_bytes(&result))
 }
 
 pub fn rotate_left(data: &[u8], bits: u32, width: u32) -> Result<Vec<u8>> {
