@@ -59,13 +59,13 @@ jobs:
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Install nightly toolchain
-        run: rustup toolchain install nightly --profile minimal --component rustfmt
+        run: rustup toolchain install nightly --profile minimal --component rustfmt,clippy
 
       - name: Check format
         run: cargo +nightly fmt --all -- --check
 
       - name: Clippy
-        run: cargo clippy --workspace -- -D warnings
+        run: cargo +nightly clippy --workspace -- -D warnings
 
       - name: Check format (fuzz)
         run: cargo +nightly fmt --manifest-path fuzz/Cargo.toml -- --check
