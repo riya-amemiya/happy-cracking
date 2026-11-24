@@ -1,7 +1,8 @@
 use happy_cracking::crypto::hashcrack::{
     HashAlgo, HashcrackAction, MAX_BRUTE_LEN, MAX_RULE_LEN, MAX_RULES, MAX_SALT_LEN,
-    MAX_TARGET_HASH_HEX_LEN, SaltPosition, brute_force, compute_hash, find_in_candidates,
-    lookup_in_pairs, lookup_in_table_file, lookup_in_table_file_with_limit, parse_table_line,
+    MAX_TARGET_HASH_HEX_LEN, MAX_WORD_LEN, SaltPosition, brute_force, check_word_len,
+    check_wordlist_entry_lens, compute_hash, find_in_candidates, lookup_in_pairs,
+    lookup_in_table_file, lookup_in_table_file_with_limit, parse_table_line,
     read_wordlist_buf_with_limit, run,
 };
 use std::fs;
@@ -582,6 +583,114 @@ fn read_wordlist_buf_with_limit_accepts_file_at_limit() {
 fn read_wordlist_buf_with_limit_bounds_device_without_eof() {
     let err = read_wordlist_buf_with_limit(std::path::Path::new("/dev/zero"), 64).unwrap_err();
     assert!(err.to_string().contains("Denial of Service"));
+}
+
+#[test]
+fn check_word_len_rejects_excessive() {
+    let word = "A".repeat(MAX_WORD_LEN + 1);
+    let err = check_word_len(&word).unwrap_err();
+    assert!(err.to_string().contains("Denial of Service"));
+}
+
+#[test]
+fn check_word_len_accepts_limit() {
+    let word = "A".repeat(MAX_WORD_LEN);
+    check_word_len(&word).unwrap();
+}
+
+#[test]
+fn check_wordlist_entry_lens_skips_blank_and_strips_crlf() {
+    check_wordlist_entry_lens("ok\r\n\nhello\r\n").unwrap();
+}
+
+#[test]
+fn check_wordlist_entry_lens_rejects_oversized_crlf_line() {
+    let word = "A".repeat(MAX_WORD_LEN + 1);
+    let err = check_wordlist_entry_lens(&format!("{word}\r\n")).unwrap_err();
+    assert!(err.to_string().contains("Denial of Service"));
+}
+
+#[test]
+fn dict_run_rejects_oversized_wordlist_entry() {
+    let path = scratch_wordlist("oversize_word");
+    fs::write(&path, format!("{}\nhello\n", "A".repeat(MAX_WORD_LEN + 1))).unwrap();
+    let start = std::time::Instant::now();
+    let err = run(HashcrackAction::Dict {
+        hash: "5d41402abc4b2a76b9719d911017c592".into(),
+        wordlist: path.clone(),
+        algo: Some(HashAlgo::Md5),
+        salt: None,
+        salt_position: SaltPosition::Suffix,
+    })
+    .unwrap_err()
+    .to_string();
+    let _ = fs::remove_file(&path);
+    assert!(
+        err.contains(&MAX_WORD_LEN.to_string()) && err.contains("Denial of Service"),
+        "unexpected error: {err}"
+    );
+    assert!(
+        start.elapsed().as_millis() < 100,
+        "oversized wordlist entry must be rejected before hashing"
+    );
+}
+
+#[test]
+fn dict_run_accepts_word_at_len_cap() {
+    let path = scratch_wordlist("word_at_cap");
+    fs::write(&path, format!("{}\nhello\n", "A".repeat(MAX_WORD_LEN))).unwrap();
+    run(HashcrackAction::Dict {
+        hash: "5d41402abc4b2a76b9719d911017c592".into(),
+        wordlist: path.clone(),
+        algo: Some(HashAlgo::Md5),
+        salt: None,
+        salt_position: SaltPosition::Suffix,
+    })
+    .unwrap();
+    let _ = fs::remove_file(&path);
+}
+
+#[test]
+fn rule_run_rejects_oversized_wordlist_entry() {
+    let words = scratch_wordlist("rule_oversize_words");
+    let rules = scratch_wordlist("rule_oversize_rules");
+    fs::write(&words, format!("{}\nhello\n", "A".repeat(MAX_WORD_LEN + 1))).unwrap();
+    fs::write(&rules, ":\n").unwrap();
+    let err = run(HashcrackAction::Rule {
+        hash: "5d41402abc4b2a76b9719d911017c592".into(),
+        wordlist: words.clone(),
+        rules: Some(rules.clone()),
+        algo: Some(HashAlgo::Md5),
+    })
+    .unwrap_err()
+    .to_string();
+    let _ = fs::remove_file(&words);
+    let _ = fs::remove_file(&rules);
+    assert!(
+        err.contains(&MAX_WORD_LEN.to_string()) && err.contains("Denial of Service"),
+        "unexpected error: {err}"
+    );
+}
+
+#[test]
+fn hybrid_run_rejects_oversized_wordlist_entry() {
+    let path = scratch_wordlist("hybrid_oversize_word");
+    fs::write(&path, format!("{}\nhello\n", "A".repeat(MAX_WORD_LEN + 1))).unwrap();
+    let err = run(HashcrackAction::Hybrid {
+        hash: "5d41402abc4b2a76b9719d911017c592".into(),
+        wordlist: path.clone(),
+        algo: Some(HashAlgo::Md5),
+        min_digits: 0,
+        max_digits: 1,
+        also_prefix: false,
+    })
+    .unwrap_err()
+    .to_string();
+    let _ = fs::remove_file(&path);
+    assert!(
+        err.contains(&MAX_WORD_LEN.to_string()) && err.contains("Denial of Service"),
+        "unexpected error: {err}"
+    );
 }
 
 #[test]
