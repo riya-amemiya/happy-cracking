@@ -135,3 +135,31 @@ fn decode_bitrot_hex_with_limit_rejects_invalid_hex() {
     let err = bitrot::decode_bitrot_hex_with_limit("zz", 16).unwrap_err();
     assert!(!err.to_string().contains("Denial of Service"));
 }
+
+#[test]
+fn rotate_left_hex_matches_hex_crate_lowercase() {
+    let data = bitrot::decode_bitrot_hex_with_limit("deadbeef", 16).unwrap();
+    let rotated = bitrot::rotate_left(&data, 1, 32).unwrap();
+    let got = bitrot::rotate_left_hex("deadbeef", 1, 32).unwrap();
+    assert_eq!(got, hex::encode(&rotated));
+    assert_eq!(got, got.to_ascii_lowercase());
+}
+
+#[test]
+fn rotate_left_hex_accepts_uppercase() {
+    let lower = bitrot::rotate_left_hex("deadbeef", 1, 32).unwrap();
+    let upper = bitrot::rotate_left_hex("DEADBEEF", 1, 32).unwrap();
+    assert_eq!(lower, upper);
+}
+
+#[test]
+fn rotate_right_hex_roundtrip() {
+    let rotated = bitrot::rotate_left_hex("cafebabe", 7, 32).unwrap();
+    let restored = bitrot::rotate_right_hex(&rotated, 7, 32).unwrap();
+    assert_eq!(restored, "cafebabe");
+}
+
+#[test]
+fn rotate_left_hex_empty() {
+    assert_eq!(bitrot::rotate_left_hex("", 1, 8).unwrap(), "");
+}
