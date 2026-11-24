@@ -132,6 +132,25 @@ fn decode_aes_hex_with_limit_accepts_empty() {
 fn decode_aes_hex_with_limit_rejects_invalid_hex() {
     let err = aes_cipher::decode_aes_hex_with_limit("zz", 16).unwrap_err();
     assert!(!err.to_string().contains("Denial of Service"));
+    assert!(err.to_string().contains("Failed to decode hex input"));
+}
+
+#[test]
+fn decode_aes_hex_with_limit_accepts_uppercase() {
+    let lower = aes_cipher::decode_aes_hex_with_limit("4a4b", 16).unwrap();
+    let upper = aes_cipher::decode_aes_hex_with_limit("4A4B", 16).unwrap();
+    assert_eq!(lower, b"JK");
+    assert_eq!(upper, lower);
+    let mixed = aes_cipher::decode_aes_hex_with_limit("48656C6c6F", 16).unwrap();
+    assert_eq!(mixed, b"Hello");
+}
+
+#[test]
+fn ecb_detect_uppercase_duplicate_blocks() {
+    let dump = "00112233445566778899aabbccddeeff00112233445566778899AABBCCDDEEFF";
+    let (detected, count) = aes_cipher::ecb_detect(dump).unwrap();
+    assert!(detected);
+    assert_eq!(count, 1);
 }
 
 #[test]
