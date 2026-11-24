@@ -167,11 +167,9 @@ impl Ignore {
             let mut igtmp = ig.inner(parent, loaded);
             igtmp.is_absolute_parent = true;
             igtmp.absolute_base = Some(absolute_base.clone());
-            igtmp.has_git = if opts.require_git && opts.git_ignore {
-                parent.join(".git").exists() || parent.join(".jj").exists()
-            } else {
-                false
-            };
+            igtmp.has_git = opts.require_git
+                && opts.git_ignore
+                && (parent.join(".git").exists() || parent.join(".jj").exists());
             let ig_arc = Arc::new(igtmp.finish());
             ig = Ignore(ig_arc.clone());
             compiled.insert(parent.as_os_str().to_os_string(), Arc::downgrade(&ig_arc));

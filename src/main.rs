@@ -15,7 +15,23 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    // === Encoding ===
+    #[command(flatten)]
+    Encoding(EncodingCommands),
+    #[command(flatten)]
+    ClassicCipher(ClassicCipherCommands),
+    #[command(flatten)]
+    HashCrypto(HashCryptoCommands),
+    #[command(flatten)]
+    AttackRecon(AttackReconCommands),
+    #[command(flatten)]
+    AdvancedCrypto(AdvancedCryptoCommands),
+    #[command(flatten)]
+    Utilities(UtilitiesCommands),
+}
+
+// === Encoding ===
+#[derive(Subcommand)]
+enum EncodingCommands {
     #[command(about = "Base64 encode/decode")]
     Base64 {
         #[command(subcommand)]
@@ -116,8 +132,38 @@ enum Commands {
         #[command(subcommand)]
         action: crypto::quotedprintable::QpAction,
     },
+}
 
-    // === Classic Ciphers ===
+impl EncodingCommands {
+    fn run(self) -> Result<()> {
+        match self {
+            Self::Base64 { action } => crypto::base64::run(action),
+            Self::Base32 { action } => crypto::base32::run(action),
+            Self::Base58 { action } => crypto::base58::run(action),
+            Self::Base62 { action } => crypto::base62::run(action),
+            Self::Base85 { action } => crypto::base85::run(action),
+            Self::Base91 { action } => crypto::base91::run(action),
+            Self::Hex { action } => crypto::hex::run(action),
+            Self::Url { action } => crypto::url::run(action),
+            Self::Binary { action } => crypto::binary::run(action),
+            Self::Morse { action } => crypto::morse::run(action),
+            Self::A1z26 { action } => crypto::a1z26::run(action),
+            Self::Baudot { action } => crypto::baudot::run(action),
+            Self::Braille { action } => crypto::braille::run(action),
+            Self::Nato { action } => crypto::nato::run(action),
+            Self::Phone { action } => crypto::phone::run(action),
+            Self::Semaphore { action } => crypto::semaphore::run(action),
+            Self::Tapcode { action } => crypto::tapcode::run(action),
+            Self::Base45 { action } => crypto::base45::run(action),
+            Self::Uuencode { action } => crypto::uuencode::run(action),
+            Self::Qp { action } => crypto::quotedprintable::run(action),
+        }
+    }
+}
+
+// === Classic Ciphers ===
+#[derive(Subcommand)]
+enum ClassicCipherCommands {
     #[command(about = "ROT13 cipher")]
     Rot13 {
         #[arg(help = "Input text")]
@@ -238,8 +284,48 @@ enum Commands {
         #[command(subcommand)]
         action: crypto::substitution::SubstitutionAction,
     },
+}
 
-    // === Hash / Crypto ===
+impl ClassicCipherCommands {
+    fn run(self) -> Result<()> {
+        match self {
+            Self::Rot13 { input } => {
+                println!("{}", crypto::rot::rot13(&input));
+                Ok(())
+            }
+            Self::Rot47 { input } => {
+                println!("{}", crypto::rot::rot47(&input));
+                Ok(())
+            }
+            Self::Caesar { action } => crypto::caesar::run(action),
+            Self::Xor { action } => crypto::xor::run(action),
+            Self::Vigenere { action } => crypto::vigenere::run(action),
+            Self::Beaufort { action } => crypto::beaufort::run(action),
+            Self::Gronsfeld { action } => crypto::gronsfeld::run(action),
+            Self::Atbash { action } => crypto::atbash::run(action),
+            Self::Railfence { action } => crypto::railfence::run(action),
+            Self::Affine { action } => crypto::affine::run(action),
+            Self::Playfair { action } => crypto::playfair::run(action),
+            Self::Foursquare { action } => crypto::foursquare::run(action),
+            Self::Hill { action } => crypto::hill::run(action),
+            Self::Bifid { action } => crypto::bifid::run(action),
+            Self::Adfgvx { action } => crypto::adfgvx::run(action),
+            Self::Columnar { action } => crypto::columnar::run(action),
+            Self::Enigma { action } => crypto::enigma::run(action),
+            Self::Baconian { action } => crypto::baconian::run(action),
+            Self::Polybius { action } => crypto::polybius::run(action),
+            Self::Otp { action } => crypto::otp::run(action),
+            Self::Aes { action } => crypto::aes_cipher::run(action),
+            Self::Des { action } => crypto::des_cipher::run(action),
+            Self::Rc4 { action } => crypto::rc4::run(action),
+            Self::Substitution { action } => crypto::substitution::run(action),
+        }
+    }
+}
+
+// === Hash / Crypto ===
+#[derive(Subcommand)]
+enum HashCryptoCommands {
     #[command(about = "Generate hash (MD5, SHA1, SHA256, SHA512)")]
     Hash {
         #[command(subcommand)]
@@ -291,8 +377,28 @@ enum Commands {
         #[command(subcommand)]
         action: crypto::zipcrack::ZipcrackAction,
     },
+}
 
-    // === Attack / Recon ===
+impl HashCryptoCommands {
+    fn run(self) -> Result<()> {
+        match self {
+            Self::Hash { action } => crypto::hash::run(action),
+            Self::Hashid { action } => crypto::hashid::run(action),
+            Self::Hmac { action } => crypto::hmac::run(action),
+            Self::Crc32 { action } => crypto::crc32::run(action),
+            Self::Crc32Forge { action } => crypto::crc32_forge::run(action),
+            Self::Rsa { action } => crypto::rsa::run(action),
+            Self::HashExt { action } => crypto::hash_ext::run(action),
+            Self::Jwt { action } => crypto::jwt::run(action),
+            Self::Hashcrack { action } => crypto::hashcrack::run(action),
+            Self::Zipcrack { action } => crypto::zipcrack::run(action),
+        }
+    }
+}
+
+// === Attack / Recon ===
+#[derive(Subcommand)]
+enum AttackReconCommands {
     #[command(about = "Aggressive auto-solve: encodings + classic cipher attacks")]
     Solve {
         #[command(subcommand)]
@@ -311,8 +417,21 @@ enum Commands {
         #[command(subcommand)]
         action: crypto::httpload::HttpLoadAction,
     },
+}
 
-    // === Advanced Crypto ===
+impl AttackReconCommands {
+    fn run(self) -> Result<()> {
+        match self {
+            Self::Solve { action } => crypto::solve::run(action),
+            Self::Portscan { action } => crypto::portscan::run(action),
+            Self::HttpLoad { action } => crypto::httpload::run(action),
+        }
+    }
+}
+
+// === Advanced Crypto ===
+#[derive(Subcommand)]
+enum AdvancedCryptoCommands {
     #[command(about = "Elliptic curve operations over finite fields")]
     Ec {
         #[command(subcommand)]
@@ -323,8 +442,20 @@ enum Commands {
         #[command(subcommand)]
         action: crypto::dh::DhAction,
     },
+}
 
-    // === Utilities ===
+impl AdvancedCryptoCommands {
+    fn run(self) -> Result<()> {
+        match self {
+            Self::Ec { action } => crypto::ec::run(action),
+            Self::Dh { action } => crypto::dh::run(action),
+        }
+    }
+}
+
+// === Utilities ===
+#[derive(Subcommand)]
+enum UtilitiesCommands {
     #[command(about = "Character frequency analysis")]
     Frequency {
         #[command(subcommand)]
@@ -402,94 +533,37 @@ enum Commands {
     },
 }
 
+impl UtilitiesCommands {
+    fn run(self) -> Result<()> {
+        match self {
+            Self::Frequency { action } => crypto::frequency::run(action),
+            Self::Auto { action } => crypto::autodecode::run(action),
+            Self::Entropy { action } => crypto::entropy::run(action),
+            Self::Cipherid { action } => crypto::cipherid::run(action),
+            Self::Math { action } => crypto::mathtools::run(action),
+            Self::Primes { action } => crypto::primes::run(action),
+            Self::Str { action } => crypto::strtools::run(action),
+            Self::Wordgen { action } => crypto::wordgen::run(action),
+            Self::Numconv { action } => crypto::numbersys::run(action),
+            Self::Chain { action } => crypto::chain::run(action),
+            Self::Hexdump { action } => crypto::hexdump::run(action),
+            Self::Bitrot { action } => crypto::bitrot::run(action),
+            Self::Padding { action } => crypto::padding::run(action),
+            Self::Filetype { action } => crypto::filetype::run(action),
+            Self::Strings { action } => crypto::strings::run(action),
+        }
+    }
+}
+
 fn main() -> Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Base64 { action } => crypto::base64::run(action)?,
-        Commands::Base32 { action } => crypto::base32::run(action)?,
-        Commands::Base58 { action } => crypto::base58::run(action)?,
-        Commands::Base62 { action } => crypto::base62::run(action)?,
-        Commands::Base85 { action } => crypto::base85::run(action)?,
-        Commands::Base91 { action } => crypto::base91::run(action)?,
-        Commands::Hex { action } => crypto::hex::run(action)?,
-        Commands::Url { action } => crypto::url::run(action)?,
-        Commands::Binary { action } => crypto::binary::run(action)?,
-        Commands::Morse { action } => crypto::morse::run(action)?,
-        Commands::A1z26 { action } => crypto::a1z26::run(action)?,
-        Commands::Baudot { action } => crypto::baudot::run(action)?,
-        Commands::Braille { action } => crypto::braille::run(action)?,
-        Commands::Nato { action } => crypto::nato::run(action)?,
-        Commands::Phone { action } => crypto::phone::run(action)?,
-        Commands::Semaphore { action } => crypto::semaphore::run(action)?,
-        Commands::Tapcode { action } => crypto::tapcode::run(action)?,
-        Commands::Base45 { action } => crypto::base45::run(action)?,
-        Commands::Uuencode { action } => crypto::uuencode::run(action)?,
-        Commands::Qp { action } => crypto::quotedprintable::run(action)?,
-
-        Commands::Rot13 { input } => {
-            println!("{}", crypto::rot::rot13(&input));
-        }
-        Commands::Rot47 { input } => {
-            println!("{}", crypto::rot::rot47(&input));
-        }
-        Commands::Caesar { action } => crypto::caesar::run(action)?,
-        Commands::Xor { action } => crypto::xor::run(action)?,
-        Commands::Vigenere { action } => crypto::vigenere::run(action)?,
-        Commands::Beaufort { action } => crypto::beaufort::run(action)?,
-        Commands::Gronsfeld { action } => crypto::gronsfeld::run(action)?,
-        Commands::Atbash { action } => crypto::atbash::run(action)?,
-        Commands::Railfence { action } => crypto::railfence::run(action)?,
-        Commands::Affine { action } => crypto::affine::run(action)?,
-        Commands::Playfair { action } => crypto::playfair::run(action)?,
-        Commands::Foursquare { action } => crypto::foursquare::run(action)?,
-        Commands::Hill { action } => crypto::hill::run(action)?,
-        Commands::Bifid { action } => crypto::bifid::run(action)?,
-        Commands::Adfgvx { action } => crypto::adfgvx::run(action)?,
-        Commands::Columnar { action } => crypto::columnar::run(action)?,
-        Commands::Enigma { action } => crypto::enigma::run(action)?,
-        Commands::Baconian { action } => crypto::baconian::run(action)?,
-        Commands::Polybius { action } => crypto::polybius::run(action)?,
-        Commands::Otp { action } => crypto::otp::run(action)?,
-        Commands::Aes { action } => crypto::aes_cipher::run(action)?,
-        Commands::Des { action } => crypto::des_cipher::run(action)?,
-        Commands::Rc4 { action } => crypto::rc4::run(action)?,
-        Commands::Substitution { action } => crypto::substitution::run(action)?,
-
-        Commands::Hash { action } => crypto::hash::run(action)?,
-        Commands::Hashid { action } => crypto::hashid::run(action)?,
-        Commands::Hmac { action } => crypto::hmac::run(action)?,
-        Commands::Crc32 { action } => crypto::crc32::run(action)?,
-        Commands::Crc32Forge { action } => crypto::crc32_forge::run(action)?,
-        Commands::Rsa { action } => crypto::rsa::run(action)?,
-        Commands::HashExt { action } => crypto::hash_ext::run(action)?,
-        Commands::Jwt { action } => crypto::jwt::run(action)?,
-
-        Commands::Hashcrack { action } => crypto::hashcrack::run(action)?,
-        Commands::Zipcrack { action } => crypto::zipcrack::run(action)?,
-        Commands::Solve { action } => crypto::solve::run(action)?,
-        Commands::Portscan { action } => crypto::portscan::run(action)?,
-        Commands::HttpLoad { action } => crypto::httpload::run(action)?,
-
-        Commands::Ec { action } => crypto::ec::run(action)?,
-        Commands::Dh { action } => crypto::dh::run(action)?,
-
-        Commands::Frequency { action } => crypto::frequency::run(action)?,
-        Commands::Auto { action } => crypto::autodecode::run(action)?,
-        Commands::Entropy { action } => crypto::entropy::run(action)?,
-        Commands::Cipherid { action } => crypto::cipherid::run(action)?,
-        Commands::Math { action } => crypto::mathtools::run(action)?,
-        Commands::Primes { action } => crypto::primes::run(action)?,
-        Commands::Str { action } => crypto::strtools::run(action)?,
-        Commands::Wordgen { action } => crypto::wordgen::run(action)?,
-        Commands::Numconv { action } => crypto::numbersys::run(action)?,
-        Commands::Chain { action } => crypto::chain::run(action)?,
-        Commands::Hexdump { action } => crypto::hexdump::run(action)?,
-        Commands::Bitrot { action } => crypto::bitrot::run(action)?,
-        Commands::Padding { action } => crypto::padding::run(action)?,
-        Commands::Filetype { action } => crypto::filetype::run(action)?,
-        Commands::Strings { action } => crypto::strings::run(action)?,
+        Commands::Encoding(command) => command.run(),
+        Commands::ClassicCipher(command) => command.run(),
+        Commands::HashCrypto(command) => command.run(),
+        Commands::AttackRecon(command) => command.run(),
+        Commands::AdvancedCrypto(command) => command.run(),
+        Commands::Utilities(command) => command.run(),
     }
-
-    Ok(())
 }
