@@ -181,7 +181,8 @@ pub fn encode(input: &str) -> String {
     encode_bytes(input.as_bytes())
 }
 
-fn encode_bytes(src: &[u8]) -> String {
+#[must_use]
+pub fn encode_bytes(src: &[u8]) -> String {
     let mut out = vec![0u8; src.len() * 2];
     encode_into(src, &mut out);
     String::from_utf8(out).expect("hex output is ASCII")
