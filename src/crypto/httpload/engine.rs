@@ -1,4 +1,4 @@
-use super::{LoadReport, Prepared, build_request, new_histogram};
+use super::{LoadReport, MAX_URL_LEN, Prepared, build_request, new_histogram};
 use anyhow::{Context, Result};
 use hdrhistogram::Histogram;
 use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
@@ -232,7 +232,7 @@ fn next_redirect(
     remaining: usize,
     parsed: &Parsed,
 ) -> Option<RedirectTarget> {
-    if remaining == 0 || parsed.location.is_empty() {
+    if remaining == 0 || parsed.location.is_empty() || parsed.location.len() > MAX_URL_LEN {
         return None;
     }
     if !matches!(parsed.status, 301 | 302 | 303 | 307 | 308) {
@@ -240,6 +240,12 @@ fn next_redirect(
     }
     let next = current.join(&parsed.location).ok()?;
     if next.scheme() != "http" && next.scheme() != "https" {
+        return None;
+    }
+    if !next.username().is_empty() || next.password().is_some() {
+        return None;
+    }
+    if !same_origin(current, &next) {
         return None;
     }
     let (method, body) = if matches!(parsed.status, 301..=303) && method != "HEAD" {
@@ -254,10 +260,14 @@ fn next_redirect(
     })
 }
 
+fn same_origin(a: &Url, b: &Url) -> bool {
+    a.scheme() == b.scheme()
+        && a.host_str() == b.host_str()
+        && a.port_or_known_default() == b.port_or_known_default()
+}
+
 fn same_socket(prep: &Prepared, url: &Url) -> bool {
-    url.scheme() == prep.url.scheme()
-        && url.host_str() == prep.url.host_str()
-        && url.port_or_known_default() == prep.url.port_or_known_default()
+    same_origin(&prep.url, url)
 }
 
 #[derive(Clone)]

@@ -222,3 +222,78 @@ fn duration_mode_stops() {
     assert!(report.elapsed >= Duration::from_millis(150));
     assert!(report.elapsed < Duration::from_secs(2));
 }
+
+fn redirect_cross_origin(raw: &[u8]) -> Vec<u8> {
+    let text = String::from_utf8_lossy(raw);
+    if text.starts_with("GET / HTTP/") {
+        return b"HTTP/1.1 302 Found\r\nLocation: http://example.com/steal\r\nContent-Length: 0\r\nConnection: keep-alive\r\n\r\n".to_vec();
+    }
+    ok_body(raw)
+}
+
+fn redirect_same_origin(raw: &[u8]) -> Vec<u8> {
+    let text = String::from_utf8_lossy(raw);
+    if text.starts_with("GET / HTTP/") {
+        return b"HTTP/1.1 302 Found\r\nLocation: /ok\r\nContent-Length: 0\r\nConnection: keep-alive\r\n\r\n".to_vec();
+    }
+    if text.starts_with("GET /ok ") {
+        return ok_body(raw);
+    }
+    b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: keep-alive\r\n\r\n".to_vec()
+}
+
+fn redirect_userinfo(raw: &[u8]) -> Vec<u8> {
+    let text = String::from_utf8_lossy(raw);
+    if text.starts_with("GET /ok ") {
+        return ok_body(raw);
+    }
+    if text.starts_with("GET / HTTP/") {
+        let host = text
+            .lines()
+            .find_map(|line| {
+                line.strip_prefix("Host: ")
+                    .or_else(|| line.strip_prefix("host: "))
+            })
+            .unwrap_or("127.0.0.1")
+            .trim();
+        return format!(
+            "HTTP/1.1 302 Found\r\nLocation: http://evil:pass@{host}/ok\r\nContent-Length: 0\r\nConnection: keep-alive\r\n\r\n"
+        )
+        .into_bytes();
+    }
+    b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: keep-alive\r\n\r\n".to_vec()
+}
+
+fn one_redirect(url: String) -> LoadRequest {
+    let mut load = req(url);
+    load.requests = Some(1);
+    load.connections = 1;
+    load.redirects = 5;
+    load
+}
+
+#[test]
+fn follows_same_origin_redirect() {
+    let server = Server::spawn(redirect_same_origin);
+    let report = httpload::run_load(&one_redirect(server.url.clone())).unwrap();
+    assert_eq!(report.success, 1);
+    assert_eq!(report.status_codes.get(&200), Some(&1));
+}
+
+#[test]
+fn does_not_follow_cross_origin_redirect() {
+    let server = Server::spawn(redirect_cross_origin);
+    let report = httpload::run_load(&one_redirect(server.url.clone())).unwrap();
+    assert_eq!(report.success, 1);
+    assert_eq!(report.status_codes.get(&302), Some(&1));
+    assert!(!report.status_codes.contains_key(&200));
+}
+
+#[test]
+fn does_not_follow_redirect_with_userinfo() {
+    let server = Server::spawn(redirect_userinfo);
+    let report = httpload::run_load(&one_redirect(server.url.clone())).unwrap();
+    assert_eq!(report.success, 1);
+    assert_eq!(report.status_codes.get(&302), Some(&1));
+    assert!(!report.status_codes.contains_key(&200));
+}
