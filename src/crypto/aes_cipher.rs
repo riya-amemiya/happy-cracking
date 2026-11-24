@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use clap::Subcommand;
 
 use aes::Aes128;
@@ -110,7 +110,7 @@ fn invalid_aes_hex<T>(hex_str: &str) -> Result<T> {
 
 pub fn decode_aes_hex_with_limit(hex_str: &str, max_bytes: usize) -> Result<Vec<u8>> {
     let hex_str = bounded_aes_hex(hex_str, max_bytes)?;
-    hex::decode(hex_str).context("Failed to decode hex input")
+    super::hex::decode_hex_with_limit(hex_str, max_bytes).or_else(|_| invalid_aes_hex(hex_str))
 }
 
 fn require_aes_block_hex(hex_input: &str) -> Result<&str> {
