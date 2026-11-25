@@ -1,3 +1,4 @@
+use crate::crypto::hex as hc_hex;
 use anyhow::{Context, Result};
 use clap::Subcommand;
 
@@ -110,17 +111,6 @@ pub fn check_crack_top(top: usize) -> Result<()> {
     Ok(())
 }
 
-const HEX_OUT: &[u8; 16] = b"0123456789abcdef";
-
-fn xor_hex_nibble(b: u8) -> Option<u8> {
-    match b {
-        b'0'..=b'9' => Some(b - b'0'),
-        b'a'..=b'f' => Some(b - b'a' + 10),
-        b'A'..=b'F' => Some(b - b'A' + 10),
-        _ => None,
-    }
-}
-
 fn bounded_xor_hex(hex_str: &str, max_bytes: usize) -> Result<&str> {
     let hex_str = hex_str.trim();
     let max_bytes = max_bytes.min(MAX_XOR_BYTES);
@@ -155,54 +145,28 @@ pub fn xor_hex_with_limit(
     max_bytes: usize,
 ) -> Result<(String, Vec<u8>)> {
     let hex_str = bounded_xor_hex(input_hex, max_bytes)?;
-    let hex_bytes = hex_str.as_bytes();
-    let (pairs, rest) = hex_bytes.as_chunks::<2>();
-    if !rest.is_empty() {
-        return invalid_xor_hex(hex_str);
-    }
+    let mut plain =
+        hc_hex::decode_hex_with_limit(hex_str, max_bytes).or_else(|_| invalid_xor_hex(hex_str))?;
 
-    let n = pairs.len();
-    let mut hex_out = vec![0u8; hex_bytes.len()];
-    let mut plain = vec![0u8; n];
-
-    if key.is_empty() {
-        for (i, pair) in pairs.iter().enumerate() {
-            let Some(hi) = xor_hex_nibble(pair[0]) else {
-                return invalid_xor_hex(hex_str);
-            };
-            let Some(lo) = xor_hex_nibble(pair[1]) else {
-                return invalid_xor_hex(hex_str);
-            };
-            let b = (hi << 4) | lo;
-            plain[i] = b;
-            hex_out[i * 2] = HEX_OUT[(b >> 4) as usize];
-            hex_out[i * 2 + 1] = HEX_OUT[(b & 0x0f) as usize];
+    if let [k] = key {
+        for b in &mut plain {
+            *b ^= k;
         }
-    } else {
+    } else if !key.is_empty() {
         let key_len = key.len();
-        let mut ki = 0usize;
-        for (i, pair) in pairs.iter().enumerate() {
-            let Some(hi) = xor_hex_nibble(pair[0]) else {
-                return invalid_xor_hex(hex_str);
-            };
-            let Some(lo) = xor_hex_nibble(pair[1]) else {
-                return invalid_xor_hex(hex_str);
-            };
-            let b = ((hi << 4) | lo) ^ key[ki];
-            plain[i] = b;
-            hex_out[i * 2] = HEX_OUT[(b >> 4) as usize];
-            hex_out[i * 2 + 1] = HEX_OUT[(b & 0x0f) as usize];
-            ki += 1;
-            if ki == key_len {
-                ki = 0;
+        let n = (plain.len() / key_len) * key_len;
+        let (chunks, rest) = plain.split_at_mut(n);
+        for chunk in chunks.chunks_exact_mut(key_len) {
+            for (b, k) in chunk.iter_mut().zip(key) {
+                *b ^= k;
             }
         }
+        for (b, k) in rest.iter_mut().zip(key) {
+            *b ^= k;
+        }
     }
 
-    Ok((
-        String::from_utf8(hex_out).expect("XOR hex output is ASCII"),
-        plain,
-    ))
+    Ok((hc_hex::encode_bytes(&plain), plain))
 }
 
 pub fn ascii_key_bytes_with_limit(key: &str, max_bytes: usize) -> Result<Vec<u8>> {
