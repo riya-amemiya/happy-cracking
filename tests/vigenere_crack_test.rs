@@ -110,3 +110,52 @@ fn test_key_length_estimation_returns_sorted() {
         assert!(ioc >= 0.0);
     }
 }
+
+#[test]
+fn test_check_crack_input_len_rejects_excessive() {
+    let input = "A".repeat(vigenere::MAX_CRACK_BYTES + 1);
+    let err = vigenere::check_crack_input_len(&input, vigenere::MAX_CRACK_BYTES).unwrap_err();
+    assert!(err.to_string().contains("Denial of Service"));
+}
+
+#[test]
+fn test_check_crack_input_len_accepts_limit() {
+    let input = "A".repeat(vigenere::MAX_CRACK_BYTES);
+    vigenere::check_crack_input_len(&input, vigenere::MAX_CRACK_BYTES).unwrap();
+}
+
+#[test]
+fn crack_run_rejects_excessive_input() {
+    let err = vigenere::run(vigenere::VigenereAction::Crack {
+        input: "A".repeat(vigenere::MAX_CRACK_BYTES + 1),
+        key_length: Some(3),
+    })
+    .unwrap_err();
+    assert!(err.to_string().contains("Denial of Service"));
+}
+
+#[test]
+fn key_length_run_rejects_excessive_input() {
+    let err = vigenere::run(vigenere::VigenereAction::KeyLength {
+        input: "A".repeat(vigenere::MAX_CRACK_BYTES + 1),
+        max_length: 20,
+    })
+    .unwrap_err();
+    assert!(err.to_string().contains("Denial of Service"));
+}
+
+#[test]
+fn crack_run_accepts_known_ciphertext() {
+    vigenere::run(vigenere::VigenereAction::Crack {
+        input: "RIJVS".to_string(),
+        key_length: Some(3),
+    })
+    .unwrap();
+}
+
+#[test]
+fn encrypt_decrypt_accept_input_beyond_crack_cap() {
+    let original = "A".repeat(vigenere::MAX_CRACK_BYTES + 8);
+    let encrypted = vigenere::encrypt(&original, "KEY").unwrap();
+    assert_eq!(vigenere::decrypt(&encrypted, "KEY").unwrap(), original);
+}
