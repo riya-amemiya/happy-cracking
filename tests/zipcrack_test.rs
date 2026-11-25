@@ -291,11 +291,135 @@ fn dict_run_reads_zip_and_wordlist_under_limit() {
     let _ = fs::remove_file(&wl_path);
 }
 
+#[test]
+fn check_word_len_rejects_excessive() {
+    let word = "A".repeat(zipcrack::MAX_WORD_LEN + 1);
+    let err = zipcrack::check_word_len(&word).unwrap_err();
+    assert!(err.to_string().contains("Denial of Service"));
+}
+
+#[test]
+fn check_word_len_accepts_limit() {
+    let word = "A".repeat(zipcrack::MAX_WORD_LEN);
+    zipcrack::check_word_len(&word).unwrap();
+}
+
+#[test]
+fn check_wordlist_entry_lens_skips_blank_and_strips_crlf() {
+    zipcrack::check_wordlist_entry_lens("ok\r\n\nhello\r\n").unwrap();
+}
+
+#[test]
+fn check_wordlist_entry_lens_rejects_oversized_crlf_line() {
+    let word = "A".repeat(zipcrack::MAX_WORD_LEN + 1);
+    let err = zipcrack::check_wordlist_entry_lens(&format!("{word}\r\n")).unwrap_err();
+    assert!(err.to_string().contains("Denial of Service"));
+}
+
+#[test]
+fn dict_run_rejects_oversized_wordlist_entry() {
+    let zip_path = scratch_file("dict_oversize_zip");
+    let wl_path = scratch_file("dict_oversize_wl");
+    fs::write(&zip_path, make_encrypted_zip("s3cr3t", "flag{zip_cracked}")).unwrap();
+    fs::write(
+        &wl_path,
+        format!("{}\ns3cr3t\n", "A".repeat(zipcrack::MAX_WORD_LEN + 1)),
+    )
+    .unwrap();
+    let start = std::time::Instant::now();
+    let err = zipcrack::run(zipcrack::ZipcrackAction::Dict {
+        file: zip_path.clone(),
+        wordlist: wl_path.clone(),
+    })
+    .unwrap_err()
+    .to_string();
+    let _ = fs::remove_file(&zip_path);
+    let _ = fs::remove_file(&wl_path);
+    assert!(
+        err.contains(&zipcrack::MAX_WORD_LEN.to_string()) && err.contains("Denial of Service"),
+        "unexpected error: {err}"
+    );
+    assert!(
+        start.elapsed().as_millis() < 100,
+        "oversized wordlist entry must be rejected before zip key derivation"
+    );
+}
+
+#[test]
+fn dict_run_accepts_word_at_len_cap() {
+    let zip_path = scratch_file("dict_word_at_cap_zip");
+    let wl_path = scratch_file("dict_word_at_cap_wl");
+    fs::write(&zip_path, make_encrypted_zip("s3cr3t", "flag{zip_cracked}")).unwrap();
+    fs::write(
+        &wl_path,
+        format!("s3cr3t\n{}\n", "A".repeat(zipcrack::MAX_WORD_LEN)),
+    )
+    .unwrap();
+    zipcrack::run(zipcrack::ZipcrackAction::Dict {
+        file: zip_path.clone(),
+        wordlist: wl_path.clone(),
+    })
+    .unwrap();
+    let _ = fs::remove_file(&zip_path);
+    let _ = fs::remove_file(&wl_path);
+}
+
 fn run_zipcrack(args: &[&str]) -> std::process::Output {
     Command::new(env!("CARGO_BIN_EXE_happy-cracking"))
         .args(args)
         .output()
         .unwrap()
+}
+
+#[test]
+fn zipcrack_dict_cli_recovers_wordlist_password() {
+    let zip_path = scratch_file("cli_dict_zip");
+    let wl_path = scratch_file("cli_dict_wl");
+    fs::write(&zip_path, make_encrypted_zip("s3cr3t", "flag{zip_cracked}")).unwrap();
+    fs::write(&wl_path, "wrong\ns3cr3t\n").unwrap();
+    let output = run_zipcrack(&[
+        "zipcrack",
+        "dict",
+        "--file",
+        zip_path.to_str().unwrap(),
+        "--wordlist",
+        wl_path.to_str().unwrap(),
+    ]);
+    let _ = fs::remove_file(&zip_path);
+    let _ = fs::remove_file(&wl_path);
+    assert!(output.status.success(), "{:?}", output.stderr);
+    assert_eq!(
+        String::from_utf8(output.stdout).unwrap(),
+        "Found password: s3cr3t\n"
+    );
+}
+
+#[test]
+fn zipcrack_dict_cli_rejects_oversized_wordlist_entry() {
+    let zip_path = scratch_file("cli_dict_oversize_zip");
+    let wl_path = scratch_file("cli_dict_oversize_wl");
+    fs::write(&zip_path, make_encrypted_zip("s3cr3t", "flag{zip_cracked}")).unwrap();
+    fs::write(
+        &wl_path,
+        format!("{}\ns3cr3t\n", "A".repeat(zipcrack::MAX_WORD_LEN + 1)),
+    )
+    .unwrap();
+    let output = run_zipcrack(&[
+        "zipcrack",
+        "dict",
+        "--file",
+        zip_path.to_str().unwrap(),
+        "--wordlist",
+        wl_path.to_str().unwrap(),
+    ]);
+    let _ = fs::remove_file(&zip_path);
+    let _ = fs::remove_file(&wl_path);
+    assert!(!output.status.success());
+    let err = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        err.contains(&zipcrack::MAX_WORD_LEN.to_string()) && err.contains("Denial of Service"),
+        "unexpected stderr: {err}"
+    );
 }
 
 #[test]

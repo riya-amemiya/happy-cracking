@@ -17,6 +17,28 @@ const MAX_VERIFY_UNCOMPRESSED: u64 = 16 * 1024 * 1024;
 
 pub const MAX_ZIP_ENTRIES: usize = 10_000;
 
+pub const MAX_WORD_LEN: usize = 64 * 1024;
+
+pub fn check_word_len(word: &str) -> Result<()> {
+    if word.len() > MAX_WORD_LEN {
+        anyhow::bail!(
+            "Wordlist entry exceeds maximum length of {MAX_WORD_LEN} bytes to prevent Denial of Service"
+        );
+    }
+    Ok(())
+}
+
+pub fn check_wordlist_entry_lens(buf: &str) -> Result<()> {
+    for line in buf.split('\n') {
+        let word = line.strip_suffix('\r').unwrap_or(line);
+        if word.is_empty() {
+            continue;
+        }
+        check_word_len(word)?;
+    }
+    Ok(())
+}
+
 #[derive(Subcommand)]
 pub enum ZipcrackAction {
     #[command(about = "Dictionary attack against a password-protected zip")]
@@ -98,6 +120,7 @@ pub fn run(action: ZipcrackAction) -> Result<()> {
                 Ok(s) => s,
                 Err(e) => String::from_utf8_lossy(e.as_bytes()).into_owned(),
             };
+            check_wordlist_entry_lens(&list)?;
             let words: Vec<&str> = list
                 .lines()
                 .map(str::trim)
