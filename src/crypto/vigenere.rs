@@ -43,6 +43,7 @@ pub fn run(action: VigenereAction) -> Result<()> {
             println!("{}", decrypt(&input, &key)?);
         }
         VigenereAction::Crack { input, key_length } => {
+            check_crack_input_len(&input, MAX_CRACK_BYTES)?;
             let key_len = if let Some(len) = key_length {
                 check_key_length(len)?;
                 len
@@ -59,6 +60,7 @@ pub fn run(action: VigenereAction) -> Result<()> {
             println!("Plaintext: {plaintext}");
         }
         VigenereAction::KeyLength { input, max_length } => {
+            check_crack_input_len(&input, MAX_CRACK_BYTES)?;
             if max_length > MAX_KEY_LENGTH {
                 check_key_length(max_length)?;
             }
@@ -179,13 +181,19 @@ fn kasiski_examination(input: &str, max_key_len: usize) -> HashMap<usize, usize>
     factor_counts
 }
 
-/// Maximum key length for Vigenère crack / key-length estimation.
-///
-/// SECURITY: `--key-length` and `--max-length` are user-controlled loop and
-/// allocation bounds. `recover_key` does `String::with_capacity(key_length)`
-/// and iterates `0..key_length`; `estimate_key_length` scans `O(max_length` * n).
-/// Unbounded values allow CPU/memory exhaustion.
 pub const MAX_KEY_LENGTH: usize = 256;
+
+pub const MAX_CRACK_BYTES: usize = 64 * 1024;
+
+pub fn check_crack_input_len(input: &str, max_bytes: usize) -> Result<()> {
+    let max_bytes = max_bytes.min(MAX_CRACK_BYTES);
+    if input.len() > max_bytes {
+        anyhow::bail!(
+            "Input exceeds maximum size of {max_bytes} bytes to prevent Denial of Service"
+        );
+    }
+    Ok(())
+}
 
 pub fn check_key_length(len: usize) -> Result<()> {
     if len == 0 {
