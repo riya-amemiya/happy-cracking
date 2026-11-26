@@ -77,17 +77,6 @@ pub fn run(action: AesCipherAction) -> Result<()> {
 pub const MAX_AES_BYTES: usize = 16 * 1024 * 1024;
 const AES128_KEY_BYTES: usize = 16;
 const AES_BLOCK_BYTES: usize = 16;
-const AES_BLOCK_HEX_CHARS: usize = 32;
-const HEX_OUT: &[u8; 16] = b"0123456789abcdef";
-
-fn aes_hex_nibble(b: u8) -> Option<u8> {
-    match b {
-        b'0'..=b'9' => Some(b - b'0'),
-        b'a'..=b'f' => Some(b - b'a' + 10),
-        b'A'..=b'F' => Some(b - b'A' + 10),
-        _ => None,
-    }
-}
 
 fn bounded_aes_hex(hex_str: &str, max_bytes: usize) -> Result<&str> {
     let hex_str = hex_str.trim();
@@ -132,27 +121,6 @@ fn require_aes_block_hex(hex_input: &str) -> Result<&str> {
     Ok(hex_str)
 }
 
-fn read_aes_block(src: &[u8]) -> Option<[u8; AES_BLOCK_BYTES]> {
-    let mut block = [0u8; AES_BLOCK_BYTES];
-    for (i, slot) in block.iter_mut().enumerate() {
-        let hi = aes_hex_nibble(src[i * 2])?;
-        let lo = aes_hex_nibble(src[i * 2 + 1])?;
-        *slot = (hi << 4) | lo;
-    }
-    Some(block)
-}
-
-fn write_aes_hex(dst: &mut [u8], block: &[u8]) {
-    for (i, &b) in block.iter().enumerate() {
-        dst[i * 2] = HEX_OUT[(b >> 4) as usize];
-        dst[i * 2 + 1] = HEX_OUT[(b & 0x0f) as usize];
-    }
-}
-
-fn hex_ascii_string(bytes: Vec<u8>) -> String {
-    String::from_utf8(bytes).expect("AES hex output is ASCII")
-}
-
 fn array_bytes(block: &Array<u8, <Aes128 as KeySizeUser>::KeySize>) -> [u8; AES_BLOCK_BYTES] {
     let mut out = [0u8; AES_BLOCK_BYTES];
     out.copy_from_slice(block);
@@ -164,20 +132,12 @@ fn crypt_aes_blocks(
     mut transform: impl FnMut([u8; AES_BLOCK_BYTES]) -> [u8; AES_BLOCK_BYTES],
 ) -> Result<String> {
     let hex_str = require_aes_block_hex(hex_input)?;
-    let bytes = hex_str.as_bytes();
-    let mut out = vec![0u8; bytes.len()];
-    for (src, dst) in bytes
-        .as_chunks::<AES_BLOCK_HEX_CHARS>()
-        .0
-        .iter()
-        .zip(out.as_chunks_mut::<AES_BLOCK_HEX_CHARS>().0.iter_mut())
-    {
-        let Some(block) = read_aes_block(src) else {
-            return invalid_aes_hex(hex_str);
-        };
-        write_aes_hex(dst, &transform(block));
+    let mut bytes = super::hex::decode_hex_with_limit(hex_str, MAX_AES_BYTES)
+        .or_else(|_| invalid_aes_hex(hex_str))?;
+    for chunk in bytes.as_chunks_mut::<AES_BLOCK_BYTES>().0 {
+        *chunk = transform(*chunk);
     }
-    Ok(hex_ascii_string(out))
+    Ok(super::hex::encode_bytes(&bytes))
 }
 
 fn parse_key(hex_key: &str) -> Result<Array<u8, <Aes128 as KeySizeUser>::KeySize>> {

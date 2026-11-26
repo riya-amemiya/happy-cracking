@@ -103,6 +103,14 @@ fn test_invalid_input_length() {
 }
 
 #[test]
+fn ecb_encrypt_rejects_invalid_hex() {
+    let key = "00112233445566778899aabbccddeeff";
+    let plaintext = "zz".repeat(16);
+    let err = aes_cipher::ecb_encrypt(&plaintext, key).unwrap_err();
+    assert!(err.to_string().contains("Failed to decode hex input"));
+}
+
+#[test]
 fn test_invalid_iv_length() {
     let key = "00112233445566778899aabbccddeeff";
     let iv = "0011223344556677";
