@@ -135,6 +135,8 @@ This produces `target/release/happy-cracking` and the companion binaries `target
 
 `hfind` and `hfd` share one implementation. A command line containing a find expression (`-name`, `-type`, `-print0`, and so on) is parsed as find syntax; otherwise it is parsed as fd syntax, except that bare positional arguments are search paths under `hfind` and fd's `[pattern] [path...]` under `hfd`.
 
+[Why hgrep and hfind outrun ripgrep and fd](docs/hgrep-hfind-performance.md) walks through the design differences behind their speed, with diagrams.
+
 ## Usage
 
 ### Encoding
