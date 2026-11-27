@@ -5,6 +5,8 @@ use std::path::{Path, PathBuf};
 
 pub const MAX_STRINGS_BYTES: usize = 16 * 1024 * 1024;
 
+pub const MAX_EXTRACTED_STRINGS: usize = 250_000;
+
 #[derive(Clone, Copy, ValueEnum)]
 pub enum StringEncoding {
     Ascii,
@@ -106,13 +108,20 @@ pub fn read_strings_bytes_with_limit(path: &Path, max_bytes: usize) -> Result<Ve
     Ok(buf)
 }
 
-fn strings_hex_nibble(b: u8) -> Option<u8> {
-    match b {
-        b'0'..=b'9' => Some(b - b'0'),
-        b'a'..=b'f' => Some(b - b'a' + 10),
-        b'A'..=b'F' => Some(b - b'A' + 10),
-        _ => None,
+pub fn check_extracted_count(count: usize, max_count: usize) -> Result<()> {
+    let max_count = max_count.min(MAX_EXTRACTED_STRINGS);
+    if count > max_count {
+        anyhow::bail!(
+            "Extracted string count exceeds maximum of {max_count} to prevent Denial of Service"
+        );
     }
+    Ok(())
+}
+
+fn push_extracted(results: &mut Vec<String>, s: String, max_count: usize) -> Result<()> {
+    check_extracted_count(results.len().saturating_add(1), max_count)?;
+    results.push(s);
+    Ok(())
 }
 
 fn bounded_strings_hex(hex_str: &str, max_bytes: usize) -> Result<&str> {
@@ -125,13 +134,6 @@ fn bounded_strings_hex(hex_str: &str, max_bytes: usize) -> Result<&str> {
         );
     }
     Ok(hex_str)
-}
-
-fn invalid_strings_hex<T>(hex_str: &str) -> Result<T> {
-    match hex::decode(hex_str) {
-        Err(err) => Err(anyhow::Error::new(err).context("Failed to decode input as hex")),
-        Ok(_) => Err(anyhow::anyhow!("Failed to decode input as hex")),
-    }
 }
 
 pub fn decode_strings_hex_with_limit(hex_str: &str, max_bytes: usize) -> Result<Vec<u8>> {
@@ -148,38 +150,8 @@ pub fn extract_ascii_from_hex_with_limit(
     min_len: usize,
     max_bytes: usize,
 ) -> Result<Vec<String>> {
-    if min_len == 0 {
-        decode_strings_hex_with_limit(hex_str, max_bytes)?;
-        return extract_ascii(&[], min_len);
-    }
-    let hex_str = bounded_strings_hex(hex_str, max_bytes)?;
-    let bytes = hex_str.as_bytes();
-    let (pairs, rest) = bytes.as_chunks::<2>();
-    if !rest.is_empty() {
-        return invalid_strings_hex(hex_str);
-    }
-
-    let mut results = Vec::new();
-    let mut current = String::new();
-    for &[hi_ch, lo_ch] in pairs {
-        let (Some(hi), Some(lo)) = (strings_hex_nibble(hi_ch), strings_hex_nibble(lo_ch)) else {
-            return invalid_strings_hex(hex_str);
-        };
-        let b = (hi << 4) | lo;
-        if (0x20..=0x7E).contains(&b) {
-            current.push(char::from(b));
-        } else if !current.is_empty() {
-            if current.len() >= min_len {
-                results.push(std::mem::take(&mut current));
-            } else {
-                current.clear();
-            }
-        }
-    }
-    if current.len() >= min_len {
-        results.push(current);
-    }
-    Ok(results)
+    let data = decode_strings_hex_with_limit(hex_str, max_bytes)?;
+    extract_ascii(&data, min_len)
 }
 
 pub fn extract_utf16le_from_hex(hex_str: &str, min_len: usize) -> Result<Vec<String>> {
@@ -191,51 +163,19 @@ pub fn extract_utf16le_from_hex_with_limit(
     min_len: usize,
     max_bytes: usize,
 ) -> Result<Vec<String>> {
-    if min_len == 0 {
-        decode_strings_hex_with_limit(hex_str, max_bytes)?;
-        return extract_utf16le(&[], min_len);
-    }
-    let hex_str = bounded_strings_hex(hex_str, max_bytes)?;
-    let bytes = hex_str.as_bytes();
-    let (pairs, rest) = bytes.as_chunks::<2>();
-    if !rest.is_empty() {
-        return invalid_strings_hex(hex_str);
-    }
-
-    let mut results = Vec::new();
-    let mut current = String::new();
-    let mut prev: Option<u8> = None;
-    for &[hi_ch, lo_ch] in pairs {
-        let (Some(hi), Some(lo)) = (strings_hex_nibble(hi_ch), strings_hex_nibble(lo_ch)) else {
-            return invalid_strings_hex(hex_str);
-        };
-        let b = (hi << 4) | lo;
-        match prev {
-            None => prev = Some(b),
-            Some(lo_b) => {
-                if (0x20..=0x7E).contains(&lo_b) && b == 0x00 {
-                    current.push(char::from(lo_b));
-                    prev = None;
-                } else {
-                    if !current.is_empty() {
-                        if current.len() >= min_len {
-                            results.push(std::mem::take(&mut current));
-                        } else {
-                            current.clear();
-                        }
-                    }
-                    prev = Some(b);
-                }
-            }
-        }
-    }
-    if current.len() >= min_len {
-        results.push(current);
-    }
-    Ok(results)
+    let data = decode_strings_hex_with_limit(hex_str, max_bytes)?;
+    extract_utf16le(&data, min_len)
 }
 
 pub fn extract_ascii(data: &[u8], min_len: usize) -> Result<Vec<String>> {
+    extract_ascii_with_count_limit(data, min_len, MAX_EXTRACTED_STRINGS)
+}
+
+pub fn extract_ascii_with_count_limit(
+    data: &[u8],
+    min_len: usize,
+    max_count: usize,
+) -> Result<Vec<String>> {
     if min_len == 0 {
         anyhow::bail!("min_len must be at least 1");
     }
@@ -248,19 +188,35 @@ pub fn extract_ascii(data: &[u8], min_len: usize) -> Result<Vec<String>> {
             current.push(b);
         } else if !current.is_empty() {
             if current.len() >= min_len {
-                results.push(String::from_utf8_lossy(&current).into_owned());
+                push_extracted(
+                    &mut results,
+                    String::from_utf8_lossy(&current).into_owned(),
+                    max_count,
+                )?;
             }
             current.clear();
         }
     }
     if current.len() >= min_len {
-        results.push(String::from_utf8_lossy(&current).into_owned());
+        push_extracted(
+            &mut results,
+            String::from_utf8_lossy(&current).into_owned(),
+            max_count,
+        )?;
     }
 
     Ok(results)
 }
 
 pub fn extract_utf16le(data: &[u8], min_len: usize) -> Result<Vec<String>> {
+    extract_utf16le_with_count_limit(data, min_len, MAX_EXTRACTED_STRINGS)
+}
+
+pub fn extract_utf16le_with_count_limit(
+    data: &[u8],
+    min_len: usize,
+    max_count: usize,
+) -> Result<Vec<String>> {
     if min_len == 0 {
         anyhow::bail!("min_len must be at least 1");
     }
@@ -277,14 +233,22 @@ pub fn extract_utf16le(data: &[u8], min_len: usize) -> Result<Vec<String>> {
             i += 2;
         } else {
             if current.len() >= min_len {
-                results.push(String::from_utf8_lossy(&current).into_owned());
+                push_extracted(
+                    &mut results,
+                    String::from_utf8_lossy(&current).into_owned(),
+                    max_count,
+                )?;
             }
             current.clear();
             i += 1;
         }
     }
     if current.len() >= min_len {
-        results.push(String::from_utf8_lossy(&current).into_owned());
+        push_extracted(
+            &mut results,
+            String::from_utf8_lossy(&current).into_owned(),
+            max_count,
+        )?;
     }
 
     Ok(results)

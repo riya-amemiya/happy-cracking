@@ -1,4 +1,4 @@
-use happy_cracking::crypto::strings::{self, StringEncoding, StringsAction};
+use happy_cracking::crypto::strings::{self, MAX_EXTRACTED_STRINGS, StringEncoding, StringsAction};
 use std::fs;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -235,4 +235,53 @@ fn read_strings_bytes_with_limit_bounds_device_without_eof() {
     let err =
         strings::read_strings_bytes_with_limit(std::path::Path::new("/dev/zero"), 64).unwrap_err();
     assert!(err.to_string().contains("Denial of Service"));
+}
+
+#[test]
+fn check_extracted_count_rejects_over_cap() {
+    let err = strings::check_extracted_count(MAX_EXTRACTED_STRINGS + 1, MAX_EXTRACTED_STRINGS)
+        .unwrap_err();
+    assert!(err.to_string().contains("Denial of Service"));
+}
+
+#[test]
+fn check_extracted_count_accepts_at_limit() {
+    strings::check_extracted_count(MAX_EXTRACTED_STRINGS, MAX_EXTRACTED_STRINGS).unwrap();
+}
+
+#[test]
+fn check_extracted_count_clamps_requested_max() {
+    let err = strings::check_extracted_count(MAX_EXTRACTED_STRINGS + 1, usize::MAX).unwrap_err();
+    assert!(err.to_string().contains("Denial of Service"));
+}
+
+#[test]
+fn extract_ascii_with_count_limit_rejects_over_cap() {
+    let err = strings::extract_ascii_with_count_limit(b"AAAA\x00BBBB\x00CCCC", 4, 2).unwrap_err();
+    assert!(err.to_string().contains("Denial of Service"));
+}
+
+#[test]
+fn extract_ascii_with_count_limit_accepts_at_limit() {
+    let found = strings::extract_ascii_with_count_limit(b"AAAA\x00BBBB", 4, 2).unwrap();
+    assert_eq!(found, vec!["AAAA".to_string(), "BBBB".to_string()]);
+}
+
+#[test]
+fn extract_utf16le_with_count_limit_rejects_over_cap() {
+    let data = [
+        b'A', 0, b'A', 0, b'A', 0, b'A', 0, 0xFF, b'B', 0, b'B', 0, b'B', 0, b'B', 0, 0xFF, b'C',
+        0, b'C', 0, b'C', 0, b'C', 0,
+    ];
+    let err = strings::extract_utf16le_with_count_limit(&data, 4, 2).unwrap_err();
+    assert!(err.to_string().contains("Denial of Service"));
+}
+
+#[test]
+fn extract_utf16le_with_count_limit_accepts_at_limit() {
+    let data = [
+        b'A', 0, b'A', 0, b'A', 0, b'A', 0, 0xFF, b'B', 0, b'B', 0, b'B', 0, b'B', 0,
+    ];
+    let found = strings::extract_utf16le_with_count_limit(&data, 4, 2).unwrap();
+    assert_eq!(found, vec!["AAAA".to_string(), "BBBB".to_string()]);
 }
