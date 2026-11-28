@@ -463,7 +463,7 @@ dependencies = [
 
 [[package]]
 name = "happy-cracking"
-version = "1.2.0"
+version = "1.3.0"
 dependencies = [
  "aes",
  "anyhow",
@@ -502,7 +502,7 @@ checksum = "ed5909b6e89a2db4456e54cd5f673791d7eca6732202bbf2a9cc504fe2f9b84a"
 
 [[package]]
 name = "hc-internal"
-version = "1.2.0"
+version = "1.3.0"
 dependencies = [
  "memchr",
  "memmap2",
@@ -538,7 +538,7 @@ checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
 
 [[package]]
 name = "hfd"
-version = "1.2.0"
+version = "1.3.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -558,7 +558,7 @@ dependencies = [
 
 [[package]]
 name = "hrg"
-version = "1.2.0"
+version = "1.3.0"
 dependencies = [
  "hc-internal",
  "memchr",
