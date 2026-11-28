@@ -50,7 +50,11 @@ would loop or panic.
 
 ## Pull requests
 
-Target `main` and fill in the pull request template.
+Target `main` and fill in the pull request template. Mergify merges pull
+requests through its merge queue once CI passes. Pull requests from
+contributors also need an approving review from `riya-amemiya`; the
+maintainer's own pull requests enter the queue when they carry the `approve`
+label.
 
 ## Releases
 
