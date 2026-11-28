@@ -22,6 +22,7 @@ happy-cracking/
 │       │ # Encoding
 │       ├── a1z26.rs      # A=1, Z=26 number-letter cipher
 │       ├── base32.rs     # Base32 encode/decode
+│       ├── base45.rs     # Base45 (RFC 9285) encode/decode
 │       ├── base58.rs     # Base58 encode/decode
 │       ├── base62.rs     # Base62 encode/decode
 │       ├── base64.rs     # Base64 encode/decode
@@ -34,9 +35,11 @@ happy-cracking/
 │       ├── morse.rs      # Morse code encode/decode
 │       ├── nato.rs       # NATO phonetic alphabet
 │       ├── phone.rs      # Phone keypad multi-tap
+│       ├── quotedprintable.rs # Quoted-Printable (RFC 2045) encode/decode
 │       ├── semaphore.rs  # Flag semaphore encoding
 │       ├── tapcode.rs    # Tap code encoding
 │       ├── url.rs        # URL encode/decode (percent-encoding)
+│       ├── uuencode.rs   # uuencode/uudecode
 │       │
 │       │ # Classic Ciphers
 │       ├── adfgvx.rs     # ADFGVX cipher
@@ -49,6 +52,7 @@ happy-cracking/
 │       ├── caesar.rs     # Caesar cipher encrypt/decrypt/bruteforce
 │       ├── columnar.rs   # Columnar transposition cipher
 │       ├── des_cipher.rs # DES/Triple-DES encrypt/decrypt
+│       ├── enigma.rs     # Enigma I/M3/M4 encrypt/decrypt and crib recovery
 │       ├── foursquare.rs # Four-square cipher
 │       ├── gronsfeld.rs  # Gronsfeld cipher (numeric Vigenere)
 │       ├── hill.rs       # Hill cipher (matrix-based)
@@ -60,7 +64,7 @@ happy-cracking/
 │       ├── rot.rs        # ROT13, ROT47, and generic rotation cipher
 │       ├── substitution.rs # Simple substitution cipher
 │       ├── vigenere.rs   # Vigenere polyalphabetic cipher
-│       ├── xor.rs        # XOR cipher and single-byte bruteforce
+│       ├── xor.rs        # XOR cipher, single-byte bruteforce, key-length, crack, crib-drag
 │       │
 │       │ # Hash / Crypto
 │       ├── crc32.rs      # CRC32 checksum
@@ -69,8 +73,17 @@ happy-cracking/
 │       ├── hash_ext.rs   # Hash length extension attack
 │       ├── hashid.rs     # Identify hash type from string
 │       ├── hmac.rs       # HMAC calculation
-│       ├── jwt.rs        # JWT decode and analysis
+│       ├── jwt.rs        # JWT decode, analysis, and attacks
 │       ├── rsa.rs        # RSA utilities
+│       │
+│       │ # Cracking
+│       ├── hashcrack.rs  # Hash cracking (dictionary, rules, mask, hybrid, brute-force, lookup)
+│       ├── zipcrack.rs   # ZIP password cracking (ZipCrypto and WinZip AES)
+│       │
+│       │ # Attack / Recon
+│       ├── httpload/     # Concurrent HTTP load generation
+│       ├── portscan.rs   # nmap output parsing and port scanning
+│       ├── solve.rs      # Aggressive auto-solve across encodings and classic ciphers
 │       │
 │       │ # Advanced Crypto
 │       ├── dh.rs         # Diffie-Hellman key exchange
@@ -80,7 +93,9 @@ happy-cracking/
 │       ├── autodecode.rs # Auto-detect and decode common encodings
 │       ├── bitrot.rs     # Bit rotation operations
 │       ├── chain.rs      # Chain multiple operations (CyberChef-style)
+│       ├── cipherid.rs   # Heuristic encoding/cipher identification
 │       ├── entropy.rs    # Shannon entropy analysis
+│       ├── filetype.rs   # File type identification from magic bytes
 │       ├── frequency.rs  # Character frequency analysis
 │       ├── hexdump.rs    # Hex dump display
 │       ├── mathtools.rs  # Number theory (GCD, modinv, modpow, Montgomery)
@@ -89,7 +104,9 @@ happy-cracking/
 │       ├── polybius_utils.rs # Helper for Polybius square-based ciphers
 │       ├── primes.rs     # Prime factorization and primality test
 │       ├── shared.rs     # Shared crypto utilities
-│       └── strtools.rs   # String tools (reverse, ord, chr)
+│       ├── strings.rs    # Printable string extraction (ASCII and UTF-16LE)
+│       ├── strtools.rs   # String tools (reverse, ord, chr)
+│       └── wordgen.rs    # Random, exhaustive, and mask string generation
 │
 ├── tests/                # Integration tests
 │   ├── a1z26_test.rs # Integration tests
@@ -97,9 +114,11 @@ happy-cracking/
 │   ├── aes_cipher_test.rs # Integration tests
 │   ├── affine_test.rs # Integration tests
 │   ├── atbash_test.rs # Integration tests
+│   ├── autodecode_aggressive_test.rs # Integration tests
 │   ├── autodecode_test.rs # Integration tests
 │   ├── baconian_test.rs # Integration tests
 │   ├── base32_test.rs # Integration tests
+│   ├── base45_test.rs # Integration tests
 │   ├── base58_test.rs # Integration tests
 │   ├── base62_test.rs # Integration tests
 │   ├── base64_test.rs # Integration tests
@@ -111,7 +130,11 @@ happy-cracking/
 │   ├── binary_test.rs # Integration tests
 │   ├── bitrot_test.rs # Integration tests
 │   ├── braille_test.rs # Integration tests
+│   ├── caesar_test.rs # Integration tests
 │   ├── chain_test.rs # Integration tests
+│   ├── cipherid_test.rs # Integration tests
+│   ├── cli_help_test.rs # CLI help output tests
+│   ├── columnar_dos.rs # Regression test for Columnar DoS
 │   ├── columnar_test.rs # Integration tests
 │   ├── crc32_forge_test.rs # Integration tests
 │   ├── crc32_test.rs # Integration tests
@@ -121,18 +144,24 @@ happy-cracking/
 │   ├── ec_dos.rs     # Regression test for EC DoS
 │   ├── ec_security_test.rs # Security tests for Elliptic Curve
 │   ├── ec_test.rs    # Integration tests
+│   ├── enigma_test.rs # Integration tests
 │   ├── entropy_test.rs # Integration tests
+│   ├── filetype_test.rs # Integration tests
 │   ├── foursquare_test.rs # Integration tests
 │   ├── frequency_chi_ioc_test.rs # Integration tests
 │   ├── frequency_test.rs # Integration tests
 │   ├── gronsfeld_test.rs # Integration tests
 │   ├── hash_ext_test.rs # Integration tests
 │   ├── hash_test.rs  # Integration tests
+│   ├── hashcrack_ext_test.rs # Integration tests
+│   ├── hashcrack_test.rs # Integration tests
 │   ├── hashid_test.rs # Integration tests
 │   ├── hex_test.rs   # Integration tests
 │   ├── hexdump_test.rs # Integration tests
 │   ├── hill_test.rs  # Integration tests
 │   ├── hmac_test.rs  # Integration tests
+│   ├── httpload_test.rs # Integration tests
+│   ├── jwt_attack_test.rs # JWT attack tests
 │   ├── jwt_test.rs   # Integration tests
 │   ├── mathtools_security_test.rs # Math security tests
 │   ├── mathtools_test.rs # Integration tests
@@ -144,29 +173,43 @@ happy-cracking/
 │   ├── phone_test.rs # Integration tests
 │   ├── playfair_test.rs # Integration tests
 │   ├── polybius_test.rs # Integration tests
+│   ├── portscan_test.rs # Integration tests
 │   ├── primes_dos.rs # Regression test for Pollard's Rho DoS
 │   ├── primes_test.rs # Integration tests
+│   ├── quotedprintable_test.rs # Integration tests
 │   ├── railfence_dos.rs # Regression test for Rail Fence DoS
 │   ├── railfence_test.rs # Integration tests
 │   ├── rc4_test.rs   # Integration tests
 │   ├── rot_test.rs   # Integration tests
 │   ├── rsa_attacks_test.rs # RSA attacks tests
+│   ├── rsa_auto_test.rs # RSA auto attack tests
+│   ├── rsa_compute_d_dos.rs # Regression test for RSA compute-d DoS
 │   ├── rsa_dos.rs    # Regression test for RSA DoS
 │   ├── rsa_test.rs   # Integration tests
 │   ├── rsa_zero_mod_fix.rs # Regression test for RSA zero modulus
 │   ├── semaphore_test.rs # Integration tests
+│   ├── solve_test.rs # Integration tests
+│   ├── strings_test.rs # Integration tests
 │   ├── strtools_test.rs # Integration tests
 │   ├── substitution_test.rs # Integration tests
 │   ├── tapcode_test.rs # Integration tests
 │   ├── url_test.rs   # Integration tests
+│   ├── uuencode_test.rs # Integration tests
 │   ├── vigenere_crack_test.rs # Integration tests
 │   ├── vigenere_test.rs # Integration tests
+│   ├── wordgen_test.rs # Integration tests
+│   ├── xor_crack_test.rs # Integration tests
 │   ├── xor_keylength_test.rs # Integration tests
-│   └── xor_test.rs   # Integration tests
+│   ├── xor_test.rs   # Integration tests
+│   └── zipcrack_test.rs # Integration tests
 │
 ├── Cargo.toml            # Project manifest (Rust 2024 edition)
 ├── Cargo.lock            # Dependency lock file
 └── .github/workflows/
+    ├── cflite_batch.yml  # ClusterFuzzLite batch fuzzing
+    ├── cflite_cron.yml   # ClusterFuzzLite pruning and coverage
+    ├── cflite_pr.yml     # ClusterFuzzLite PR fuzzing
+    ├── release.yml       # Publish every crate to crates.io on a version tag
     └── static-check.yml  # CI pipeline
 ```
 
@@ -287,6 +330,17 @@ cargo run -- semaphore decode "2-3 1-6 3-2 3-2 3-6"
 # Tap code
 cargo run -- tapcode encode "hello"
 cargo run -- tapcode decode ". ..... . ..... ... . ... . ... ....."
+
+# Base45 (RFC 9285)
+cargo run -- base45 encode "AB"
+cargo run -- base45 decode "BB8"
+
+# uuencode
+cargo run -- uuencode encode "flag{uu}"
+
+# Quoted-Printable (RFC 2045)
+cargo run -- qp encode "café="
+cargo run -- qp decode "caf=C3=A9=3D"
 ```
 
 ### Classic Ciphers
@@ -308,6 +362,8 @@ cargo run -- xor cipher "48656c6c6f" --key "41"
 cargo run -- xor cipher "48656c6c6f" --key "A" --ascii
 cargo run -- xor bruteforce "48656c6c6f" --printable
 cargo run -- xor keylength "00112233445566778899aabbccddeeff" --max-len 40
+cargo run -- xor crack "<hex>" --max-len 40
+cargo run -- xor crib "<hex>" --crib "flag{"
 
 # Vigenere cipher
 cargo run -- vigenere encrypt "HELLO" --key "KEY"
@@ -395,6 +451,11 @@ cargo run -- rc4 sbox --key "4b6579"
 cargo run -- substitution encode "Hello" --alphabet "QWERTYUIOPASDFGHJKLZXCVBNM"
 cargo run -- substitution decode "Itssg" --alphabet "QWERTYUIOPASDFGHJKLZXCVBNM"
 cargo run -- substitution solve "Itssg"
+
+# Enigma I/M3/M4
+cargo run -- enigma encrypt "HELLO"
+cargo run -- enigma decrypt "ILBDA"
+cargo run -- enigma crack "BDZGO" --crib "AAAAA"
 ```
 
 ### Hash / Crypto
@@ -415,6 +476,7 @@ cargo run -- hmac md5 "message" --key "secret"
 cargo run -- hmac sha1 "message" --key "secret"
 cargo run -- hmac sha256 "message" --key "secret"
 cargo run -- hmac sha512 "message" --key "secret"
+cargo run -- hmac verify-sha256 "message" --key "secret" --tag "8b5f48702995c1598c573db1e21866a9b825d4a794d169d7060a03605796360b"
 
 # CRC32
 cargo run -- crc32 compute "hello"
@@ -433,6 +495,7 @@ cargo run -- rsa hastad --e 3 --ciphertexts "c1,c2,c3" --moduli "n1,n2,n3"
 cargo run -- rsa common-modulus --n "3233" --e1 "17" --e2 "257" --c1 "c1" --c2 "c2"
 cargo run -- rsa pollard-p1 --n "3233"
 cargo run -- rsa pollard-rho --n "3233"
+cargo run -- rsa auto --n "3233" --e "17"
 
 # Hash Extension Attack
 cargo run -- hash-ext sha256-extend "5d41402abc4b2a76b9719d911017c592" --original-len 8 --append "admin=true"
@@ -440,6 +503,36 @@ cargo run -- hash-ext sha256-extend "5d41402abc4b2a76b9719d911017c592" --origina
 # JWT
 cargo run -- jwt decode "eyJhbG..."
 cargo run -- jwt analyze "eyJhbG..."
+cargo run -- jwt crack "eyJhbG..." --wordlist words.txt
+```
+
+### Cracking
+
+```bash
+# Hash cracking
+cargo run -- hashcrack dict "5d41402abc4b2a76b9719d911017c592" --wordlist words.txt
+cargo run -- hashcrack brute "<hash>" --algo md5 --preset alnum --min-len 1 --max-len 4
+cargo run -- hashcrack lookup "5d41402abc4b2a76b9719d911017c592" --table rainbow.txt
+cargo run -- hashcrack rule "<hash>" --wordlist words.txt --rules rules.txt
+cargo run -- hashcrack mask "<hash>" --mask 'flag{?d?d?d}' --algo md5
+cargo run -- hashcrack hybrid "<hash>" --wordlist words.txt --max-digits 4
+
+# ZIP cracking (ZipCrypto or WinZip AES)
+cargo run -- zipcrack dict --file secret.zip --wordlist words.txt
+cargo run -- zipcrack brute --file secret.zip --charset "0123456789" --min-len 1 --max-len 6
+cargo run -- zipcrack mask --file secret.zip --mask 'AB?c?cZ' --charset 01
+cargo run -- zipcrack random --file secret.zip --length 4 --count 1000 --charset 0123456789
+cargo run -- zipcrack info --file secret.zip
+```
+
+### Attack / Recon
+
+```bash
+cargo run -- solve run "Khoor" --top 10
+cargo run -- portscan parse scan.nmap
+cargo run -- portscan scan 127.0.0.1
+cargo run -- portscan commons
+cargo run -- httpload run http://127.0.0.1:8080/ -n 200 -c 50
 ```
 
 ### Advanced Crypto
@@ -472,6 +565,11 @@ cargo run -- auto decode "SGVsbG8=" --recursive
 # Shannon entropy analysis
 cargo run -- entropy analyze "Hello World"
 
+# Encoding/cipher identification, file type, and strings
+cargo run -- cipherid analyze "SGVsbG8gV29ybGQ="
+cargo run -- filetype identify "89504e470d0a1a0a"
+cargo run -- strings extract --file firmware.bin --min-len 6 --encoding both
+
 # Number theory tools
 cargo run -- math gcd 12345 67890
 cargo run -- math lcm 12 18
@@ -486,6 +584,11 @@ cargo run -- primes isprime 104729
 cargo run -- str reverse "hello"
 cargo run -- str ord "hello"
 cargo run -- str chr "104 101 108 108 111"
+
+# String generation
+cargo run -- wordgen random --length 16 --count 1000
+cargo run -- wordgen enumerate --charset abc --min-len 2 --max-len 4
+cargo run -- wordgen mask 'AB?c?cZ' --charset 01
 
 # Number base conversion
 cargo run -- numconv convert 255 --from 10 --to 16
@@ -552,7 +655,7 @@ pub fn my_function(input: &str) -> Result<String> {
 
 ### Testing Conventions
 
-Integration tests go in `tests/` directory. Test files follow `{module}_test.rs` naming. Include empty string tests, roundtrip tests, error case tests, and CTF-style test data (e.g., `flag{...}` format). Include security regression tests (e.g., `tests/ec_dos.rs`, `tests/rsa_dos.rs`, `tests/railfence_dos.rs`) to prevent performance regressions or DoS vulnerabilities.
+Integration tests go in `tests/` directory; tests for the companion binaries live in `crates/hrg/tests/` and `crates/hfd/tests/`. Test files follow `{module}_test.rs` naming. Include empty string tests, roundtrip tests, error case tests, and CTF-style test data (e.g., `flag{...}` format). Include security regression tests (e.g., `tests/ec_dos.rs`, `tests/rsa_dos.rs`, `tests/railfence_dos.rs`) to prevent performance regressions or DoS vulnerabilities.
 
 ### Security & Robustness Guidelines
 
@@ -567,9 +670,11 @@ The GitHub Actions workflow (`.github/workflows/static-check.yml`) runs on PRs a
 
 1. **Build** - `cargo build --workspace --verbose`
 2. **Test** - `cargo test --workspace --verbose`
-3. **Lint** - `cargo fmt --all -- --check` and `cargo clippy --workspace -- -D warnings`
+3. **Lint** - `cargo +nightly fmt --all -- --check`, `cargo +nightly clippy --workspace -- -D warnings`, and `cargo +nightly fmt --manifest-path fuzz/Cargo.toml -- --check`
 
 All checks must pass before merging.
+
+`.github/workflows/release.yml` runs when a version tag such as `1.3.0` is pushed. It checks that the tag matches `version` in `[workspace.package]` and publishes `happy-cracking`, `hc-internal`, `hrg`, and `hfd` to crates.io with `cargo publish --workspace` through Trusted Publishing. The `cflite_*.yml` workflows run ClusterFuzzLite on pull requests and on a schedule.
 
 ## Dependencies
 
@@ -577,22 +682,31 @@ All checks must pass before merging.
 | ----- | --------- |
 | `aes` | AES block cipher |
 | `anyhow` | Error handling with context |
+| `base64` | Base64 engines for `jwt`, `chain`, `auto`, and `httpload` |
+| `cipher` | Block cipher traits and padding for AES/DES |
 | `clap` | CLI argument parsing with derive macros |
-| `base64` | Base64 encoding/decoding |
-| `bs58` | Base58 encoding/decoding |
-| `cipher` | Crypto traits |
-| `data-encoding` | Base32 encoding/decoding |
 | `des` | DES block cipher |
+| `hdrhistogram` | Latency histograms for `httpload` |
 | `hex` | Hexadecimal encoding/decoding |
+| `httparse` | HTTP response parsing for `httpload` |
 | `md-5` | MD5 hash generation |
-| `num-bigint` | Big integer arithmetic (math/primes) |
+| `md4` | MD4/NTLM hashes for `hashcrack` |
+| `num-bigint` | Big integer arithmetic (math, primes, Base58, Base62) |
 | `num-integer` | Integer traits and operations |
 | `num-traits` | Numeric traits |
+| `rand` | Random sampling for `wordgen` and `zipcrack` |
+| `rayon` | Parallel search in `hashcrack`, `zipcrack`, `jwt`, and `enigma` |
+| `rustls` / `webpki-roots` | TLS for `httpload` |
+| `serde` / `serde_json` | JSON for `jwt` and `httpload` output |
 | `sha1` | SHA1 hash generation |
 | `sha2` | SHA256/SHA512 hash generation |
-| `serde` | Serialization framework |
-| `serde_json` | JSON serialization |
+| `socket2` | Socket setup for `httpload` |
+| `umt_rust` | Base64 helpers behind the `base64` command |
+| `url` | URL parsing |
 | `urlencoding` | URL percent-encoding |
+| `zip` | ZIP archives for `zipcrack` |
+
+`hc-internal`, `hrg`, and `hfd` also use `memchr`, `memmap2`, `regex`, `rustix` (Unix), and `unicode-normalization` (macOS). Their versions live in `[workspace.dependencies]` in the root `Cargo.toml`.
 
 ## Adding New Features
 
@@ -604,7 +718,7 @@ All checks must pass before merging.
 6. Add integration tests in `tests/`
 7. Run `cargo fmt` and `cargo clippy --workspace -- -D warnings` before committing
 
-Companion binaries ship from separate workspace packages: `cargo install hrg` installs `hrg`, `hgrep`, and `hg`, and `cargo install hfd` installs `hfd` and `hfind`. `cargo install happy-cracking` installs only `happy-cracking`. Shared filesystem/gitignore helpers live in the `hc-internal` library at `crates/hc-internal/`. Every package takes its version from `[workspace.package]`, and `hc-internal` is pinned with `=` in `[workspace.dependencies]`, so bump both together; the release workflow publishes all four packages from one tag.
+Companion binaries ship from separate workspace packages: `cargo install hrg` installs `hrg`, `hgrep`, and `hg`, and `cargo install hfd` installs `hfd` and `hfind`. `cargo install happy-cracking` installs only `happy-cracking`. Shared walker, search, printer, regex, encoding, and filesystem helpers live in the public `hc-internal` library at `crates/hc-internal/`, which other crates can depend on. Each crate under `crates/` has its own `README.md`, which crates.io shows on the crate page. Every package takes its version from `[workspace.package]`, and `hc-internal` is pinned with `=` in `[workspace.dependencies]`, so bump both together; the release workflow publishes all four packages from one tag.
 
 ## Notes for AI Assistants
 
@@ -614,7 +728,7 @@ Companion binaries ship from separate workspace packages: `cargo install hrg` in
 - Keep functions pure and testable where possible
 - Prefer `&str` for input parameters, return owned `String` for results
 - Commands in `main.rs` are organized by category with comments
-- Base85 and Base91 are implemented without external crates
+- Base32, Base45, Base58, Base62, Base85, Base91, uuencode, and Quoted-Printable are implemented without external encoding crates
 - The `chain` module references other crypto modules via `crate::crypto::*`
 - Math and primes modules use `u128` for number representation, with Montgomery optimization for odd moduli
 - Security regression tests in `tests/` (like `ec_dos.rs`) ensure robustness against DoS attacks

@@ -12,8 +12,9 @@ body:
   - type: input
     id: version
     attributes:
-      label: happy-cracking version
-      placeholder: "1.2.0"
+      label: Version
+      description: Version of happy-cracking, hrg, or hfd. All crates in this repository share one version number.
+      placeholder: "1.3.0"
     validations:
       required: true
   - type: input

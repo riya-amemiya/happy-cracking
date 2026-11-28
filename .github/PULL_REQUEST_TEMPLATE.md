@@ -4,6 +4,6 @@
 
 ## How to test
 
-- [ ] `cargo test`
+- [ ] `cargo test --workspace`
 - [ ] `cargo +nightly fmt --all -- --check`
-- [ ] `cargo clippy --workspace -- -D warnings`
+- [ ] `cargo +nightly clippy --workspace -- -D warnings`

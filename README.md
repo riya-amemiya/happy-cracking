@@ -64,7 +64,7 @@ This installs the `happy-cracking` CLI only. The companion tools are separate pa
 | `des`          | DES and Triple-DES encrypt/decrypt                       |
 | `rc4`          | RC4 stream cipher                                        |
 | `substitution` | Simple substitution cipher (encode/decode/solve)         |
-| `xor`          | XOR cipher, single-byte bruteforce, key-length, crib-drag |
+| `xor`          | XOR cipher, single-byte bruteforce, key-length, repeating-key crack, crib-drag |
 
 ### Hash / Crypto (8 tools)
 
@@ -83,7 +83,7 @@ This installs the `happy-cracking` CLI only. The companion tools are separate pa
 
 | Command     | Description                                                                                          |
 | ----------- | ---------------------------------------------------------------------------------------------------- |
-| `hashcrack` | Recover hashes via dictionary, brute-force, or table lookup (MD5/SHA1/SHA256/SHA512/MD4/NTLM, optional salt, rayon-parallel) |
+| `hashcrack` | Recover hashes via dictionary, hashcat-style rules, mask, hybrid wordlist-plus-digits, brute-force, or table lookup (MD5/SHA1/SHA256/SHA512/MD4/NTLM, optional salt, rayon-parallel) |
 | `zipcrack`  | Crack password-protected ZIP archives (ZipCrypto and WinZip AES) via dictionary, wordgen brute-force, mask, or random sampling, plus archive info |
 
 ### Attack / Recon (3 tools)
@@ -121,15 +121,17 @@ This installs the `happy-cracking` CLI only. The companion tools are separate pa
 | `bitrot`    | Bit rotation (rotate left / rotate right)                                |
 | `padding`   | PKCS7 and zero padding / unpadding                                       |
 
-### Companion binaries
+### Companion tools
 
-| Command | Description                                                        |
-| ------- | ------------------------------------------------------------------ |
-| `hgrep` | Searcher accepting GNU grep 3.12 and ripgrep 15.1.0 command lines  |
-| `hg`    | Same binary with ripgrep meanings for colliding short flags        |
-| `hrg`   | Same as `hg`                                                       |
-| `hfind` | Walker accepting find expressions and fd 10.4.2 command lines      |
-| `hfd`   | Same binary that reads bare positionals as fd's pattern and paths  |
+The companion tools ship as separate crates in this repository. `cargo install hrg` installs `hrg`, `hgrep`, and `hg`, and `cargo install hfd` installs `hfd` and `hfind`. Both are built on [`hc-internal`](crates/hc-internal/README.md), a library of shared walker, search, printer, regex, and encoding helpers that other crates can also depend on. All four crates share one version number.
+
+| Command | Crate                            | Description                                                        |
+| ------- | -------------------------------- | ------------------------------------------------------------------ |
+| `hgrep` | [`hrg`](crates/hrg/README.md)    | Searcher accepting GNU grep 3.12 and ripgrep 15.1.0 command lines  |
+| `hg`    | [`hrg`](crates/hrg/README.md)    | Same binary with ripgrep meanings for colliding short flags        |
+| `hrg`   | [`hrg`](crates/hrg/README.md)    | Same as `hg`                                                       |
+| `hfind` | [`hfd`](crates/hfd/README.md)    | Walker accepting find expressions and fd 10.4.2 command lines      |
+| `hfd`   | [`hfd`](crates/hfd/README.md)    | Same binary that reads bare positionals as fd's pattern and paths  |
 
 `hgrep`, `hg`, and `hrg` share one implementation that accepts every GNU grep flag and every ripgrep flag. The short flags whose meanings collide between the two tools (`-r -h -L -s -E -z -I -T -U -u -0`) take the GNU grep meaning under `hgrep` and the ripgrep meaning under `hg` and `hrg`; their other meaning stays reachable through the long option. Directory operands without `-r` are searched like ripgrep (ignore files, hidden-file and binary filtering); `-r`/`-R` search like GNU grep. `hgrep` defaults to GNU grep's BRE syntax and output conventions, `hg`/`hrg` to ripgrep's regex syntax and output conventions.
 
@@ -230,6 +232,8 @@ happy-cracking rot47 "Hello, World! 123"
 happy-cracking xor cipher "48656c6c6f" --key "41"
 happy-cracking xor bruteforce "48656c6c6f" --printable
 happy-cracking xor keylength "00112233445566778899aabbccddeeff" --max-len 40
+happy-cracking xor crack "<hex>" --max-len 40
+happy-cracking xor crib "<hex>" --crib "flag{"
 ```
 
 ### Hash / Crypto
@@ -268,6 +272,15 @@ happy-cracking hashcrack brute "<hash>" --algo md5 --preset alnum --min-len 1 --
 # Reverse lookup against a precomputed "hash:plaintext" table
 happy-cracking hashcrack lookup "5d41402abc4b2a76b9719d911017c592" --table rainbow.txt
 
+# Wordlist with hashcat-style rules (built-in rules when --rules is omitted)
+happy-cracking hashcrack rule "<hash>" --wordlist words.txt --rules rules.txt
+
+# Mask attack (?l ?u ?d ?s ?a and literals)
+happy-cracking hashcrack mask "<hash>" --mask 'flag{?d?d?d}' --algo md5
+
+# Wordlist candidates with numeric suffixes
+happy-cracking hashcrack hybrid "<hash>" --wordlist words.txt --max-digits 4
+
 # Crack a password-protected zip (ZipCrypto or WinZip AES).
 # brute, mask, and random use wordgen's charset, enumeration, ?c mask, and sampling.
 happy-cracking zipcrack dict --file secret.zip --wordlist words.txt
@@ -287,6 +300,7 @@ happy-cracking solve run "ZmxhZ3tiNjR9" --aggressive
 # Parse nmap output or scan a host
 happy-cracking portscan parse scan.nmap
 happy-cracking portscan scan 127.0.0.1
+happy-cracking portscan commons
 
 # Concurrent HTTP requests
 happy-cracking httpload run http://127.0.0.1:8080/ -n 200 -c 50
