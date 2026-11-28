@@ -27,17 +27,18 @@ Pull requests to `main` run:
 cargo build --workspace --verbose
 cargo test --workspace --verbose
 cargo +nightly fmt --all -- --check
-cargo clippy --workspace -- -D warnings
+cargo +nightly clippy --workspace -- -D warnings
 cargo +nightly fmt --manifest-path fuzz/Cargo.toml -- --check
 ```
 
-Install nightly rustfmt before the format check:
+Install nightly rustfmt and clippy before the format and lint checks:
 
 ```sh
-rustup toolchain install nightly --profile minimal --component rustfmt
+rustup toolchain install nightly --profile minimal --component rustfmt,clippy
 ```
 
-`cargo fmt` rewrites the main package. Clippy must pass with no warnings.
+`cargo fmt --all` rewrites every workspace package. Clippy must pass with no
+warnings.
 
 ## Tests
 
@@ -50,6 +51,14 @@ would loop or panic.
 ## Pull requests
 
 Target `main` and fill in the pull request template.
+
+## Releases
+
+`happy-cracking`, `hc-internal`, `hrg`, and `hfd` share one version. A release
+bumps `version` in `[workspace.package]` and the `=` pin on `hc-internal` in
+`[workspace.dependencies]` to the same number. After that change is merged,
+pushing a tag with the bare version number (for example `1.3.0`) runs
+`.github/workflows/release.yml`, which publishes all four crates to crates.io.
 
 ## Security
 

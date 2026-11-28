@@ -2,7 +2,9 @@
 
 ## Supported versions
 
-The latest version of `happy-cracking` published to crates.io receives security updates.
+The latest version published to crates.io receives security updates. This
+covers `happy-cracking`, `hrg`, `hfd`, and `hc-internal`, which are released
+together under one version number.
 
 ## Reporting a vulnerability
 
@@ -24,6 +26,9 @@ Please wait for a maintainer response before any public disclosure.
 Report defects in this project, including panics and memory-safety issues,
 unbounded resource use on crafted input, incorrect cryptographic or encoding
 results, and vulnerabilities in release artifacts or dependencies.
+
+This covers the `hrg` and `hfd` search tools and the `hc-internal` library as
+well as the `happy-cracking` CLI.
 
 `happy-cracking` is a CTF toolkit. Hash cracking, textbook cryptosystem
 attacks, port scanning, and HTTP load generation are intended commands. Use of
