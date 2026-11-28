@@ -1,0 +1,34 @@
+[package]
+edition.workspace = true
+name = "hrg"
+version.workspace = true
+autobins = false
+description = "GNU grep and ripgrep compatible searcher, installed as hrg, hgrep, and hg"
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "hrg"
+path = "src/bin/hrg.rs"
+
+[[bin]]
+name = "hgrep"
+path = "src/bin/hgrep.rs"
+
+[[bin]]
+name = "hg"
+path = "src/bin/hg.rs"
+
+[dependencies]
+hc-internal.workspace = true
+memchr.workspace = true
+memmap2.workspace = true
+rayon.workspace = true
+regex.workspace = true
+serde_json.workspace = true
+
+[target.'cfg(unix)'.dependencies]
+rustix.workspace = true
+
+[lints]
+workspace = true

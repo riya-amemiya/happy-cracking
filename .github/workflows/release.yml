@@ -84,4 +84,4 @@ jobs:
           if [ "${DRY_RUN}" = "true" ]; then
             extra+=(--dry-run)
           fi
-          cargo publish --locked "${extra[@]}"
+          cargo publish --workspace --locked "${extra[@]}"

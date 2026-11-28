@@ -5,24 +5,27 @@ pull request.
 
 ## Setup
 
-This repository is a Rust 2024 package. Stable Rust builds and tests the
-project. CI formats with nightly `rustfmt`.
+This repository is a Rust 2024 Cargo workspace. The root package is
+`happy-cracking`, and `crates/` holds `hrg`, `hfd`, and their shared
+`hc-internal` library. Stable Rust builds and tests the project. CI formats
+with nightly `rustfmt`.
 
 ```sh
-cargo build
-cargo test
+cargo build --workspace
+cargo test --workspace
 ```
 
 `cargo run -- <command>` runs `happy-cracking`. Companion binaries are
-`cargo run --bin hgrep -- <args>` and `cargo run --bin hfind -- <args>`.
+`cargo run -p hrg --bin hgrep -- <args>` and
+`cargo run -p hfd --bin hfind -- <args>`.
 
 ## Checks
 
 Pull requests to `main` run:
 
 ```sh
-cargo build --verbose
-cargo test --verbose
+cargo build --workspace --verbose
+cargo test --workspace --verbose
 cargo +nightly fmt --all -- --check
 cargo clippy --workspace -- -D warnings
 cargo +nightly fmt --manifest-path fuzz/Cargo.toml -- --check
@@ -38,7 +41,8 @@ rustup toolchain install nightly --profile minimal --component rustfmt
 
 ## Tests
 
-Integration tests live in `tests/` and are named `{module}_test.rs`. When
+Integration tests live in `tests/`, or in `crates/<package>/tests/` for `hrg`
+and `hfd`, and are named `{module}_test.rs`. When
 encoding or cipher behavior changes, cover empty input, round trips, error
 cases, and a `flag{...}` example. Reject zero moduli and other inputs that
 would loop or panic.
