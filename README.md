@@ -8,7 +8,7 @@ A fast, comprehensive CTF (Capture The Flag) toolkit written in Rust. Provides 7
 cargo install happy-cracking
 ```
 
-This produces `target/release/happy-cracking` and the companion binaries `target/release/hgrep`, `target/release/hg`, `target/release/hfind`, and `target/release/hfd`.
+This installs the `happy-cracking` CLI only. The companion tools are separate packages. `cargo install hrg` installs `hrg`, `hgrep`, and `hg`, and `cargo install hfd` installs `hfd` and `hfind`.
 
 ## Features
 
@@ -390,13 +390,13 @@ hfd -H -I -t f config
 ## Development
 
 ```bash
-cargo build            # Build happy-cracking, hgrep, and hfind
-cargo test             # Run all tests
-cargo fmt              # Format code
-cargo clippy -- -D warnings  # Lint
+cargo build --workspace  # Build happy-cracking, hgrep, and hfind
+cargo test --workspace   # Run all tests
+cargo fmt --all          # Format code
+cargo clippy --workspace -- -D warnings  # Lint
 ```
 
-`cargo run -- <command>` runs `happy-cracking`. Companion binaries ship in the same package: `cargo run --bin hgrep -- <args>` and `cargo run --bin hfind -- <args>`. `hg` and `hrg` are argv0 variants of `hgrep`. `hfd` is an argv0 variant of `hfind`.
+`cargo run -- <command>` runs `happy-cracking`. Companion binaries ship in the `hrg` and `hfd` workspace packages under `crates/`: `cargo run -p hrg --bin hgrep -- <args>` and `cargo run -p hfd --bin hfind -- <args>`. `hg` and `hrg` are argv0 variants of `hgrep`. `hfd` is an argv0 variant of `hfind`. Both packages depend on the shared `hc-internal` library.
 
 ## Community
 

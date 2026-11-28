@@ -8,14 +8,14 @@
 
 ```tree
 happy-cracking/
-├── Cargo.toml            # happy-cracking package
+├── Cargo.toml            # Workspace root and happy-cracking package
+├── crates/
+│   ├── hc-internal/      # Shared walker, search, printer, regex, encoding, and fs helpers
+│   ├── hrg/              # GNU grep + ripgrep compatible searcher, binaries hrg, hgrep, hg (argv0 picks colliding flag meanings)
+│   └── hfd/              # find + fd compatible walker, binaries hfd, hfind
 ├── src/
 │   ├── main.rs           # CLI entry point with clap subcommands
-│   ├── lib.rs            # Library root, exposes crypto, hgrep, and hfind
-│   ├── bin/              # hgrep, hg, hrg, hfind, hfd binaries
-│   ├── hgrep/            # GNU grep + ripgrep compatible searcher (argv0 picks colliding flag meanings)
-│   ├── hfind/            # find + fd compatible walker
-│   ├── hc_internal/      # Shared walker, search, printer, regex, encoding, and fs helpers
+│   ├── lib.rs            # Library root, exposes crypto
 │   └── crypto/           # Cryptographic operations
 │       ├── mod.rs        # Module exports
 │       │
@@ -174,26 +174,26 @@ happy-cracking/
 
 ```bash
 # Build the project
-cargo build
+cargo build --workspace
 
 # Run tests
-cargo test
+cargo test --workspace
 
 # Run tests with output
-cargo test -- --nocapture
+cargo test --workspace -- --nocapture
 
 # Format code (required for CI)
-cargo fmt
+cargo fmt --all
 
 # Run clippy linter (must pass with no warnings)
-cargo clippy -- -D warnings
+cargo clippy --workspace -- -D warnings
 
 # Run the CLI
 cargo run -- <command>
 
-# Companion binaries in the same package
-cargo run --bin hgrep -- <args>
-cargo run --bin hfind -- <args>
+# Companion binaries in the hrg and hfd packages
+cargo run -p hrg --bin hgrep -- <args>
+cargo run -p hfd --bin hfind -- <args>
 ```
 
 ## Fuzzing (ClusterFuzzLite / cargo-fuzz)
@@ -565,8 +565,8 @@ Integration tests go in `tests/` directory. Test files follow `{module}_test.rs`
 
 The GitHub Actions workflow (`.github/workflows/static-check.yml`) runs on PRs and pushes to main:
 
-1. **Build** - `cargo build --verbose`
-2. **Test** - `cargo test --verbose`
+1. **Build** - `cargo build --workspace --verbose`
+2. **Test** - `cargo test --workspace --verbose`
 3. **Lint** - `cargo fmt --all -- --check` and `cargo clippy --workspace -- -D warnings`
 
 All checks must pass before merging.
@@ -604,7 +604,7 @@ All checks must pass before merging.
 6. Add integration tests in `tests/`
 7. Run `cargo fmt` and `cargo clippy --workspace -- -D warnings` before committing
 
-Companion binaries (`hgrep`, `hfind`, `hg`, `hfd`) ship from the happy-cracking package. Shared filesystem/gitignore helpers live in `src/hc_internal/`.
+Companion binaries ship from separate workspace packages: `cargo install hrg` installs `hrg`, `hgrep`, and `hg`, and `cargo install hfd` installs `hfd` and `hfind`. `cargo install happy-cracking` installs only `happy-cracking`. Shared filesystem/gitignore helpers live in the `hc-internal` library at `crates/hc-internal/`. Every package takes its version from `[workspace.package]`, and `hc-internal` is pinned with `=` in `[workspace.dependencies]`, so bump both together; the release workflow publishes all four packages from one tag.
 
 ## Notes for AI Assistants
 

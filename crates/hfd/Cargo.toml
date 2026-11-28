@@ -1,0 +1,28 @@
+[package]
+edition.workspace = true
+name = "hfd"
+version.workspace = true
+autobins = false
+description = "find and fd compatible file walker, installed as hfd and hfind"
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "hfd"
+path = "src/bin/hfd.rs"
+
+[[bin]]
+name = "hfind"
+path = "src/bin/hfind.rs"
+
+[dependencies]
+anyhow.workspace = true
+clap.workspace = true
+hc-internal.workspace = true
+regex.workspace = true
+
+[target.'cfg(unix)'.dependencies]
+rustix.workspace = true
+
+[lints]
+workspace = true

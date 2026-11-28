@@ -476,15 +476,11 @@ dependencies = [
  "httparse",
  "md-5",
  "md4",
- "memchr",
- "memmap2",
  "num-bigint",
  "num-integer",
  "num-traits",
  "rand",
  "rayon",
- "regex",
- "rustix",
  "rustls",
  "serde",
  "serde_json",
@@ -492,7 +488,6 @@ dependencies = [
  "sha2",
  "socket2",
  "umt_rust",
- "unicode-normalization",
  "url",
  "urlencoding",
  "webpki-roots",
@@ -504,6 +499,20 @@ name = "hashbrown"
 version = "0.17.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ed5909b6e89a2db4456e54cd5f673791d7eca6732202bbf2a9cc504fe2f9b84a"
+
+[[package]]
+name = "hc-internal"
+version = "1.2.0"
+dependencies = [
+ "memchr",
+ "memmap2",
+ "rayon",
+ "regex",
+ "rustix",
+ "serde",
+ "serde_json",
+ "unicode-normalization",
+]
 
 [[package]]
 name = "hdrhistogram"
@@ -528,12 +537,36 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
 
 [[package]]
+name = "hfd"
+version = "1.2.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "hc-internal",
+ "regex",
+ "rustix",
+]
+
+[[package]]
 name = "hmac"
 version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6303bc9732ae41b04cb554b844a762b4115a61bfaa81e3e83050991eeb56863f"
 dependencies = [
  "digest",
+]
+
+[[package]]
+name = "hrg"
+version = "1.2.0"
+dependencies = [
+ "hc-internal",
+ "memchr",
+ "memmap2",
+ "rayon",
+ "regex",
+ "rustix",
+ "serde_json",
 ]
 
 [[package]]
