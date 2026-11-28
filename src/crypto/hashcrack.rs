@@ -665,23 +665,35 @@ pub fn lookup_in_table_file_with_limit(
     let target = target.trim();
     let mut line = String::new();
     let mut consumed = 0usize;
-    while reader
-        .read_line(&mut line)
-        .context("Failed to read table line")?
-        != 0
-    {
+    let max_line = MAX_WORD_LEN.saturating_add(2);
+    loop {
+        line.clear();
+        let n = reader
+            .by_ref()
+            .take(max_line as u64)
+            .read_line(&mut line)
+            .context("Failed to read table line")?;
+        if n == 0 {
+            break;
+        }
+        let content = line.strip_suffix('\n').unwrap_or(&line);
+        let content = content.strip_suffix('\r').unwrap_or(content);
+        if content.len() > MAX_WORD_LEN {
+            anyhow::bail!(
+                "Table entry exceeds maximum length of {MAX_WORD_LEN} bytes to prevent Denial of Service"
+            );
+        }
         consumed = consumed.saturating_add(line.len());
         if consumed > max_bytes {
             anyhow::bail!(
                 "Table exceeds maximum size of {max_bytes} bytes to prevent Denial of Service"
             );
         }
-        if let Some((hash, plain)) = table_line_parts(&line)
+        if let Some((hash, plain)) = table_line_parts(content)
             && hash.eq_ignore_ascii_case(target)
         {
             return Ok(Some(plain.to_string()));
         }
-        line.clear();
     }
     Ok(None)
 }
