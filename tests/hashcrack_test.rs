@@ -561,6 +561,40 @@ fn lookup_in_table_file_with_limit_bounds_device_without_eof() {
 }
 
 #[test]
+fn lookup_in_table_file_rejects_oversized_line() {
+    let path = scratch_wordlist("table_long_line");
+    fs::write(
+        &path,
+        format!("deadbeef:{}\nhello\n", "A".repeat(MAX_WORD_LEN + 1)),
+    )
+    .unwrap();
+    let start = std::time::Instant::now();
+    let err = lookup_in_table_file("deadbeef", &path)
+        .unwrap_err()
+        .to_string();
+    let _ = fs::remove_file(&path);
+    assert!(
+        err.contains(&MAX_WORD_LEN.to_string()) && err.contains("Denial of Service"),
+        "unexpected error: {err}"
+    );
+    assert!(
+        start.elapsed().as_millis() < 100,
+        "oversized table line must be rejected before scanning the rest of the file"
+    );
+}
+
+#[test]
+fn lookup_in_table_file_accepts_line_at_len_cap() {
+    let path = scratch_wordlist("table_line_at_cap");
+    let hash = "5d41402abc4b2a76b9719d911017c592";
+    let plain = "A".repeat(MAX_WORD_LEN - hash.len() - 1);
+    fs::write(&path, format!("{hash}:{plain}\nhello\n")).unwrap();
+    let found = lookup_in_table_file(hash, &path).unwrap();
+    let _ = fs::remove_file(&path);
+    assert_eq!(found, Some(plain));
+}
+
+#[test]
 fn read_wordlist_buf_with_limit_rejects_oversized_file() {
     let path = scratch_wordlist("oversize");
     fs::write(&path, vec![b'a'; 32]).unwrap();
