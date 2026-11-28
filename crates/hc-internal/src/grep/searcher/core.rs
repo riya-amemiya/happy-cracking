@@ -12,13 +12,13 @@ enum FastMatchResult {
     SwitchToSlow,
 }
 
-pub(crate) trait LineFeed {
+pub trait LineFeed {
     fn peek(&mut self, pos: usize, end: usize) -> Result<Option<(Range, Option<u64>)>, String>;
 
     fn consume(&mut self);
 }
 
-pub(crate) struct Core<'s, M, S> {
+pub struct Core<'s, M, S> {
     config: &'s Config,
     matcher: M,
     searcher: &'s Searcher,
@@ -39,7 +39,7 @@ pub(crate) struct Core<'s, M, S> {
 }
 
 impl<'s, M: Matcher, S: Sink> Core<'s, M, S> {
-    pub(crate) fn new(searcher: &'s Searcher, matcher: M, sink: S, binary: bool) -> Core<'s, M, S> {
+    pub fn new(searcher: &'s Searcher, matcher: M, sink: S, binary: bool) -> Core<'s, M, S> {
         Core {
             config: &searcher.config,
             matcher,
@@ -65,15 +65,15 @@ impl<'s, M: Matcher, S: Sink> Core<'s, M, S> {
         }
     }
 
-    pub(crate) fn set_feed(&mut self, feed: &'s mut dyn LineFeed) {
+    pub fn set_feed(&mut self, feed: &'s mut dyn LineFeed) {
         self.feed = Some(feed);
     }
 
-    pub(crate) fn pos(&self) -> usize {
+    pub fn pos(&self) -> usize {
         self.pos
     }
 
-    pub(crate) fn set_pos(&mut self, pos: usize) {
+    pub fn set_pos(&mut self, pos: usize) {
         self.pos = pos;
     }
 
@@ -85,19 +85,19 @@ impl<'s, M: Matcher, S: Sink> Core<'s, M, S> {
         self.count += 1;
     }
 
-    pub(crate) fn binary_byte_offset(&self) -> Option<u64> {
+    pub fn binary_byte_offset(&self) -> Option<u64> {
         self.binary_byte_offset.map(|offset| offset as u64)
     }
 
-    pub(crate) fn matcher(&self) -> &M {
+    pub fn matcher(&self) -> &M {
         &self.matcher
     }
 
-    pub(crate) fn matched(&mut self, buf: &[u8], range: &Range) -> Result<bool, S::Error> {
+    pub fn matched(&mut self, buf: &[u8], range: &Range) -> Result<bool, S::Error> {
         self.sink_matched(buf, range)
     }
 
-    pub(crate) fn binary_data(&mut self, binary_byte_offset: u64) -> Result<bool, S::Error> {
+    pub fn binary_data(&mut self, binary_byte_offset: u64) -> Result<bool, S::Error> {
         self.sink.binary_data(self.searcher, binary_byte_offset)
     }
 
@@ -106,7 +106,7 @@ impl<'s, M: Matcher, S: Sink> Core<'s, M, S> {
         self.matcher.is_match(line).map_err(S::Error::error_message)
     }
 
-    pub(crate) fn find(&mut self, slice: &[u8]) -> Result<Option<Range>, S::Error> {
+    pub fn find(&mut self, slice: &[u8]) -> Result<Option<Range>, S::Error> {
         if self.has_exceeded_match_limit() {
             return Ok(None);
         }
@@ -129,11 +129,11 @@ impl<'s, M: Matcher, S: Sink> Core<'s, M, S> {
             .map_err(S::Error::error_message)
     }
 
-    pub(crate) fn begin(&mut self) -> Result<bool, S::Error> {
+    pub fn begin(&mut self) -> Result<bool, S::Error> {
         self.sink.begin(self.searcher)
     }
 
-    pub(crate) fn finish(
+    pub fn finish(
         &mut self,
         byte_count: u64,
         binary_byte_offset: Option<u64>,
@@ -147,7 +147,7 @@ impl<'s, M: Matcher, S: Sink> Core<'s, M, S> {
         )
     }
 
-    pub(crate) fn match_by_line(&mut self, buf: &[u8]) -> Result<bool, S::Error> {
+    pub fn match_by_line(&mut self, buf: &[u8]) -> Result<bool, S::Error> {
         if self.is_line_by_line_fast() {
             match self.match_by_line_fast(buf)? {
                 FastMatchResult::SwitchToSlow => self.match_by_line_slow(buf),
@@ -159,7 +159,7 @@ impl<'s, M: Matcher, S: Sink> Core<'s, M, S> {
         }
     }
 
-    pub(crate) fn roll(&mut self, buf: &[u8]) -> usize {
+    pub fn roll(&mut self, buf: &[u8]) -> usize {
         let consumed = if self.config.max_context() == 0 {
             buf.len()
         } else {
@@ -178,7 +178,7 @@ impl<'s, M: Matcher, S: Sink> Core<'s, M, S> {
         consumed
     }
 
-    pub(crate) fn detect_binary(&mut self, buf: &[u8], range: &Range) -> Result<bool, S::Error> {
+    pub fn detect_binary(&mut self, buf: &[u8], range: &Range) -> Result<bool, S::Error> {
         if self.binary_byte_offset.is_some() {
             return Ok(self.config.binary.quit_byte().is_some());
         }
@@ -198,11 +198,7 @@ impl<'s, M: Matcher, S: Sink> Core<'s, M, S> {
         }
     }
 
-    pub(crate) fn before_context_by_line(
-        &mut self,
-        buf: &[u8],
-        upto: usize,
-    ) -> Result<bool, S::Error> {
+    pub fn before_context_by_line(&mut self, buf: &[u8], upto: usize) -> Result<bool, S::Error> {
         if self.config.before_context == 0 {
             return Ok(true);
         }
@@ -232,11 +228,7 @@ impl<'s, M: Matcher, S: Sink> Core<'s, M, S> {
         Ok(true)
     }
 
-    pub(crate) fn after_context_by_line(
-        &mut self,
-        buf: &[u8],
-        upto: usize,
-    ) -> Result<bool, S::Error> {
+    pub fn after_context_by_line(&mut self, buf: &[u8], upto: usize) -> Result<bool, S::Error> {
         if self.after_context_left == 0 {
             return Ok(true);
         }
@@ -264,11 +256,7 @@ impl<'s, M: Matcher, S: Sink> Core<'s, M, S> {
         Ok(true)
     }
 
-    pub(crate) fn other_context_by_line(
-        &mut self,
-        buf: &[u8],
-        upto: usize,
-    ) -> Result<bool, S::Error> {
+    pub fn other_context_by_line(&mut self, buf: &[u8], upto: usize) -> Result<bool, S::Error> {
         let mut stepper = LineStep::new(
             self.config.line_term.as_byte(),
             self.last_line_visited,
@@ -611,7 +599,7 @@ impl<'s, M: Matcher, S: Sink> Core<'s, M, S> {
         self.last_line_counted = upto;
     }
 
-    pub(crate) fn is_line_by_line_fast(&self) -> bool {
+    pub fn is_line_by_line_fast(&self) -> bool {
         if self.config.passthru() {
             return false;
         }

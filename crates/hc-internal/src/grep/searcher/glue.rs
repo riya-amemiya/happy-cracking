@@ -5,7 +5,7 @@ use super::lines::{self, LineStep};
 use super::sink::{Sink, SinkError};
 use super::{Config, Range, Searcher};
 
-pub(crate) struct ReadByLine<'s, M, R, S> {
+pub struct ReadByLine<'s, M, R, S> {
     config: &'s Config,
     core: Core<'s, M, S>,
     rdr: LineBufferReader<'s, R>,
@@ -17,7 +17,7 @@ where
     R: std::io::Read,
     S: Sink,
 {
-    pub(crate) fn new(
+    pub fn new(
         searcher: &'s Searcher,
         matcher: M,
         read_from: LineBufferReader<'s, R>,
@@ -30,7 +30,7 @@ where
         }
     }
 
-    pub(crate) fn run(mut self) -> Result<(), S::Error> {
+    pub fn run(mut self) -> Result<(), S::Error> {
         if self.core.begin()? {
             while self.fill()? {
                 if !self.core.match_by_line(self.rdr.buffer())? {
@@ -73,13 +73,13 @@ where
     }
 }
 
-pub(crate) struct SliceByLine<'s, M, S> {
+pub struct SliceByLine<'s, M, S> {
     core: Core<'s, M, S>,
     slice: &'s [u8],
 }
 
 impl<'s, M: Matcher, S: Sink> SliceByLine<'s, M, S> {
-    pub(crate) fn new(
+    pub fn new(
         searcher: &'s Searcher,
         matcher: M,
         slice: &'s [u8],
@@ -92,12 +92,12 @@ impl<'s, M: Matcher, S: Sink> SliceByLine<'s, M, S> {
         }
     }
 
-    pub(crate) fn with_feed(mut self, feed: &'s mut dyn LineFeed) -> SliceByLine<'s, M, S> {
+    pub fn with_feed(mut self, feed: &'s mut dyn LineFeed) -> SliceByLine<'s, M, S> {
         self.core.set_feed(feed);
         self
     }
 
-    pub(crate) fn run(mut self) -> Result<(), S::Error> {
+    pub fn run(mut self) -> Result<(), S::Error> {
         if self.core.begin()? {
             let binary_upto = std::cmp::min(self.slice.len(), DEFAULT_BUFFER_CAPACITY);
             let binary_range = Range::new(0, binary_upto);
@@ -120,7 +120,7 @@ impl<'s, M: Matcher, S: Sink> SliceByLine<'s, M, S> {
     }
 }
 
-pub(crate) struct MultiLine<'s, M, S> {
+pub struct MultiLine<'s, M, S> {
     config: &'s Config,
     core: Core<'s, M, S>,
     slice: &'s [u8],
@@ -128,7 +128,7 @@ pub(crate) struct MultiLine<'s, M, S> {
 }
 
 impl<'s, M: Matcher, S: Sink> MultiLine<'s, M, S> {
-    pub(crate) fn new(
+    pub fn new(
         searcher: &'s Searcher,
         matcher: M,
         slice: &'s [u8],
@@ -142,7 +142,7 @@ impl<'s, M: Matcher, S: Sink> MultiLine<'s, M, S> {
         }
     }
 
-    pub(crate) fn run(mut self) -> Result<(), S::Error> {
+    pub fn run(mut self) -> Result<(), S::Error> {
         if self.core.begin()? {
             let binary_upto = std::cmp::min(self.slice.len(), DEFAULT_BUFFER_CAPACITY);
             let binary_range = Range::new(0, binary_upto);

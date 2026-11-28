@@ -211,8 +211,8 @@ pub enum SinkCount {
 
 #[derive(Clone, Debug)]
 pub struct SinkFinish {
-    pub(crate) byte_count: u64,
-    pub(crate) binary_byte_offset: Option<u64>,
+    pub byte_count: u64,
+    pub binary_byte_offset: Option<u64>,
 }
 
 impl SinkFinish {
@@ -231,12 +231,12 @@ impl SinkFinish {
 
 #[derive(Clone, Debug)]
 pub struct SinkMatch<'b> {
-    pub(crate) line_term: LineTerminator,
-    pub(crate) bytes: &'b [u8],
-    pub(crate) absolute_byte_offset: u64,
-    pub(crate) line_number: Option<u64>,
-    pub(crate) buffer: &'b [u8],
-    pub(crate) bytes_range_in_buffer: std::ops::Range<usize>,
+    pub line_term: LineTerminator,
+    pub bytes: &'b [u8],
+    pub absolute_byte_offset: u64,
+    pub line_number: Option<u64>,
+    pub buffer: &'b [u8],
+    pub bytes_range_in_buffer: std::ops::Range<usize>,
 }
 
 impl<'b> SinkMatch<'b> {
@@ -287,11 +287,11 @@ pub enum SinkContextKind {
 #[derive(Clone, Debug)]
 pub struct SinkContext<'b> {
     #[cfg(test)]
-    pub(crate) line_term: LineTerminator,
-    pub(crate) bytes: &'b [u8],
-    pub(crate) kind: SinkContextKind,
-    pub(crate) absolute_byte_offset: u64,
-    pub(crate) line_number: Option<u64>,
+    pub line_term: LineTerminator,
+    pub bytes: &'b [u8],
+    pub kind: SinkContextKind,
+    pub absolute_byte_offset: u64,
+    pub line_number: Option<u64>,
 }
 
 impl<'b> SinkContext<'b> {

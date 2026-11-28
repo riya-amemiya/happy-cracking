@@ -94,7 +94,7 @@ fn new_regex_set(pats: &[String]) -> Result<RegexSet, Error> {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) enum MatchStrategy {
+pub enum MatchStrategy {
     Literal(String),
     BasenameLiteral(String),
     Extension(String),
@@ -105,7 +105,8 @@ pub(crate) enum MatchStrategy {
 }
 
 impl MatchStrategy {
-    pub(crate) fn new(pat: &Glob) -> MatchStrategy {
+    #[must_use]
+    pub fn new(pat: &Glob) -> MatchStrategy {
         if let Some(lit) = pat.basename_literal() {
             MatchStrategy::BasenameLiteral(lit)
         } else if let Some(lit) = pat.literal() {
@@ -817,7 +818,7 @@ impl Parser<'_> {
     }
 }
 
-pub(crate) struct Fnv(u64);
+pub struct Fnv(u64);
 
 impl Default for Fnv {
     fn default() -> Fnv {
@@ -837,7 +838,7 @@ impl Hasher for Fnv {
     }
 }
 
-pub(crate) type FnvMap<K, V> = HashMap<K, V, BuildHasherDefault<Fnv>>;
+pub type FnvMap<K, V> = HashMap<K, V, BuildHasherDefault<Fnv>>;
 
 type LitMap = FnvMap<Vec<u8>, Vec<usize>>;
 
@@ -880,11 +881,13 @@ impl<'a> Candidate<'a> {
         }
     }
 
-    pub(crate) fn path(&self) -> &[u8] {
+    #[must_use]
+    pub fn path(&self) -> &[u8] {
         &self.path
     }
 
-    pub(crate) fn basename(&self) -> &[u8] {
+    #[must_use]
+    pub fn basename(&self) -> &[u8] {
         if self.has_base {
             &self.path[self.base..]
         } else {
@@ -892,19 +895,22 @@ impl<'a> Candidate<'a> {
         }
     }
 
-    pub(crate) fn ext(&self) -> &[u8] {
+    #[must_use]
+    pub fn ext(&self) -> &[u8] {
         &self.path[self.ext..]
     }
 }
 
 #[cfg(unix)]
-pub(crate) fn path_bytes(path: &Path) -> Cow<'_, [u8]> {
+#[must_use]
+pub fn path_bytes(path: &Path) -> Cow<'_, [u8]> {
     use std::os::unix::ffi::OsStrExt;
     Cow::Borrowed(path.as_os_str().as_bytes())
 }
 
 #[cfg(not(unix))]
-pub(crate) fn path_bytes(path: &Path) -> Cow<'_, [u8]> {
+#[must_use]
+pub fn path_bytes(path: &Path) -> Cow<'_, [u8]> {
     let bytes = match path.to_string_lossy() {
         Cow::Borrowed(s) => Cow::Borrowed(s.as_bytes()),
         Cow::Owned(s) => Cow::Owned(s.into_bytes()),
@@ -1083,7 +1089,7 @@ impl GlobSet {
         self.strats.iter().any(|(_, s)| s.is_match(path))
     }
 
-    pub(crate) fn last_match(
+    pub fn last_match(
         &self,
         path: &Candidate<'_>,
         accept: &dyn Fn(usize) -> bool,

@@ -2,21 +2,21 @@ use std::io;
 
 use memchr::{memchr, memrchr};
 
-pub(crate) const DEFAULT_BUFFER_CAPACITY: usize = 64 * (1 << 10);
+pub const DEFAULT_BUFFER_CAPACITY: usize = 64 * (1 << 10);
 
 #[derive(Clone, Copy, Debug, Default)]
-pub(crate) enum BufferAllocation {
+pub enum BufferAllocation {
     #[default]
     Eager,
     Error(usize),
 }
 
-pub(crate) fn alloc_error(limit: usize) -> io::Error {
+pub fn alloc_error(limit: usize) -> io::Error {
     io::Error::other(format!("configured allocation limit ({limit}) exceeded"))
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub(crate) enum BinaryDetection {
+pub enum BinaryDetection {
     #[default]
     None,
     Quit(u8),
@@ -49,16 +49,16 @@ impl Default for Config {
 }
 
 #[derive(Clone, Debug, Default)]
-pub(crate) struct LineBufferBuilder {
+pub struct LineBufferBuilder {
     config: Config,
 }
 
 impl LineBufferBuilder {
-    pub(crate) fn new() -> LineBufferBuilder {
+    pub fn new() -> LineBufferBuilder {
         LineBufferBuilder::default()
     }
 
-    pub(crate) fn build(&self) -> LineBuffer {
+    pub fn build(&self) -> LineBuffer {
         LineBuffer {
             config: self.config,
             buf: vec![0; self.config.capacity],
@@ -70,59 +70,56 @@ impl LineBufferBuilder {
         }
     }
 
-    pub(crate) fn capacity(&mut self, capacity: usize) -> &mut LineBufferBuilder {
+    pub fn capacity(&mut self, capacity: usize) -> &mut LineBufferBuilder {
         self.config.capacity = capacity;
         self
     }
 
-    pub(crate) fn line_terminator(&mut self, lineterm: u8) -> &mut LineBufferBuilder {
+    pub fn line_terminator(&mut self, lineterm: u8) -> &mut LineBufferBuilder {
         self.config.lineterm = lineterm;
         self
     }
 
-    pub(crate) fn buffer_alloc(&mut self, behavior: BufferAllocation) -> &mut LineBufferBuilder {
+    pub fn buffer_alloc(&mut self, behavior: BufferAllocation) -> &mut LineBufferBuilder {
         self.config.buffer_alloc = behavior;
         self
     }
 
-    pub(crate) fn binary_detection(
-        &mut self,
-        detection: BinaryDetection,
-    ) -> &mut LineBufferBuilder {
+    pub fn binary_detection(&mut self, detection: BinaryDetection) -> &mut LineBufferBuilder {
         self.config.binary = detection;
         self
     }
 }
 
 #[derive(Debug)]
-pub(crate) struct LineBufferReader<'b, R> {
+pub struct LineBufferReader<'b, R> {
     rdr: R,
     line_buffer: &'b mut LineBuffer,
 }
 
 impl<'b, R: io::Read> LineBufferReader<'b, R> {
-    pub(crate) fn new(rdr: R, line_buffer: &'b mut LineBuffer) -> LineBufferReader<'b, R> {
+    pub fn new(rdr: R, line_buffer: &'b mut LineBuffer) -> LineBufferReader<'b, R> {
         line_buffer.clear();
         LineBufferReader { rdr, line_buffer }
     }
 
-    pub(crate) fn absolute_byte_offset(&self) -> u64 {
+    pub fn absolute_byte_offset(&self) -> u64 {
         self.line_buffer.absolute_byte_offset
     }
 
-    pub(crate) fn binary_byte_offset(&self) -> Option<u64> {
+    pub fn binary_byte_offset(&self) -> Option<u64> {
         self.line_buffer.binary_byte_offset
     }
 
-    pub(crate) fn fill(&mut self) -> Result<bool, io::Error> {
+    pub fn fill(&mut self) -> Result<bool, io::Error> {
         self.line_buffer.fill(&mut self.rdr)
     }
 
-    pub(crate) fn buffer(&self) -> &[u8] {
+    pub fn buffer(&self) -> &[u8] {
         self.line_buffer.buffer()
     }
 
-    pub(crate) fn consume(&mut self, amt: usize) {
+    pub fn consume(&mut self, amt: usize) {
         self.line_buffer.consume(amt);
     }
 
@@ -134,7 +131,7 @@ impl<'b, R: io::Read> LineBufferReader<'b, R> {
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct LineBuffer {
+pub struct LineBuffer {
     config: Config,
     buf: Vec<u8>,
     pos: usize,
@@ -145,7 +142,7 @@ pub(crate) struct LineBuffer {
 }
 
 impl LineBuffer {
-    pub(crate) fn set_binary_detection(&mut self, binary: BinaryDetection) {
+    pub fn set_binary_detection(&mut self, binary: BinaryDetection) {
         self.config.binary = binary;
     }
 
@@ -244,7 +241,7 @@ impl LineBuffer {
     }
 }
 
-pub(crate) fn replace_bytes(mut bytes: &mut [u8], src: u8, replacement: u8) -> Option<usize> {
+pub fn replace_bytes(mut bytes: &mut [u8], src: u8, replacement: u8) -> Option<usize> {
     if src == replacement {
         return None;
     }

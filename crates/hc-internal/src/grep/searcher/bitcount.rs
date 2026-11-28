@@ -1,7 +1,7 @@
 const BLOCK: usize = 64;
 const MAX_NEEDLE: usize = 4;
 
-pub(crate) fn literal_line_counts(hay: &[u8], needle: &[u8], term: u8) -> Option<(u64, u64)> {
+pub fn literal_line_counts(hay: &[u8], needle: &[u8], term: u8) -> Option<(u64, u64)> {
     if !cfg!(any(target_arch = "aarch64", target_arch = "x86_64"))
         || needle.is_empty()
         || needle.len() > MAX_NEEDLE
@@ -112,7 +112,7 @@ fn masks(_block: &[u8; BLOCK], _keys: &[u8], _out: &mut [u64]) {}
 
 const GROUP: usize = BLOCK * 255;
 
-pub(crate) fn count_byte(hay: &[u8], byte: u8) -> u64 {
+pub fn count_byte(hay: &[u8], byte: u8) -> u64 {
     let (groups, rest) = hay.as_chunks::<GROUP>();
     let (blocks, tail) = rest.as_chunks::<BLOCK>();
     groups

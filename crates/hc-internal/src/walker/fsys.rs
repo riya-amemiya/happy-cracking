@@ -88,40 +88,40 @@ impl From<std::fs::FileType> for FileType {
     }
 }
 
-pub(crate) struct Ent {
+pub struct Ent {
     #[cfg(unix)]
     start: u32,
     #[cfg(unix)]
     len: u32,
     #[cfg(not(unix))]
     name: std::ffi::OsString,
-    pub(crate) ty: Option<FileType>,
-    pub(crate) ino: u64,
-    pub(crate) attr_hidden: bool,
+    pub ty: Option<FileType>,
+    pub ino: u64,
+    pub attr_hidden: bool,
 }
 
 #[derive(Default)]
-pub(crate) struct Listing {
+pub struct Listing {
     #[cfg(unix)]
     names: Vec<u8>,
-    pub(crate) ents: Vec<Ent>,
-    pub(crate) err: Option<io::Error>,
+    pub ents: Vec<Ent>,
+    pub err: Option<io::Error>,
 }
 
 impl Listing {
     #[cfg(unix)]
-    pub(crate) fn name(&self, ent: &Ent) -> &OsStr {
+    pub fn name(&self, ent: &Ent) -> &OsStr {
         use std::os::unix::ffi::OsStrExt;
         let start = ent.start as usize;
         OsStr::from_bytes(&self.names[start..start + ent.len as usize])
     }
 
     #[cfg(not(unix))]
-    pub(crate) fn name<'a>(&self, ent: &'a Ent) -> &'a OsStr {
+    pub fn name<'a>(&self, ent: &'a Ent) -> &'a OsStr {
         &ent.name
     }
 
-    pub(crate) fn lookup_all(&self, names: &[&OsStr]) -> Vec<Lookup> {
+    pub fn lookup_all(&self, names: &[&OsStr]) -> Vec<Lookup> {
         let mut out: Vec<Lookup> = names
             .iter()
             .map(|n| {
@@ -156,14 +156,14 @@ impl Listing {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum Lookup {
+pub enum Lookup {
     Absent,
     Present(FileType),
     Unknown,
 }
 
 #[cfg(unix)]
-pub(crate) fn check_dir(path: &Path) -> io::Result<()> {
+pub fn check_dir(path: &Path) -> io::Result<()> {
     use rustix::fs::{Mode, OFlags};
     rustix::fs::open(
         path,
@@ -174,11 +174,11 @@ pub(crate) fn check_dir(path: &Path) -> io::Result<()> {
 }
 
 #[cfg(not(unix))]
-pub(crate) fn check_dir(path: &Path) -> io::Result<()> {
+pub fn check_dir(path: &Path) -> io::Result<()> {
     std::fs::read_dir(path).map(drop)
 }
 
-pub(crate) fn read_dir(path: &Path) -> io::Result<Listing> {
+pub fn read_dir(path: &Path) -> io::Result<Listing> {
     let mut listing = Listing::default();
     for next in std::fs::read_dir(path)? {
         let ent = match next {
@@ -223,37 +223,37 @@ impl Listing {
 }
 
 #[cfg(windows)]
-pub(crate) fn attr_hidden(md: &std::fs::Metadata) -> bool {
+pub fn attr_hidden(md: &std::fs::Metadata) -> bool {
     use std::os::windows::fs::MetadataExt;
     md.file_attributes() & 0x2 != 0
 }
 
 #[cfg(not(windows))]
-pub(crate) fn attr_hidden(_: &std::fs::Metadata) -> bool {
+pub fn attr_hidden(_: &std::fs::Metadata) -> bool {
     false
 }
 
 #[cfg(unix)]
-pub(crate) fn dev_ino(md: &std::fs::Metadata) -> (u64, u64) {
+pub fn dev_ino(md: &std::fs::Metadata) -> (u64, u64) {
     use std::os::unix::fs::MetadataExt;
     (md.dev(), md.ino())
 }
 
 #[cfg(unix)]
-pub(crate) fn device_num(path: &Path) -> io::Result<u64> {
+pub fn device_num(path: &Path) -> io::Result<u64> {
     use std::os::unix::fs::MetadataExt;
     path.metadata().map(|md| md.dev())
 }
 
 #[cfg(not(unix))]
-pub(crate) fn device_num(_: &Path) -> io::Result<u64> {
+pub fn device_num(_: &Path) -> io::Result<u64> {
     Err(io::Error::other(
         "walkdir: same_file_system option not supported on this platform",
     ))
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) struct Handle {
+pub struct Handle {
     #[cfg(unix)]
     key: (u64, u64),
     #[cfg(not(unix))]
@@ -262,7 +262,7 @@ pub(crate) struct Handle {
 
 impl Handle {
     #[cfg(unix)]
-    pub(crate) fn from_path(path: &Path) -> io::Result<Handle> {
+    pub fn from_path(path: &Path) -> io::Result<Handle> {
         let file = std::fs::File::open(path)?;
         Ok(Handle {
             key: dev_ino(&file.metadata()?),
@@ -270,14 +270,14 @@ impl Handle {
     }
 
     #[cfg(not(unix))]
-    pub(crate) fn from_path(path: &Path) -> io::Result<Handle> {
+    pub fn from_path(path: &Path) -> io::Result<Handle> {
         Ok(Handle {
             key: std::fs::canonicalize(path)?,
         })
     }
 
     #[cfg(unix)]
-    pub(crate) fn stdout() -> Option<Handle> {
+    pub fn stdout() -> Option<Handle> {
         let st = rustix::fs::fstat(std::io::stdout()).ok()?;
         if rustix::fs::FileType::from_raw_mode(st.st_mode) != rustix::fs::FileType::RegularFile {
             return None;
@@ -288,12 +288,12 @@ impl Handle {
     }
 
     #[cfg(not(unix))]
-    pub(crate) fn stdout() -> Option<Handle> {
+    pub fn stdout() -> Option<Handle> {
         None
     }
 
     #[cfg(unix)]
-    pub(crate) fn ino(&self) -> u64 {
+    pub fn ino(&self) -> u64 {
         self.key.1
     }
 }

@@ -48,7 +48,7 @@ impl LineStep {
     }
 
     #[inline]
-    pub(crate) fn next_match(&mut self, bytes: &[u8]) -> Option<Match> {
+    pub fn next_match(&mut self, bytes: &[u8]) -> Option<Match> {
         self.next_impl(bytes).map(|(s, e)| Match::new(s, e))
     }
 
@@ -75,12 +75,12 @@ impl LineStep {
 }
 
 #[inline]
-pub(crate) fn count(bytes: &[u8], line_term: u8) -> u64 {
+pub fn count(bytes: &[u8], line_term: u8) -> u64 {
     super::bitcount::count_byte(bytes, line_term)
 }
 
 #[inline]
-pub(crate) fn without_terminator(bytes: &[u8], line_term: LineTerminator) -> &[u8] {
+pub fn without_terminator(bytes: &[u8], line_term: LineTerminator) -> &[u8] {
     let term = line_term.as_bytes();
     let start = bytes.len().saturating_sub(term.len());
     if bytes.get(start..) == Some(term) {
@@ -90,7 +90,7 @@ pub(crate) fn without_terminator(bytes: &[u8], line_term: LineTerminator) -> &[u
 }
 
 #[inline]
-pub(crate) fn locate(bytes: &[u8], line_term: u8, range: Match) -> Match {
+pub fn locate(bytes: &[u8], line_term: u8, range: Match) -> Match {
     let line_start = memrchr(line_term, &bytes[..range.start()]).map_or(0, |i| i + 1);
     let line_end = if range.end() > line_start && bytes[range.end() - 1] == line_term {
         range.end()
@@ -100,7 +100,7 @@ pub(crate) fn locate(bytes: &[u8], line_term: u8, range: Match) -> Match {
     Match::new(line_start, line_end)
 }
 
-pub(crate) fn preceding(bytes: &[u8], line_term: u8, count: usize) -> usize {
+pub fn preceding(bytes: &[u8], line_term: u8, count: usize) -> usize {
     preceding_by_pos(bytes, bytes.len(), line_term, count)
 }
 

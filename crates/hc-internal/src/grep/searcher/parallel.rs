@@ -12,7 +12,7 @@ use super::lines::{self, LineStep};
 
 const PANICKED: &str = "search worker panicked";
 
-pub(crate) fn thread_count() -> usize {
+pub fn thread_count() -> usize {
     rayon::current_num_threads()
 }
 
@@ -20,7 +20,7 @@ fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
     mutex.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
-pub(crate) fn run_workers<F: Fn() + Sync>(workers: usize, work: F) {
+pub fn run_workers<F: Fn() + Sync>(workers: usize, work: F) {
     rayon::in_place_scope(|scope| {
         for _ in 1..workers {
             scope.spawn(|_| work());
@@ -30,14 +30,14 @@ pub(crate) fn run_workers<F: Fn() + Sync>(workers: usize, work: F) {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum Region {
+pub enum Region {
     Clean,
     LongLine,
     Binary,
 }
 
 impl Region {
-    pub(crate) fn worst(self, other: Region) -> Region {
+    pub fn worst(self, other: Region) -> Region {
         match (self, other) {
             (Region::Binary, _) | (_, Region::Binary) => Region::Binary,
             (Region::LongLine, _) | (_, Region::LongLine) => Region::LongLine,
@@ -47,18 +47,12 @@ impl Region {
 }
 
 #[derive(Clone, Copy, Debug)]
-pub(crate) struct Guard {
-    pub(crate) byte: u8,
-    pub(crate) window: usize,
+pub struct Guard {
+    pub byte: u8,
+    pub window: usize,
 }
 
-pub(crate) fn check_region(
-    data: &[u8],
-    start: usize,
-    end: usize,
-    term: u8,
-    guard: Guard,
-) -> Region {
+pub fn check_region(data: &[u8], start: usize, end: usize, term: u8, guard: Guard) -> Region {
     if memchr(guard.byte, &data[start..end]).is_some() {
         return Region::Binary;
     }
@@ -87,7 +81,7 @@ struct State {
     idle: usize,
 }
 
-pub(crate) struct Shared {
+pub struct Shared {
     state: Mutex<State>,
     ready: Condvar,
     space: Condvar,
@@ -96,7 +90,7 @@ pub(crate) struct Shared {
 }
 
 impl Shared {
-    pub(crate) fn new(chunks: usize, window: usize) -> Shared {
+    pub fn new(chunks: usize, window: usize) -> Shared {
         Shared {
             state: Mutex::new(State {
                 slots: (0..chunks).map(|_| None).collect(),
@@ -113,7 +107,7 @@ impl Shared {
         }
     }
 
-    pub(crate) fn finish(&self) {
+    pub fn finish(&self) {
         self.stop.store(true, Ordering::Relaxed);
         let _state = lock(&self.state);
         self.space.notify_all();
@@ -147,7 +141,7 @@ impl Shared {
         }
     }
 
-    pub(crate) fn region(&self, k: usize) -> Region {
+    pub fn region(&self, k: usize) -> Region {
         let mut state = lock(&self.state);
         loop {
             if let Some(region) = state.regions[k] {
@@ -182,7 +176,7 @@ impl Shared {
     }
 }
 
-pub(crate) fn split_chunks(buf: &[u8], term: u8, chunk_size: usize) -> Vec<(usize, usize)> {
+pub fn split_chunks(buf: &[u8], term: u8, chunk_size: usize) -> Vec<(usize, usize)> {
     let mut chunks = vec![];
     let mut start = 0usize;
     while start < buf.len() {
@@ -198,13 +192,13 @@ pub(crate) fn split_chunks(buf: &[u8], term: u8, chunk_size: usize) -> Vec<(usiz
     chunks
 }
 
-pub(crate) struct Job<'a> {
-    pub(crate) buf: &'a [u8],
-    pub(crate) finder: &'a dyn ParallelMatcher,
-    pub(crate) line_term: LineTerminator,
-    pub(crate) count_lines: bool,
-    pub(crate) guard: Option<Guard>,
-    pub(crate) per_line: bool,
+pub struct Job<'a> {
+    pub buf: &'a [u8],
+    pub finder: &'a dyn ParallelMatcher,
+    pub line_term: LineTerminator,
+    pub count_lines: bool,
+    pub guard: Option<Guard>,
+    pub per_line: bool,
 }
 
 impl ChunkOut {
@@ -291,7 +285,7 @@ fn search_lines_chunk(
     Ok(out.close(job, counted, end))
 }
 
-pub(crate) fn search_worker(job: &Job<'_>, shared: &Shared, chunks: &[(usize, usize)]) {
+pub fn search_worker(job: &Job<'_>, shared: &Shared, chunks: &[(usize, usize)]) {
     let fork = job.finder.par_fork();
     let finder = fork.as_deref().unwrap_or(job.finder);
     let term = job.line_term.as_byte();
@@ -316,7 +310,7 @@ pub(crate) fn search_worker(job: &Job<'_>, shared: &Shared, chunks: &[(usize, us
     }
 }
 
-pub(crate) struct Feed<'a> {
+pub struct Feed<'a> {
     job: &'a Job<'a>,
     shared: &'a Shared,
     chunks: usize,
@@ -327,7 +321,7 @@ pub(crate) struct Feed<'a> {
 }
 
 impl<'a> Feed<'a> {
-    pub(crate) fn new(job: &'a Job<'a>, shared: &'a Shared, chunks: usize) -> Feed<'a> {
+    pub fn new(job: &'a Job<'a>, shared: &'a Shared, chunks: usize) -> Feed<'a> {
         Feed {
             job,
             shared,
@@ -385,11 +379,11 @@ impl LineFeed for Feed<'_> {
     }
 }
 
-pub(crate) fn count_lines_in(buf: &[u8], start: usize, end: usize, term: u8) -> u64 {
+pub fn count_lines_in(buf: &[u8], start: usize, end: usize, term: u8) -> u64 {
     lines::count(&buf[start..end], term) + u64::from(end > start && buf[end - 1] != term)
 }
 
-pub(crate) fn count_matches_at<F>(
+pub fn count_matches_at<F>(
     haystack: &[u8],
     at: usize,
     limit: usize,
@@ -422,13 +416,13 @@ where
     Ok(count)
 }
 
-pub(crate) struct CountOut {
-    pub(crate) matched: u64,
-    pub(crate) matches: u64,
-    pub(crate) lines: u64,
+pub struct CountOut {
+    pub matched: u64,
+    pub matches: u64,
+    pub lines: u64,
 }
 
-pub(crate) trait LineCounter {
+pub trait LineCounter {
     fn candidate(&self, haystack: &[u8]) -> Result<Option<LineMatchKind>, String>;
 
     #[cfg(test)]
@@ -458,7 +452,7 @@ impl LineCounter for &dyn ParallelMatcher {
     }
 }
 
-pub(crate) fn count_chunk<C: LineCounter>(
+pub fn count_chunk<C: LineCounter>(
     buf: &[u8],
     line_term: LineTerminator,
     start: usize,
@@ -537,7 +531,7 @@ pub(crate) fn count_chunk<C: LineCounter>(
     Ok(out)
 }
 
-pub(crate) fn count_chunk_converted<C: LineCounter>(
+pub fn count_chunk_converted<C: LineCounter>(
     chunk: &[u8],
     line_term: LineTerminator,
     byte: u8,
@@ -561,19 +555,19 @@ pub(crate) fn count_chunk_converted<C: LineCounter>(
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum Counting {
+pub enum Counting {
     Plain,
     Converted(u8),
     Guarded(u8),
 }
 
 #[derive(Clone, Copy)]
-pub(crate) struct CountSpec<'a> {
-    pub(crate) buf: &'a [u8],
-    pub(crate) line_term: LineTerminator,
-    pub(crate) with_matches: bool,
-    pub(crate) with_lines: bool,
-    pub(crate) mode: Counting,
+pub struct CountSpec<'a> {
+    pub buf: &'a [u8],
+    pub line_term: LineTerminator,
+    pub with_matches: bool,
+    pub with_lines: bool,
+    pub mode: Counting,
 }
 
 impl CountOut {
@@ -645,7 +639,7 @@ fn count_piece<C: LineCounter>(
     }
 }
 
-pub(crate) fn count_sequential<C: LineCounter>(
+pub fn count_sequential<C: LineCounter>(
     spec: CountSpec<'_>,
     counter: &C,
 ) -> Result<Option<CountOut>, String> {
@@ -663,7 +657,7 @@ pub(crate) fn count_sequential<C: LineCounter>(
     Ok(Some(total))
 }
 
-pub(crate) fn count_parallel(
+pub fn count_parallel(
     spec: CountSpec<'_>,
     matcher: &dyn ParallelMatcher,
     chunks: &[(usize, usize)],

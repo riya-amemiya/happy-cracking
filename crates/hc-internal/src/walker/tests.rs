@@ -8,7 +8,7 @@ use std::sync::{Arc, Mutex};
 use super::{DirEntry, Error, WalkBuilder, WalkState};
 
 #[derive(Debug)]
-pub(crate) struct TempDir(PathBuf);
+pub struct TempDir(PathBuf);
 
 impl Drop for TempDir {
     fn drop(&mut self) {
@@ -17,7 +17,7 @@ impl Drop for TempDir {
 }
 
 impl TempDir {
-    pub(crate) fn new() -> TempDir {
+    pub fn new() -> TempDir {
         static COUNTER: AtomicUsize = AtomicUsize::new(0);
         let count = COUNTER.fetch_add(1, Ordering::Relaxed);
         let path = std::env::temp_dir()
@@ -28,12 +28,12 @@ impl TempDir {
         TempDir(path.canonicalize().unwrap())
     }
 
-    pub(crate) fn path(&self) -> &Path {
+    pub fn path(&self) -> &Path {
         &self.0
     }
 }
 
-pub(crate) fn wfile<P: AsRef<Path>>(path: P, contents: &str) {
+pub fn wfile<P: AsRef<Path>>(path: P, contents: &str) {
     let mut file = File::create(path).unwrap();
     file.write_all(contents.as_bytes()).unwrap();
 }
@@ -47,7 +47,7 @@ fn symlink<P: AsRef<Path>, Q: AsRef<Path>>(src: P, dst: Q) {
     std::os::unix::fs::symlink(src, dst).unwrap();
 }
 
-pub(crate) fn mkdirp<P: AsRef<Path>>(path: P) {
+pub fn mkdirp<P: AsRef<Path>>(path: P) {
     fs::create_dir_all(path).unwrap();
 }
 

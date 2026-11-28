@@ -14,7 +14,8 @@ pub struct Error {
 }
 
 impl Error {
-    pub(crate) fn compile(err: u32, offset: usize) -> Error {
+    #[must_use]
+    pub fn compile(err: u32, offset: usize) -> Error {
         Error {
             kind: ErrorKind::Compile,
             code: 100 + err as i32,
@@ -22,7 +23,8 @@ impl Error {
         }
     }
 
-    pub(crate) fn matching(code: i32) -> Error {
+    #[must_use]
+    pub fn matching(code: i32) -> Error {
         Error {
             kind: ErrorKind::Match,
             code,

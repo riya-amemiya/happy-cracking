@@ -23,11 +23,13 @@ impl HyperlinkConfig {
         HyperlinkConfig(Arc::new(HyperlinkConfigInner { env, format }))
     }
 
-    pub(crate) fn environment(&self) -> &HyperlinkEnvironment {
+    #[must_use]
+    pub fn environment(&self) -> &HyperlinkEnvironment {
         &self.0.env
     }
 
-    pub(crate) fn format(&self) -> &HyperlinkFormat {
+    #[must_use]
+    pub fn format(&self) -> &HyperlinkFormat {
         &self.0.format
     }
 }
@@ -49,7 +51,8 @@ impl HyperlinkFormat {
         self.parts.is_empty()
     }
 
-    pub(crate) fn is_line_dependent(&self) -> bool {
+    #[must_use]
+    pub fn is_line_dependent(&self) -> bool {
         self.is_line_dependent
     }
 }
@@ -432,14 +435,14 @@ impl std::fmt::Display for Part {
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct Values<'a> {
+pub struct Values<'a> {
     path: &'a HyperlinkPath,
     line: Option<u64>,
     column: Option<u64>,
 }
 
 impl<'a> Values<'a> {
-    pub(crate) fn new(path: &'a HyperlinkPath) -> Values<'a> {
+    pub fn new(path: &'a HyperlinkPath) -> Values<'a> {
         Values {
             path,
             line: None,
@@ -447,36 +450,36 @@ impl<'a> Values<'a> {
         }
     }
 
-    pub(crate) fn line(mut self, line: Option<u64>) -> Values<'a> {
+    pub fn line(mut self, line: Option<u64>) -> Values<'a> {
         self.line = line;
         self
     }
 
-    pub(crate) fn column(mut self, column: Option<u64>) -> Values<'a> {
+    pub fn column(mut self, column: Option<u64>) -> Values<'a> {
         self.column = column;
         self
     }
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct Interpolator {
+pub struct Interpolator {
     config: HyperlinkConfig,
     buf: RefCell<Vec<u8>>,
 }
 
 impl Interpolator {
-    pub(crate) fn new(config: &HyperlinkConfig) -> Interpolator {
+    pub fn new(config: &HyperlinkConfig) -> Interpolator {
         Interpolator {
             config: config.clone(),
             buf: RefCell::new(vec![]),
         }
     }
 
-    pub(crate) fn enabled<W: WriteColor>(&self, wtr: &W) -> bool {
+    pub fn enabled<W: WriteColor>(&self, wtr: &W) -> bool {
         !self.config.format().is_empty() && wtr.supports_hyperlinks() && wtr.supports_color()
     }
 
-    pub(crate) fn begin<W: WriteColor>(
+    pub fn begin<W: WriteColor>(
         &self,
         values: &Values<'_>,
         mut wtr: W,
@@ -495,17 +498,17 @@ impl Interpolator {
 }
 
 #[derive(Clone, Copy, Debug)]
-pub(crate) struct InterpolatorStatus {
+pub struct InterpolatorStatus {
     active: bool,
 }
 
 impl InterpolatorStatus {
     #[inline]
-    pub(crate) fn inactive() -> InterpolatorStatus {
+    pub fn inactive() -> InterpolatorStatus {
         InterpolatorStatus { active: false }
     }
 
-    pub(crate) fn finish<W: WriteColor>(self, mut wtr: W) -> io::Result<()> {
+    pub fn finish<W: WriteColor>(self, mut wtr: W) -> io::Result<()> {
         if !self.active {
             return Ok(());
         }
@@ -514,11 +517,11 @@ impl InterpolatorStatus {
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct HyperlinkPath(Vec<u8>);
+pub struct HyperlinkPath(Vec<u8>);
 
 impl HyperlinkPath {
     #[cfg(unix)]
-    pub(crate) fn from_path(original_path: &Path) -> Option<HyperlinkPath> {
+    pub fn from_path(original_path: &Path) -> Option<HyperlinkPath> {
         use std::os::unix::ffi::OsStrExt;
         let path = original_path.canonicalize().ok()?;
         let bytes = path.as_os_str().as_bytes();
@@ -529,7 +532,7 @@ impl HyperlinkPath {
     }
 
     #[cfg(windows)]
-    pub(crate) fn from_path(original_path: &Path) -> Option<HyperlinkPath> {
+    pub fn from_path(original_path: &Path) -> Option<HyperlinkPath> {
         let path = std::path::absolute(original_path).ok()?;
         let mut string = path.to_str()?;
         if let Some(rest) = string.strip_prefix(r"\\?\") {
@@ -545,7 +548,7 @@ impl HyperlinkPath {
     }
 
     #[cfg(not(any(windows, unix)))]
-    pub(crate) fn from_path(_original_path: &Path) -> Option<HyperlinkPath> {
+    pub fn from_path(_original_path: &Path) -> Option<HyperlinkPath> {
         None
     }
 

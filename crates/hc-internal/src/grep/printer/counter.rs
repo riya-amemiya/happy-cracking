@@ -3,14 +3,14 @@ use std::io::{self, Write};
 use super::termcolor::{ColorSpec, HyperlinkSpec, WriteColor};
 
 #[derive(Clone, Debug)]
-pub(crate) struct CounterWriter<W> {
+pub struct CounterWriter<W> {
     wtr: W,
     count: u64,
     total_count: u64,
 }
 
 impl<W: Write> CounterWriter<W> {
-    pub(crate) fn new(wtr: W) -> CounterWriter<W> {
+    pub fn new(wtr: W) -> CounterWriter<W> {
         CounterWriter {
             wtr,
             count: 0,
@@ -21,29 +21,29 @@ impl<W: Write> CounterWriter<W> {
 
 impl<W> CounterWriter<W> {
     #[inline]
-    pub(crate) fn count(&self) -> u64 {
+    pub fn count(&self) -> u64 {
         self.count
     }
 
     #[inline]
-    pub(crate) fn total_count(&self) -> u64 {
+    pub fn total_count(&self) -> u64 {
         self.total_count + self.count
     }
 
     #[inline]
-    pub(crate) fn reset_count(&mut self) {
+    pub fn reset_count(&mut self) {
         self.total_count += self.count;
         self.count = 0;
     }
 
     #[inline]
-    pub(crate) fn get_mut(&mut self) -> &mut W {
+    pub fn get_mut(&mut self) -> &mut W {
         &mut self.wtr
     }
 
     #[cfg(test)]
     #[inline]
-    pub(crate) fn into_inner(self) -> W {
+    pub fn into_inner(self) -> W {
         self.wtr
     }
 }

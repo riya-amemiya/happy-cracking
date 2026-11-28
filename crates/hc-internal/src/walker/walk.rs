@@ -103,7 +103,7 @@ impl DirEntry {
         self.err.as_ref()
     }
 
-    pub(crate) fn is_dir(&self) -> bool {
+    pub fn is_dir(&self) -> bool {
         self.ty.is_some_and(FileType::is_dir)
     }
 

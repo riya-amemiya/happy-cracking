@@ -83,21 +83,24 @@ impl Error {
         }
     }
 
-    pub(crate) fn with_path<P: AsRef<Path>>(self, path: P) -> Error {
+    #[must_use]
+    pub fn with_path<P: AsRef<Path>>(self, path: P) -> Error {
         Error::WithPath {
             path: path.as_ref().to_path_buf(),
             err: Box::new(self),
         }
     }
 
-    pub(crate) fn with_depth(self, depth: usize) -> Error {
+    #[must_use]
+    pub fn with_depth(self, depth: usize) -> Error {
         Error::WithDepth {
             depth,
             err: Box::new(self),
         }
     }
 
-    pub(crate) fn tagged<P: AsRef<Path>>(self, path: P, lineno: u64) -> Error {
+    #[must_use]
+    pub fn tagged<P: AsRef<Path>>(self, path: P, lineno: u64) -> Error {
         let errline = Error::WithLineNumber {
             line: lineno,
             err: Box::new(self),
@@ -148,32 +151,33 @@ impl From<io::Error> for Error {
 }
 
 #[derive(Debug, Default)]
-pub(crate) struct PartialErrorBuilder(Vec<Error>);
+pub struct PartialErrorBuilder(Vec<Error>);
 
 impl PartialErrorBuilder {
-    pub(crate) fn push(&mut self, err: Error) {
+    pub fn push(&mut self, err: Error) {
         self.0.push(err);
     }
 
-    pub(crate) fn push_ignore_io(&mut self, err: Error) {
+    pub fn push_ignore_io(&mut self, err: Error) {
         if !err.is_io() {
             self.push(err);
         }
     }
 
-    pub(crate) fn maybe_push(&mut self, err: Option<Error>) {
+    pub fn maybe_push(&mut self, err: Option<Error>) {
         if let Some(err) = err {
             self.push(err);
         }
     }
 
-    pub(crate) fn maybe_push_ignore_io(&mut self, err: Option<Error>) {
+    pub fn maybe_push_ignore_io(&mut self, err: Option<Error>) {
         if let Some(err) = err {
             self.push_ignore_io(err);
         }
     }
 
-    pub(crate) fn into_error_option(mut self) -> Option<Error> {
+    #[must_use]
+    pub fn into_error_option(mut self) -> Option<Error> {
         match self.0.len() {
             0 => None,
             1 => self.0.pop(),
@@ -226,10 +230,7 @@ impl<T> Match<T> {
 }
 
 #[cfg(unix)]
-pub(crate) fn strip_prefix<'a, P: AsRef<Path> + ?Sized>(
-    prefix: &P,
-    path: &'a Path,
-) -> Option<&'a Path> {
+pub fn strip_prefix<'a, P: AsRef<Path> + ?Sized>(prefix: &P, path: &'a Path) -> Option<&'a Path> {
     use std::os::unix::ffi::OsStrExt;
     let prefix = prefix.as_ref().as_os_str().as_bytes();
     let path = path.as_os_str().as_bytes();
@@ -238,26 +239,25 @@ pub(crate) fn strip_prefix<'a, P: AsRef<Path> + ?Sized>(
 }
 
 #[cfg(not(unix))]
-pub(crate) fn strip_prefix<'a, P: AsRef<Path> + ?Sized>(
-    prefix: &P,
-    path: &'a Path,
-) -> Option<&'a Path> {
+pub fn strip_prefix<'a, P: AsRef<Path> + ?Sized>(prefix: &P, path: &'a Path) -> Option<&'a Path> {
     path.strip_prefix(prefix).ok()
 }
 
 #[cfg(unix)]
-pub(crate) fn is_file_name(path: &Path) -> bool {
+#[must_use]
+pub fn is_file_name(path: &Path) -> bool {
     use std::os::unix::ffi::OsStrExt;
     memchr::memchr(b'/', path.as_os_str().as_bytes()).is_none()
 }
 
 #[cfg(not(unix))]
-pub(crate) fn is_file_name(path: &Path) -> bool {
+#[must_use]
+pub fn is_file_name(path: &Path) -> bool {
     path.parent().is_some_and(|p| p.as_os_str().is_empty())
 }
 
 #[cfg(unix)]
-pub(crate) fn file_name<P: AsRef<Path> + ?Sized>(path: &P) -> Option<&OsStr> {
+pub fn file_name<P: AsRef<Path> + ?Sized>(path: &P) -> Option<&OsStr> {
     use std::os::unix::ffi::OsStrExt;
     let path = path.as_ref().as_os_str().as_bytes();
     if path.is_empty() || path.last() == Some(&b'.') {
@@ -268,10 +268,11 @@ pub(crate) fn file_name<P: AsRef<Path> + ?Sized>(path: &P) -> Option<&OsStr> {
 }
 
 #[cfg(not(unix))]
-pub(crate) fn file_name<P: AsRef<Path> + ?Sized>(path: &P) -> Option<&OsStr> {
+pub fn file_name<P: AsRef<Path> + ?Sized>(path: &P) -> Option<&OsStr> {
     path.as_ref().file_name()
 }
 
-pub(crate) fn is_hidden(path: &Path) -> bool {
+#[must_use]
+pub fn is_hidden(path: &Path) -> bool {
     file_name(path).is_some_and(|name| name.as_encoded_bytes().first() == Some(&b'.'))
 }

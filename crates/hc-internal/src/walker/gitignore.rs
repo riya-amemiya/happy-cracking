@@ -230,7 +230,7 @@ impl GitignoreBuilder {
     }
 
     #[cfg(test)]
-    pub(crate) fn add_str(&mut self, gitignore: &str) -> Result<&mut GitignoreBuilder, Error> {
+    pub fn add_str(&mut self, gitignore: &str) -> Result<&mut GitignoreBuilder, Error> {
         for line in gitignore.lines() {
             self.add_line(line)?;
         }

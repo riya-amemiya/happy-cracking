@@ -13,18 +13,18 @@ use super::{Error, Match, PartialErrorBuilder, is_hidden, strip_prefix};
 
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Clone, Copy, Debug)]
-pub(crate) struct IgnoreOptions {
-    pub(crate) hidden: bool,
-    pub(crate) ignore: bool,
-    pub(crate) parents: bool,
-    pub(crate) git_global: bool,
-    pub(crate) git_ignore: bool,
-    pub(crate) git_exclude: bool,
-    pub(crate) ignore_case_insensitive: bool,
-    pub(crate) require_git: bool,
+pub struct IgnoreOptions {
+    pub hidden: bool,
+    pub ignore: bool,
+    pub parents: bool,
+    pub git_global: bool,
+    pub git_ignore: bool,
+    pub git_exclude: bool,
+    pub ignore_case_insensitive: bool,
+    pub require_git: bool,
 }
 
-pub(crate) enum Probe<'a> {
+pub enum Probe<'a> {
     Fs,
     Listing(&'a Listing),
 }
@@ -44,7 +44,7 @@ struct Shared {
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct Ignore(Arc<IgnoreInner>);
+pub struct Ignore(Arc<IgnoreInner>);
 
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug)]
@@ -120,23 +120,23 @@ fn lookup_exists(dir: &Path, name: &OsStr, lookup: Lookup) -> bool {
 }
 
 impl Ignore {
-    pub(crate) fn path(&self) -> &Path {
+    pub fn path(&self) -> &Path {
         &self.0.dir
     }
 
-    pub(crate) fn is_root(&self) -> bool {
+    pub fn is_root(&self) -> bool {
         self.0.parent.is_none()
     }
 
-    pub(crate) fn is_absolute_parent(&self) -> bool {
+    pub fn is_absolute_parent(&self) -> bool {
         self.0.is_absolute_parent
     }
 
-    pub(crate) fn parents(&self) -> impl Iterator<Item = &Ignore> {
+    pub fn parents(&self) -> impl Iterator<Item = &Ignore> {
         std::iter::successors(Some(self), |ig| ig.0.parent.as_ref())
     }
 
-    pub(crate) fn add_parents<P: AsRef<Path>>(&self, path: P) -> (Ignore, Option<Error>) {
+    pub fn add_parents<P: AsRef<Path>>(&self, path: P) -> (Ignore, Option<Error>) {
         let opts = self.0.shared.opts;
         if !opts.parents && !opts.git_ignore && !opts.git_exclude && !opts.git_global {
             return (self.clone(), None);
@@ -177,7 +177,7 @@ impl Ignore {
         (ig, errs.into_error_option())
     }
 
-    pub(crate) fn add_child(
+    pub fn add_child(
         &self,
         dir: &Path,
         probe: &Probe<'_>,
@@ -297,7 +297,7 @@ impl Ignore {
         (loaded, errs.into_error_option())
     }
 
-    pub(crate) fn should_skip(&self, path: &Path, is_dir: bool, attr_hidden: bool) -> bool {
+    pub fn should_skip(&self, path: &Path, is_dir: bool, attr_hidden: bool) -> bool {
         let m = if self.0.any_rules {
             self.matched(path, is_dir)
         } else {
@@ -427,18 +427,18 @@ impl Ignore {
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct IgnoreBuilder {
+pub struct IgnoreBuilder {
     dir: PathBuf,
     overrides: Arc<Override>,
     types: Arc<Types>,
     explicit_ignores: Vec<Gitignore>,
     custom_ignore_filenames: Vec<OsString>,
     global_gitignores_relative_to: Option<PathBuf>,
-    pub(crate) opts: IgnoreOptions,
+    pub opts: IgnoreOptions,
 }
 
 impl IgnoreBuilder {
-    pub(crate) fn new() -> IgnoreBuilder {
+    pub fn new() -> IgnoreBuilder {
         IgnoreBuilder {
             dir: PathBuf::new(),
             overrides: Arc::new(Override::empty()),
@@ -459,7 +459,7 @@ impl IgnoreBuilder {
         }
     }
 
-    pub(crate) fn build_with_cwd(&self, cwd: Option<PathBuf>) -> Ignore {
+    pub fn build_with_cwd(&self, cwd: Option<PathBuf>) -> Ignore {
         let global_gitignores_relative_to =
             cwd.or_else(|| self.global_gitignores_relative_to.clone());
         let git_global_matcher = match (&global_gitignores_relative_to, self.opts.git_global) {
@@ -511,27 +511,27 @@ impl IgnoreBuilder {
         ))
     }
 
-    pub(crate) fn current_dir(&mut self, cwd: impl Into<PathBuf>) -> &mut IgnoreBuilder {
+    pub fn current_dir(&mut self, cwd: impl Into<PathBuf>) -> &mut IgnoreBuilder {
         self.global_gitignores_relative_to = Some(cwd.into());
         self
     }
 
-    pub(crate) fn overrides(&mut self, overrides: Override) -> &mut IgnoreBuilder {
+    pub fn overrides(&mut self, overrides: Override) -> &mut IgnoreBuilder {
         self.overrides = Arc::new(overrides);
         self
     }
 
-    pub(crate) fn types(&mut self, types: Types) -> &mut IgnoreBuilder {
+    pub fn types(&mut self, types: Types) -> &mut IgnoreBuilder {
         self.types = Arc::new(types);
         self
     }
 
-    pub(crate) fn add_ignore(&mut self, ig: Gitignore) -> &mut IgnoreBuilder {
+    pub fn add_ignore(&mut self, ig: Gitignore) -> &mut IgnoreBuilder {
         self.explicit_ignores.push(ig);
         self
     }
 
-    pub(crate) fn add_custom_ignore_filename<S: AsRef<OsStr>>(
+    pub fn add_custom_ignore_filename<S: AsRef<OsStr>>(
         &mut self,
         file_name: S,
     ) -> &mut IgnoreBuilder {
@@ -568,7 +568,7 @@ fn create_gitignore(
 
 pub const MAX_GITDIR_LINE_BYTES: usize = 16 * 1024 * 1024;
 
-pub(crate) fn read_gitdir_line_with_limit<R: Read>(
+pub fn read_gitdir_line_with_limit<R: Read>(
     reader: R,
     max_bytes: usize,
 ) -> Result<Option<String>, io::Error> {

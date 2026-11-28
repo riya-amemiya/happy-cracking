@@ -13,7 +13,7 @@ use super::super::searcher::{
 use super::MAX_LOOK_AHEAD;
 use super::hyperlink::HyperlinkPath;
 
-pub(crate) struct Replacer<M: Matcher> {
+pub struct Replacer<M: Matcher> {
     space: Option<Space<M>>,
 }
 
@@ -34,11 +34,11 @@ impl<M: Matcher> fmt::Debug for Replacer<M> {
 }
 
 impl<M: Matcher> Replacer<M> {
-    pub(crate) fn new() -> Replacer<M> {
+    pub fn new() -> Replacer<M> {
         Replacer { space: None }
     }
 
-    pub(crate) fn replace_all(
+    pub fn replace_all(
         &mut self,
         searcher: &Searcher,
         matcher: &M,
@@ -85,14 +85,14 @@ impl<M: Matcher> Replacer<M> {
         Ok(())
     }
 
-    pub(crate) fn replacement(&self) -> Option<(&[u8], &[Match])> {
+    pub fn replacement(&self) -> Option<(&[u8], &[Match])> {
         match self.space {
             Some(ref space) if !space.matches.is_empty() => Some((&space.dst, &space.matches)),
             _ => None,
         }
     }
 
-    pub(crate) fn clear(&mut self) {
+    pub fn clear(&mut self) {
         if let Some(ref mut space) = self.space {
             space.dst.clear();
             space.matches.clear();
@@ -113,7 +113,7 @@ impl<M: Matcher> Replacer<M> {
 }
 
 #[derive(Debug)]
-pub(crate) struct Sunk<'a> {
+pub struct Sunk<'a> {
     bytes: &'a [u8],
     absolute_byte_offset: u64,
     line_number: Option<u64>,
@@ -124,7 +124,7 @@ pub(crate) struct Sunk<'a> {
 
 impl<'a> Sunk<'a> {
     #[inline]
-    pub(crate) fn empty() -> Sunk<'static> {
+    pub fn empty() -> Sunk<'static> {
         Sunk {
             bytes: &[],
             absolute_byte_offset: 0,
@@ -136,7 +136,7 @@ impl<'a> Sunk<'a> {
     }
 
     #[inline]
-    pub(crate) fn from_sink_match(
+    pub fn from_sink_match(
         sunk: &'a SinkMatch<'a>,
         original_matches: &'a [Match],
         replacement: Option<(&'a [u8], &'a [Match])>,
@@ -153,7 +153,7 @@ impl<'a> Sunk<'a> {
     }
 
     #[inline]
-    pub(crate) fn from_sink_context(
+    pub fn from_sink_context(
         sunk: &'a SinkContext<'a>,
         original_matches: &'a [Match],
         replacement: Option<(&'a [u8], &'a [Match])>,
@@ -170,43 +170,43 @@ impl<'a> Sunk<'a> {
     }
 
     #[inline]
-    pub(crate) fn context_kind(&self) -> Option<&'a SinkContextKind> {
+    pub fn context_kind(&self) -> Option<&'a SinkContextKind> {
         self.context_kind
     }
 
     #[inline]
-    pub(crate) fn bytes(&self) -> &'a [u8] {
+    pub fn bytes(&self) -> &'a [u8] {
         self.bytes
     }
 
     #[inline]
-    pub(crate) fn matches(&self) -> &'a [Match] {
+    pub fn matches(&self) -> &'a [Match] {
         self.matches
     }
 
     #[inline]
-    pub(crate) fn original_matches(&self) -> &'a [Match] {
+    pub fn original_matches(&self) -> &'a [Match] {
         self.original_matches
     }
 
     #[inline]
-    pub(crate) fn lines(&self, line_term: u8) -> LineIter<'a> {
+    pub fn lines(&self, line_term: u8) -> LineIter<'a> {
         LineIter::new(line_term, self.bytes())
     }
 
     #[inline]
-    pub(crate) fn absolute_byte_offset(&self) -> u64 {
+    pub fn absolute_byte_offset(&self) -> u64 {
         self.absolute_byte_offset
     }
 
     #[inline]
-    pub(crate) fn line_number(&self) -> Option<u64> {
+    pub fn line_number(&self) -> Option<u64> {
         self.line_number
     }
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct PrinterPath<'a> {
+pub struct PrinterPath<'a> {
     #[cfg(not(unix))]
     path: &'a Path,
     bytes: Cow<'a, [u8]>,
@@ -214,13 +214,13 @@ pub(crate) struct PrinterPath<'a> {
 }
 
 #[cfg(unix)]
-pub(crate) fn path_bytes(path: &Path) -> Cow<'_, [u8]> {
+pub fn path_bytes(path: &Path) -> Cow<'_, [u8]> {
     use std::os::unix::ffi::OsStrExt;
     Cow::Borrowed(path.as_os_str().as_bytes())
 }
 
 #[cfg(not(unix))]
-pub(crate) fn path_bytes(path: &Path) -> Cow<'_, [u8]> {
+pub fn path_bytes(path: &Path) -> Cow<'_, [u8]> {
     match path.to_string_lossy() {
         Cow::Borrowed(s) => Cow::Borrowed(s.as_bytes()),
         Cow::Owned(s) => Cow::Owned(s.into_bytes()),
@@ -228,7 +228,7 @@ pub(crate) fn path_bytes(path: &Path) -> Cow<'_, [u8]> {
 }
 
 impl<'a> PrinterPath<'a> {
-    pub(crate) fn new(path: &'a Path) -> PrinterPath<'a> {
+    pub fn new(path: &'a Path) -> PrinterPath<'a> {
         PrinterPath {
             #[cfg(not(unix))]
             path,
@@ -237,7 +237,7 @@ impl<'a> PrinterPath<'a> {
         }
     }
 
-    pub(crate) fn with_separator(mut self, sep: Option<u8>) -> PrinterPath<'a> {
+    pub fn with_separator(mut self, sep: Option<u8>) -> PrinterPath<'a> {
         let Some(sep) = sep else { return self };
         let mut bytes = self.bytes.to_vec();
         for b in &mut bytes {
@@ -249,31 +249,31 @@ impl<'a> PrinterPath<'a> {
         self
     }
 
-    pub(crate) fn as_bytes(&self) -> &[u8] {
+    pub fn as_bytes(&self) -> &[u8] {
         &self.bytes
     }
 
-    pub(crate) fn as_hyperlink(&self) -> Option<&HyperlinkPath> {
+    pub fn as_hyperlink(&self) -> Option<&HyperlinkPath> {
         self.hyperlink
             .get_or_init(|| HyperlinkPath::from_path(self.as_path()))
             .as_ref()
     }
 
     #[cfg(unix)]
-    pub(crate) fn as_path(&self) -> &Path {
+    pub fn as_path(&self) -> &Path {
         use std::ffi::OsStr;
         use std::os::unix::ffi::OsStrExt;
         Path::new(OsStr::from_bytes(self.as_bytes()))
     }
 
     #[cfg(not(unix))]
-    pub(crate) fn as_path(&self) -> &Path {
+    pub fn as_path(&self) -> &Path {
         self.path
     }
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub(crate) struct NiceDuration(pub time::Duration);
+pub struct NiceDuration(pub time::Duration);
 
 impl fmt::Display for NiceDuration {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -300,7 +300,7 @@ impl serde::Serialize for NiceDuration {
 }
 
 #[derive(Debug)]
-pub(crate) struct DecimalFormatter {
+pub struct DecimalFormatter {
     buf: [u8; Self::MAX_U64_LEN],
     start: usize,
 }
@@ -308,7 +308,7 @@ pub(crate) struct DecimalFormatter {
 impl DecimalFormatter {
     const MAX_U64_LEN: usize = 20;
 
-    pub(crate) fn new(mut n: u64) -> DecimalFormatter {
+    pub fn new(mut n: u64) -> DecimalFormatter {
         let mut buf = [0; Self::MAX_U64_LEN];
         let mut i = buf.len();
         loop {
@@ -322,12 +322,12 @@ impl DecimalFormatter {
         DecimalFormatter { buf, start: i }
     }
 
-    pub(crate) fn as_bytes(&self) -> &[u8] {
+    pub fn as_bytes(&self) -> &[u8] {
         &self.buf[self.start..]
     }
 }
 
-pub(crate) fn trim_ascii_prefix(line_term: LineTerminator, slice: &[u8], range: Match) -> Match {
+pub fn trim_ascii_prefix(line_term: LineTerminator, slice: &[u8], range: Match) -> Match {
     let count = slice[range]
         .iter()
         .take_while(|&&b| {
@@ -338,7 +338,7 @@ pub(crate) fn trim_ascii_prefix(line_term: LineTerminator, slice: &[u8], range: 
     range.with_start(range.start() + count)
 }
 
-pub(crate) fn find_iter_at_in_context<M, F>(
+pub fn find_iter_at_in_context<M, F>(
     searcher: &Searcher,
     matcher: M,
     mut bytes: &[u8],
@@ -368,11 +368,7 @@ where
         .map_err(io::Error::error_message)
 }
 
-pub(crate) fn trim_line_terminator<'b>(
-    searcher: &Searcher,
-    buf: &'b [u8],
-    line: &mut Match,
-) -> &'b [u8] {
+pub fn trim_line_terminator<'b>(searcher: &Searcher, buf: &'b [u8], line: &mut Match) -> &'b [u8] {
     let lineterm = searcher.line_terminator();
     if lineterm.is_suffix(&buf[*line]) {
         let mut end = line.end() - 1;
@@ -455,7 +451,7 @@ fn grapheme_regex() -> &'static regex::bytes::Regex {
     })
 }
 
-pub(crate) fn grapheme_len(bs: &[u8]) -> usize {
+pub fn grapheme_len(bs: &[u8]) -> usize {
     if bs.is_empty() {
         return 0;
     }
@@ -468,7 +464,7 @@ pub(crate) fn grapheme_len(bs: &[u8]) -> usize {
     }
 }
 
-pub(crate) fn grapheme_end_offsets(bs: &[u8], limit: usize) -> Option<usize> {
+pub fn grapheme_end_offsets(bs: &[u8], limit: usize) -> Option<usize> {
     let mut pos = 0;
     let mut last = None;
     for _ in 0..limit {

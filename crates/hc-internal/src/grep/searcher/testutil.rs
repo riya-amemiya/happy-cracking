@@ -11,14 +11,14 @@ use super::sink::{Sink, SinkContext, SinkFinish, SinkMatch};
 use super::{BinaryDetection, Searcher, SearcherBuilder};
 
 #[derive(Clone, Debug)]
-pub(crate) struct RegexMatcher {
+pub struct RegexMatcher {
     regex: Regex,
     line_term: Option<LineTerminator>,
     every_line_is_candidate: bool,
 }
 
 impl RegexMatcher {
-    pub(crate) fn new(pattern: &str) -> RegexMatcher {
+    pub fn new(pattern: &str) -> RegexMatcher {
         let regex = RegexBuilder::new(pattern).multi_line(true).build().unwrap();
         RegexMatcher {
             regex,
@@ -27,12 +27,12 @@ impl RegexMatcher {
         }
     }
 
-    pub(crate) fn set_line_term(&mut self, line_term: Option<LineTerminator>) -> &mut RegexMatcher {
+    pub fn set_line_term(&mut self, line_term: Option<LineTerminator>) -> &mut RegexMatcher {
         self.line_term = line_term;
         self
     }
 
-    pub(crate) fn every_line_is_candidate(&mut self, yes: bool) -> &mut RegexMatcher {
+    pub fn every_line_is_candidate(&mut self, yes: bool) -> &mut RegexMatcher {
         self.every_line_is_candidate = yes;
         self
     }
@@ -100,14 +100,14 @@ impl ParallelMatcher for RegexMatcher {
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct KitchenSink(Vec<u8>);
+pub struct KitchenSink(Vec<u8>);
 
 impl KitchenSink {
-    pub(crate) fn new() -> KitchenSink {
+    pub fn new() -> KitchenSink {
         KitchenSink(vec![])
     }
 
-    pub(crate) fn as_bytes(&self) -> &[u8] {
+    pub fn as_bytes(&self) -> &[u8] {
         &self.0
     }
 }
@@ -170,7 +170,7 @@ const AUTO_HEAP_LIMIT: u32 = 1 << 4;
 const PASSTHRU: u32 = 1 << 5;
 
 #[derive(Debug)]
-pub(crate) struct SearcherTester {
+pub struct SearcherTester {
     haystack: String,
     pattern: String,
     expected_no_line_number: Option<String>,
@@ -184,7 +184,7 @@ pub(crate) struct SearcherTester {
 }
 
 impl SearcherTester {
-    pub(crate) fn new(haystack: &str, pattern: &str) -> SearcherTester {
+    pub fn new(haystack: &str, pattern: &str) -> SearcherTester {
         SearcherTester {
             haystack: haystack.to_string(),
             pattern: pattern.to_string(),
@@ -199,7 +199,7 @@ impl SearcherTester {
         }
     }
 
-    pub(crate) fn test(&self) {
+    pub fn test(&self) {
         assert!(
             self.expected_no_line_number.is_some(),
             "an 'expected' string with NO line numbers must be given"
@@ -223,57 +223,57 @@ impl SearcherTester {
         }
     }
 
-    pub(crate) fn expected_no_line_number(&mut self, exp: &str) -> &mut SearcherTester {
+    pub fn expected_no_line_number(&mut self, exp: &str) -> &mut SearcherTester {
         self.expected_no_line_number = Some(exp.to_string());
         self
     }
 
-    pub(crate) fn expected_with_line_number(&mut self, exp: &str) -> &mut SearcherTester {
+    pub fn expected_with_line_number(&mut self, exp: &str) -> &mut SearcherTester {
         self.expected_with_line_number = Some(exp.to_string());
         self
     }
 
-    pub(crate) fn expected_slice_no_line_number(&mut self, exp: &str) -> &mut SearcherTester {
+    pub fn expected_slice_no_line_number(&mut self, exp: &str) -> &mut SearcherTester {
         self.expected_slice_no_line_number = Some(exp.to_string());
         self
     }
 
-    pub(crate) fn line_number(&mut self, yes: bool) -> &mut SearcherTester {
+    pub fn line_number(&mut self, yes: bool) -> &mut SearcherTester {
         self.flags.set(LINE_NUMBER, yes);
         self
     }
 
-    pub(crate) fn by_line(&mut self, yes: bool) -> &mut SearcherTester {
+    pub fn by_line(&mut self, yes: bool) -> &mut SearcherTester {
         self.flags.set(BY_LINE, yes);
         self
     }
 
-    pub(crate) fn invert_match(&mut self, yes: bool) -> &mut SearcherTester {
+    pub fn invert_match(&mut self, yes: bool) -> &mut SearcherTester {
         self.flags.set(INVERT_MATCH, yes);
         self
     }
 
-    pub(crate) fn binary_detection(&mut self, detection: BinaryDetection) -> &mut SearcherTester {
+    pub fn binary_detection(&mut self, detection: BinaryDetection) -> &mut SearcherTester {
         self.binary = detection;
         self
     }
 
-    pub(crate) fn auto_heap_limit(&mut self, yes: bool) -> &mut SearcherTester {
+    pub fn auto_heap_limit(&mut self, yes: bool) -> &mut SearcherTester {
         self.flags.set(AUTO_HEAP_LIMIT, yes);
         self
     }
 
-    pub(crate) fn after_context(&mut self, lines: usize) -> &mut SearcherTester {
+    pub fn after_context(&mut self, lines: usize) -> &mut SearcherTester {
         self.after_context = lines;
         self
     }
 
-    pub(crate) fn before_context(&mut self, lines: usize) -> &mut SearcherTester {
+    pub fn before_context(&mut self, lines: usize) -> &mut SearcherTester {
         self.before_context = lines;
         self
     }
 
-    pub(crate) fn passthru(&mut self, yes: bool) -> &mut SearcherTester {
+    pub fn passthru(&mut self, yes: bool) -> &mut SearcherTester {
         self.flags.set(PASSTHRU, yes);
         self
     }

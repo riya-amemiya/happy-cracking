@@ -1,5 +1,5 @@
 #[rustfmt::skip]
-pub(crate) const DEFAULT_TYPES: &[(&[&str], &[&str])] = &[
+pub const DEFAULT_TYPES: &[(&[&str], &[&str])] = &[
     (&["ada"], &["*.adb", "*.ads"]),
     (&["agda"], &["*.agda", "*.lagda"]),
     (&["aidl"], &["*.aidl"]),
